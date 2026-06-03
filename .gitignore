@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+.bun/
+
+# Builds
+dist/
+build/
+.vite/
+coverage/
+*.tsbuildinfo
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+bun-debug.log*
+
+# Test and cache output
+.cache/
+.turbo/
+.parcel-cache/
+playwright-report/
+test-results/
+blob-report/
+
+# Runtime data
+tmp/
+temp/
+.tmp/
+uploads/
+artifacts/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Database/local infra
+*.sqlite
+*.sqlite3
+*.db
+dump.sql
