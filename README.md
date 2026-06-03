@@ -6,7 +6,7 @@ The product promise is not "rewrite my prompt." It is: find the cheapest prompt 
 
 ## Current Repo State
 
-This repo currently contains the durable source of truth extracted from the PromptOpts MVP PDFs. It intentionally does not contain product code, dependencies, or scaffolding yet.
+This repo contains the durable source of truth extracted from the PromptOpts MVP PDFs plus a minimal Bun + TypeScript monorepo scaffold. The scaffold is intentionally limited to app infrastructure: a React shell, a Hono health route, worker entrypoints, and package boundaries. Product features are still deferred to future implementation tasks.
 
 ## Source Of Truth
 
@@ -44,3 +44,54 @@ Start with `AGENTS.md`, then use the focused docs under `docs/context/`:
 - Workers: Bun eval/report workers.
 - Data: Postgres, Redis or equivalent queue, object storage.
 - Providers: OpenAI, Anthropic, Gemini only for MVP.
+
+## Monorepo Layout
+
+```text
+apps/
+  web/                 React + TypeScript + Vite shell
+  api/                 Hono + TypeScript API running on Bun
+workers/
+  eval-runner/         Bun worker entrypoint
+  report-generator/    Bun worker entrypoint
+packages/
+  shared/              Shared constants and schemas
+  prompt-core/         Prompt-domain package boundary
+  eval-core/           Eval-domain package boundary
+  model-registry/      Model registry package boundary
+  provider-adapters/   Provider adapter package boundary
+  admin-core/          Admin package boundary
+```
+
+## Local Setup
+
+Bun is the primary toolchain. Do not switch to npm or pnpm as the primary workflow.
+
+```bash
+bun install
+cp .env.example .env
+bun run dev:api
+bun run dev:web
+```
+
+With `VITE_API_URL=http://localhost:3000`, the web shell checks `GET /health` from the API.
+
+## Validation
+
+```bash
+bun install
+bun run typecheck
+bun test
+bun run build
+```
+
+`bun run lint` currently runs the TypeScript build check. Add a dedicated lint tool only when the project needs source formatting or lint rules beyond type safety.
+
+## Root Scripts
+
+- `bun run dev:web`: start the Vite web app.
+- `bun run dev:api`: start the Hono API on Bun.
+- `bun run dev:workers`: start both worker entrypoints.
+- `bun run typecheck`: run TypeScript project references.
+- `bun test`: run Bun tests.
+- `bun run build`: build packages, API, workers, and web.

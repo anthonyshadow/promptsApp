@@ -1,0 +1,28 @@
+{
+  "name": "promptopts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "workers/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "cd apps/web && bun run dev",
+    "dev:api": "cd apps/api && bun run dev",
+    "dev:workers": "(cd workers/eval-runner && bun run dev) & (cd workers/report-generator && bun run dev) & wait",
+    "test": "bun test",
+    "typecheck": "tsc -b",
+    "lint": "bun run typecheck",
+    "build": "bun run build:packages && bun run build:api && bun run build:workers && bun run build:web",
+    "build:web": "cd apps/web && bun run build",
+    "build:api": "cd apps/api && bun run build",
+    "build:workers": "(cd workers/eval-runner && bun run build) && (cd workers/report-generator && bun run build)",
+    "build:packages": "(cd packages/shared && bun run build) && (cd packages/prompt-core && bun run build) && (cd packages/eval-core && bun run build) && (cd packages/model-registry && bun run build) && (cd packages/provider-adapters && bun run build) && (cd packages/admin-core && bun run build)"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.7.3"
+  }
+}

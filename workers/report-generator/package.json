@@ -1,0 +1,15 @@
+{
+  "name": "@promptopts/report-generator",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "build": "tsc -b && bun build src/index.ts --target bun --outdir dist",
+    "typecheck": "tsc -b",
+    "start": "bun src/index.ts"
+  },
+  "dependencies": {
+    "@promptopts/shared": "workspace:*"
+  }
+}

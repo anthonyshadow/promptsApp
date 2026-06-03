@@ -1,0 +1,15 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/shared" },
+    { "path": "./packages/prompt-core" },
+    { "path": "./packages/eval-core" },
+    { "path": "./packages/model-registry" },
+    { "path": "./packages/provider-adapters" },
+    { "path": "./packages/admin-core" },
+    { "path": "./apps/api" },
+    { "path": "./apps/web" },
+    { "path": "./workers/eval-runner" },
+    { "path": "./workers/report-generator" }
+  ]
+}
