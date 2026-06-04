@@ -146,8 +146,44 @@ export const demoAudit: AuditResponse = {
 export const demoQualityContract: QualityContract = {
   id: "quality_contract_demo_support",
   project_id: demoProject.id,
+  task: "Support ticket classification",
+  required_output: "Strict JSON with urgency, topic, routing_group, and short rationale.",
+  must_preserve: ["Strict JSON", "Urgency labels", "routing_group"],
+  forbidden_behavior: ["Do not invent customer facts.", "Do not include private policy text."],
   pass_threshold: 0.92,
   must_pass_check_ids: ["check_json", "check_urgency", "check_routing"],
+  check_definitions: [
+    {
+      id: "check_json",
+      type: "json_schema",
+      description: "Returns strict JSON",
+      must_pass: true,
+      field_path: null,
+      expected_value: ["urgency", "topic", "routing_group", "rationale"],
+      pattern: null,
+      placeholder_note: null
+    },
+    {
+      id: "check_urgency",
+      type: "exact",
+      description: "Preserves urgency labels",
+      must_pass: true,
+      field_path: "urgency",
+      expected_value: "high",
+      pattern: null,
+      placeholder_note: null
+    },
+    {
+      id: "check_routing",
+      type: "required_phrase",
+      description: "Includes support routing group",
+      must_pass: true,
+      field_path: "routing_group",
+      expected_value: "support",
+      pattern: null,
+      placeholder_note: null
+    }
+  ],
   notes: "Must preserve JSON shape, urgency, and routing group before any savings claim.",
   is_mock: true,
   created_at: demoCreatedAt,
@@ -170,16 +206,18 @@ export const demoTestCases: TestCase[] = [
         must_pass: true,
         field_path: null,
         expected_value: null,
-        pattern: null
+        pattern: null,
+        placeholder_note: null
       },
       {
         id: "check_urgency",
-        type: "exact_label",
+        type: "exact",
         description: "Sets urgency to high",
         must_pass: true,
         field_path: "urgency",
         expected_value: "high",
-        pattern: null
+        pattern: null,
+        placeholder_note: null
       }
     ],
     is_mock: true,
@@ -201,7 +239,8 @@ export const demoTestCases: TestCase[] = [
         must_pass: true,
         field_path: "routing_group",
         expected_value: "account_support",
-        pattern: null
+        pattern: null,
+        placeholder_note: null
       }
     ],
     is_mock: true,
@@ -218,12 +257,13 @@ export const demoTestCases: TestCase[] = [
     checks: [
       {
         id: "check_feature",
-        type: "exact_label",
+        type: "exact",
         description: "Classifies feature request",
         must_pass: false,
         field_path: "topic",
         expected_value: "feature_request",
-        pattern: null
+        pattern: null,
+        placeholder_note: null
       }
     ],
     is_mock: true,

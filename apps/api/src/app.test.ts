@@ -286,6 +286,161 @@ describe("public API routes", () => {
     expect(freeAudit?.shareable_summary).toContain("Run evals before switching");
   });
 
+  test("GET and POST /projects/:id/quality-contract support auto-draft and persistence", async () => {
+    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const app = createApp({ repository });
+    const promptResponse = await expectOkJson(
+      await app.request(
+        "/prompts",
+        jsonRequest({
+          workspace_id: DEMO_IDS.workspace,
+          name: "Contract draft project",
+          task_type: "classification",
+          provider: "openai",
+          model_id: "openai-demo-balanced",
+          prompt_text: "Classify {{message}} into label and confidence JSON.",
+          variables: ["message"]
+        })
+      )
+    );
+
+    const autoDraft = await expectOkJson(
+      await app.request(`/projects/${promptResponse.project.id}/quality-contract`)
+    );
+    expect(autoDraft.source).toBe("auto_draft");
+    expect(autoDraft.contract.task).toBe("Classification");
+    expect(autoDraft.production_recommendation_allowed).toBe(false);
+    expect(autoDraft.production_blockers.join(" ")).toContain("No test cases");
+
+    const saved = await expectOkJson(
+      await app.request(
+        `/projects/${promptResponse.project.id}/quality-contract`,
+        jsonRequest({
+          task: autoDraft.contract.task,
+          required_output: autoDraft.contract.required_output,
+          must_preserve: autoDraft.contract.must_preserve,
+          forbidden_behavior: autoDraft.contract.forbidden_behavior,
+          pass_threshold: 0.95,
+          must_pass_check_ids: autoDraft.contract.must_pass_check_ids,
+          check_definitions: autoDraft.contract.check_definitions,
+          notes: "Reviewed contract."
+        })
+      )
+    );
+
+    expect(saved.source).toBe("persisted");
+    expect(saved.contract.notes).toBe("Reviewed contract.");
+    expect(await repository.quality_contracts.get(saved.contract.id)).toBeDefined();
+  });
+
+  test("test case creation and update keep production recommendation blocked until eval proof", async () => {
+    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const app = createApp({ repository });
+    const beforeCases = await repository.test_cases.list();
+
+    const created = await expectOkJson(
+      await app.request(
+        `/quality-contracts/${DEMO_IDS.qualityContract}/test-cases`,
+        jsonRequest({
+          name: "New exact label",
+          input_variables: { customer_message: "Need billing help" },
+          expected_output: { category: "billing" },
+          checks: [
+            {
+              id: "check_new_exact",
+              type: "exact",
+              description: "Category remains billing.",
+              must_pass: true,
+              field_path: "category",
+              expected_value: "billing",
+              pattern: null,
+              placeholder_note: null
+            }
+          ]
+        })
+      )
+    );
+
+    expect(await repository.test_cases.list()).toHaveLength(beforeCases.length + 1);
+    expect(created.test_case.name).toBe("New exact label");
+    expect(created.production_recommendation_allowed).toBe(false);
+    expect(created.production_blockers.join(" ")).toContain("Eval matrix");
+
+    const updated = await expectOkJson(
+      await app.request(
+        `/test-cases/${created.test_case.id}`,
+        patchJsonRequest({
+          name: "Updated exact label"
+        })
+      )
+    );
+
+    expect(updated.test_case.name).toBe("Updated exact label");
+  });
+
+  test("POST /reports includes no-test blocker when quality contract has no cases", async () => {
+    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const app = createApp({ repository });
+    const promptResponse = await expectOkJson(
+      await app.request(
+        "/prompts",
+        jsonRequest({
+          workspace_id: DEMO_IDS.workspace,
+          name: "No-test report project",
+          task_type: "support",
+          provider: "openai",
+          model_id: "openai-demo-balanced",
+          prompt_text: "Route {{message}} to the right team.",
+          variables: ["message"]
+        })
+      )
+    );
+    const contractResponse = await expectOkJson(
+      await app.request(`/projects/${promptResponse.project.id}/quality-contract`)
+    );
+    const savedContract = await expectOkJson(
+      await app.request(
+        `/projects/${promptResponse.project.id}/quality-contract`,
+        jsonRequest({
+          task: contractResponse.contract.task,
+          required_output: contractResponse.contract.required_output,
+          must_preserve: contractResponse.contract.must_preserve,
+          forbidden_behavior: contractResponse.contract.forbidden_behavior,
+          pass_threshold: contractResponse.contract.pass_threshold,
+          must_pass_check_ids: contractResponse.contract.must_pass_check_ids,
+          check_definitions: contractResponse.contract.check_definitions,
+          notes: contractResponse.contract.notes
+        })
+      )
+    );
+    const evalRun = await expectOkJson(
+      await app.request(
+        "/eval-runs",
+        jsonRequest({
+          project_id: promptResponse.project.id,
+          quality_contract_id: savedContract.contract.id,
+          baseline_prompt_version_id: promptResponse.version.id,
+          candidate_ids: [],
+          model_registry_record_ids: [],
+          pass_threshold: savedContract.contract.pass_threshold
+        })
+      )
+    );
+
+    const report = await expectOkJson(
+      await app.request(
+        "/reports",
+        jsonRequest({
+          project_id: promptResponse.project.id,
+          eval_run_id: evalRun.id
+        })
+      )
+    );
+
+    expect(report.production_recommendation_allowed).toBe(false);
+    expect(report.production_blockers.join(" ")).toContain("No test cases");
+  });
+
   test("implements the public route map with seed or mock data", async () => {
     const app = createTestApp();
 

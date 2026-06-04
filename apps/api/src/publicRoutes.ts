@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { autoDraftQualityContract } from "@promptopts/eval-core";
 import { runPromptModelAudit } from "@promptopts/prompt-core";
 import {
   createHealthResponse,
@@ -17,7 +18,9 @@ import {
   type PromptProject,
   type PromptVersion,
   type PromptOptsRepository,
-  type RecommendationReport
+  type QualityContract,
+  type RecommendationReport,
+  type TestCase
 } from "@promptopts/shared";
 import {
   auditRequestSchema,
@@ -29,8 +32,13 @@ import {
   promptCreateResponseSchema,
   promptOptimizeRequestSchema,
   promptOptimizeResponseSchema,
+  qualityContractRequestSchema,
+  qualityContractResponseSchema,
   reportCreateRequestSchema,
-  reportExportResponseSchema
+  reportExportResponseSchema,
+  testCaseCreateRequestSchema,
+  testCaseMutationResponseSchema,
+  testCasePatchRequestSchema
 } from "./contracts";
 import type { ApiEnv } from "./context";
 import {
@@ -266,6 +274,136 @@ export function createPublicApiRoutes() {
         })
       );
     })
+    .get("/projects/:id/quality-contract", async (c) => {
+      const project = await c.var.repository.projects.get(c.req.param("id"));
+      if (!project) {
+        return notFound(c, "Project not found");
+      }
+
+      const result = await getQualityContractState(c.var.repository, project);
+
+      return c.json(qualityContractResponseSchema.parse(result));
+    })
+    .post("/projects/:id/quality-contract", async (c) => {
+      const body = await validateJson(c, qualityContractRequestSchema);
+      if (!body.success) {
+        return body.response;
+      }
+
+      const project = await c.var.repository.projects.get(c.req.param("id"));
+      if (!project) {
+        return notFound(c, "Project not found");
+      }
+
+      const timestamp = nowIso();
+      const existing = await getPersistedQualityContract(c.var.repository, project.id);
+      const contract =
+        existing
+          ? await c.var.repository.quality_contracts.update(existing.id, {
+              ...body.data,
+              updated_at: timestamp
+            })
+          : await c.var.repository.quality_contracts.create({
+              id: createId("quality_contract"),
+              project_id: project.id,
+              ...body.data,
+              is_mock: true,
+              created_at: timestamp,
+              updated_at: timestamp
+            });
+
+      if (!contract) {
+        return notFound(c, "Quality contract not found");
+      }
+
+      const testCases = await getContractTestCases(c.var.repository, contract.id);
+
+      return c.json(
+        qualityContractResponseSchema.parse({
+          contract,
+          test_cases: testCases,
+          ...getProductionRecommendationState(testCases),
+          source: "persisted"
+        }),
+        existing ? 200 : 201
+      );
+    })
+    .post("/quality-contracts/:id/test-cases", async (c) => {
+      const body = await validateJson(c, testCaseCreateRequestSchema);
+      if (!body.success) {
+        return body.response;
+      }
+
+      const contract = await c.var.repository.quality_contracts.get(c.req.param("id"));
+      if (!contract) {
+        return notFound(c, "Quality contract not found");
+      }
+
+      const timestamp = nowIso();
+      const testCase: TestCase = {
+        id: createId("test_case"),
+        project_id: contract.project_id,
+        quality_contract_id: contract.id,
+        name: body.data.name,
+        input_variables: body.data.input_variables,
+        expected_output: body.data.expected_output,
+        checks: body.data.checks,
+        is_mock: true,
+        created_at: timestamp,
+        updated_at: timestamp
+      };
+
+      await c.var.repository.test_cases.create(testCase);
+
+      const testCases = await getContractTestCases(c.var.repository, contract.id);
+
+      return c.json(
+        testCaseMutationResponseSchema.parse({
+          test_case: testCase,
+          ...getProductionRecommendationState(testCases)
+        }),
+        201
+      );
+    })
+    .patch("/test-cases/:id", async (c) => {
+      const body = await validateJson(c, testCasePatchRequestSchema);
+      if (!body.success) {
+        return body.response;
+      }
+
+      const existing = await c.var.repository.test_cases.get(c.req.param("id"));
+      if (!existing) {
+        return notFound(c, "Test case not found");
+      }
+
+      const patch: Partial<Omit<TestCase, "id">> = { updated_at: nowIso() };
+
+      if (body.data.name !== undefined) {
+        patch.name = body.data.name;
+      }
+      if (body.data.input_variables !== undefined) {
+        patch.input_variables = body.data.input_variables;
+      }
+      if (body.data.expected_output !== undefined) {
+        patch.expected_output = body.data.expected_output;
+      }
+      if (body.data.checks !== undefined) {
+        patch.checks = body.data.checks;
+      }
+
+      const testCase = await c.var.repository.test_cases.update(existing.id, patch);
+      if (!testCase) {
+        return notFound(c, "Test case not found");
+      }
+      const testCases = await getContractTestCases(c.var.repository, existing.quality_contract_id);
+
+      return c.json(
+        testCaseMutationResponseSchema.parse({
+          test_case: testCase,
+          ...getProductionRecommendationState(testCases)
+        })
+      );
+    })
     .post("/eval-runs", async (c) => {
       const body = await validateJson(c, evalRunCreateRequestSchema);
       if (!body.success) {
@@ -317,6 +455,14 @@ export function createPublicApiRoutes() {
       }
 
       const timestamp = nowIso();
+      const testCases = await getContractTestCases(c.var.repository, evalRun.quality_contract_id);
+      const productionBlockers = [
+        ...(testCases.length === 0
+          ? ["No test cases exist; production recommendation is disabled until tests are added."]
+          : []),
+        "TODO: eval-core must score the matrix before report generation.",
+        "TODO: model registry rows must be verified before exact savings claims."
+      ];
       const report: RecommendationReport = {
         id: createId("report"),
         project_id: body.data.project_id,
@@ -328,10 +474,7 @@ export function createPublicApiRoutes() {
         risk_summary: ["No production recommendation until eval threshold passes with zero must-pass failures."],
         savings_summary: null,
         production_recommendation_allowed: false,
-        production_blockers: [
-          "TODO: eval-core must score the matrix before report generation.",
-          "TODO: model registry rows must be verified before exact savings claims."
-        ],
+        production_blockers: productionBlockers,
         registry_freshness: "unverified",
         is_mock: true,
         generated_at: null,
@@ -376,6 +519,100 @@ export function createPublicApiRoutes() {
         })
       );
     });
+}
+
+async function getQualityContractState(repository: PromptOptsRepository, project: PromptProject) {
+  const persisted = await getPersistedQualityContract(repository, project.id);
+  const contract = persisted ?? createDraftQualityContract(project, await getLatestPromptAnalysis(repository, project));
+  const testCases = persisted ? await getContractTestCases(repository, persisted.id) : [];
+
+  return {
+    contract,
+    test_cases: testCases,
+    ...getProductionRecommendationState(testCases),
+    source: persisted ? "persisted" : "auto_draft"
+  };
+}
+
+async function getPersistedQualityContract(
+  repository: PromptOptsRepository,
+  projectId: string
+): Promise<QualityContract | undefined> {
+  const contracts = await repository.quality_contracts.list();
+
+  return contracts.find((contract) => contract.project_id === projectId);
+}
+
+async function getContractTestCases(repository: PromptOptsRepository, contractId: string): Promise<TestCase[]> {
+  const testCases = await repository.test_cases.list();
+
+  return testCases.filter((testCase) => testCase.quality_contract_id === contractId);
+}
+
+async function getLatestPromptAnalysis(
+  repository: PromptOptsRepository,
+  project: PromptProject
+): Promise<PromptAnalysis> {
+  const prompts = (await repository.prompts.list()).filter((prompt) => prompt.project_id === project.id);
+  const promptIds = new Set(prompts.map((prompt) => prompt.id));
+  const versionIds = new Set(
+    (await repository.prompt_versions.list())
+      .filter((version) => promptIds.has(version.prompt_id))
+      .map((version) => version.id)
+  );
+  const analyses = (await repository.prompt_analyses.list()).filter((analysis) =>
+    versionIds.has(analysis.prompt_version_id)
+  );
+
+  return analyses.sort((a, b) => b.created_at.localeCompare(a.created_at))[0] ?? createFallbackPromptAnalysis(project);
+}
+
+function createDraftQualityContract(project: PromptProject, analysis: PromptAnalysis): QualityContract {
+  const timestamp = nowIso();
+  const draft = autoDraftQualityContract(analysis);
+
+  return {
+    id: createId("quality_contract_draft"),
+    project_id: project.id,
+    ...draft,
+    is_mock: true,
+    created_at: timestamp,
+    updated_at: timestamp
+  };
+}
+
+function createFallbackPromptAnalysis(project: PromptProject): PromptAnalysis {
+  const timestamp = nowIso();
+
+  return {
+    id: createId("analysis_draft"),
+    prompt_version_id: "prompt_version_draft",
+    provider: project.current_provider,
+    model_id: project.current_model_id,
+    task_type: project.task_type,
+    input_tokens: 0,
+    estimated_output_tokens: 0,
+    model_fit: "appropriate",
+    waste_findings: [],
+    risk_level: "medium",
+    compression_guardrails: ["Preserve required output format.", "Keep user-visible behavior stable."],
+    registry_freshness: "unverified",
+    is_mock: true,
+    created_at: timestamp
+  };
+}
+
+function getProductionRecommendationState(testCases: TestCase[]) {
+  const blockers = ["Eval matrix has not passed threshold with zero must-pass failures."];
+
+  if (testCases.length === 0) {
+    blockers.unshift("No test cases exist; production recommendation is disabled until tests are added.");
+  }
+
+  return {
+    production_recommendation_allowed: false,
+    production_blockers: blockers
+  };
 }
 
 async function createFreeAuditCapture(

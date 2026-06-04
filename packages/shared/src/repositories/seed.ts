@@ -113,8 +113,44 @@ export function createDemoRepositorySeed(): Required<RepositorySeed> {
       {
         id: DEMO_IDS.qualityContract,
         project_id: DEMO_IDS.project,
+        task: "Support ticket classification",
+        required_output: "Strict JSON with category, urgency, summary, and suggested_reply.",
+        must_preserve: ["JSON shape", "Urgency labels", "Support routing intent"],
+        forbidden_behavior: ["Do not invent customer details.", "Do not expose private policy text."],
         pass_threshold: 0.95,
-        must_pass_check_ids: [mustPassCheckId],
+        must_pass_check_ids: [mustPassCheckId, "check_support_classifier_outage_urgency"],
+        check_definitions: [
+          {
+            id: mustPassCheckId,
+            type: "json_schema",
+            description: "Output keeps required JSON keys.",
+            must_pass: true,
+            field_path: null,
+            expected_value: ["category", "urgency", "summary", "suggested_reply"],
+            pattern: null,
+            placeholder_note: null
+          },
+          {
+            id: "check_support_classifier_outage_urgency",
+            type: "exact",
+            description: "Outages affecting a team are high urgency.",
+            must_pass: true,
+            field_path: "urgency",
+            expected_value: "high",
+            pattern: null,
+            placeholder_note: null
+          },
+          {
+            id: "check_support_classifier_tone_judge",
+            type: "llm_judge",
+            description: "Suggested reply is empathetic and concise.",
+            must_pass: false,
+            field_path: "suggested_reply",
+            expected_value: "empathetic_concise",
+            pattern: null,
+            placeholder_note: "LLM judge placeholder; not a deterministic check."
+          }
+        ],
         notes: "Synthetic MVP contract for support classification.",
         is_mock: true,
         created_at: DEMO_TIMESTAMP,
@@ -140,16 +176,18 @@ export function createDemoRepositorySeed(): Required<RepositorySeed> {
             must_pass: true,
             field_path: null,
             expected_value: ["category", "urgency", "summary", "suggested_reply"],
-            pattern: null
+            pattern: null,
+            placeholder_note: null
           },
           {
             id: "check_support_classifier_billing_label",
-            type: "exact_label",
+            type: "exact",
             description: "Billing messages are labeled billing.",
             must_pass: false,
             field_path: "category",
             expected_value: "billing",
-            pattern: null
+            pattern: null,
+            placeholder_note: null
           }
         ],
         is_mock: true,
@@ -169,12 +207,13 @@ export function createDemoRepositorySeed(): Required<RepositorySeed> {
         checks: [
           {
             id: "check_support_classifier_outage_urgency",
-            type: "exact_label",
+            type: "exact",
             description: "Outages affecting a team are high urgency.",
             must_pass: true,
             field_path: "urgency",
             expected_value: "high",
-            pattern: null
+            pattern: null,
+            placeholder_note: null
           }
         ],
         is_mock: true,
@@ -199,7 +238,8 @@ export function createDemoRepositorySeed(): Required<RepositorySeed> {
             must_pass: false,
             field_path: "suggested_reply",
             expected_value: "invite",
-            pattern: null
+            pattern: null,
+            placeholder_note: null
           }
         ],
         is_mock: true,
@@ -224,7 +264,8 @@ export function createDemoRepositorySeed(): Required<RepositorySeed> {
             must_pass: false,
             field_path: "summary",
             expected_value: null,
-            pattern: "cancel|cancellation"
+            pattern: "cancel|cancellation",
+            placeholder_note: null
           }
         ],
         is_mock: true,
@@ -249,7 +290,8 @@ export function createDemoRepositorySeed(): Required<RepositorySeed> {
             must_pass: false,
             field_path: "suggested_reply",
             expected_value: "empathetic_concise",
-            pattern: null
+            pattern: null,
+            placeholder_note: "LLM judge placeholder; not a deterministic check."
           }
         ],
         is_mock: true,

@@ -49,4 +49,27 @@ describe("public route screens", () => {
     expect(html).toContain("Spend estimate");
     expect(html).toContain("Suggested next action");
   });
+
+  test("renders the quality contract screen with manual and CSV test-case entry", () => {
+    const apiState: ApiState = { status: "not-configured" };
+    const html = renderToString(
+      <PublicRouteScreen
+        apiClient={null}
+        apiState={apiState}
+        appState={createInitialPublicAppState()}
+        registryModels={demoModelRegistry}
+        route={parsePublicRoute("/app/projects/project_demo_support/success")}
+        updateAppState={() => undefined}
+        onNavigate={() => undefined}
+      />
+    );
+
+    expect(html).toContain("Quality contract");
+    expect(html).toContain("Auto-drafted contract");
+    expect(html).toContain("Add manual test case");
+    expect(html).toContain("CSV upload");
+    expect(html).toContain("LLM judge");
+    expect(html).toContain("Production recommendation disabled");
+    expect(html).toContain("Must-pass ready");
+  });
 });

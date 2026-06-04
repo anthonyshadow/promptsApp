@@ -12,6 +12,7 @@
   "dependencies": {
     "@emotion/css": "^11.13.5",
     "@promptopts/api": "workspace:*",
+    "@promptopts/eval-core": "workspace:*",
     "@promptopts/shared": "workspace:*",
     "hono": "^4.6.16",
     "react": "^18.3.1",

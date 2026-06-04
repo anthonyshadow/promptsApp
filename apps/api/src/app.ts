@@ -22,7 +22,12 @@ export type {
   AuditResponse,
   ModelsResponse,
   PromptCreateRequest,
-  PromptCreateResponse
+  PromptCreateResponse,
+  QualityContractRequest,
+  QualityContractResponse,
+  TestCaseCreateRequest,
+  TestCaseMutationResponse,
+  TestCasePatchRequest
 } from "./contracts";
 
 export default app;

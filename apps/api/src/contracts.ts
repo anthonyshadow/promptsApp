@@ -12,6 +12,7 @@ import {
   promptProjectSchema,
   promptSchema,
   promptVersionSchema,
+  qualityCheckDefinitionSchema,
   qualityContractSchema,
   recommendationReportSchema,
   reportArtifactFormatSchema,
@@ -111,6 +112,62 @@ export const promptOptimizeResponseSchema = z
   })
   .strict();
 export type PromptOptimizeResponse = z.infer<typeof promptOptimizeResponseSchema>;
+
+export const qualityContractRequestSchema = qualityContractSchema
+  .pick({
+    task: true,
+    required_output: true,
+    must_preserve: true,
+    forbidden_behavior: true,
+    pass_threshold: true,
+    must_pass_check_ids: true,
+    check_definitions: true,
+    notes: true
+  })
+  .strict();
+export type QualityContractRequest = z.infer<typeof qualityContractRequestSchema>;
+
+export const qualityContractResponseSchema = z
+  .object({
+    contract: qualityContractSchema,
+    test_cases: z.array(testCaseSchema),
+    production_recommendation_allowed: z.boolean(),
+    production_blockers: z.array(nonEmptyStringSchema),
+    source: z.enum(["persisted", "auto_draft"])
+  })
+  .strict();
+export type QualityContractResponse = z.infer<typeof qualityContractResponseSchema>;
+
+export const testCaseCreateRequestSchema = z
+  .object({
+    name: nonEmptyStringSchema,
+    input_variables: metadataSchema,
+    expected_output: z.unknown().nullable(),
+    checks: z.array(qualityCheckDefinitionSchema).min(1)
+  })
+  .strict();
+export type TestCaseCreateRequest = z.infer<typeof testCaseCreateRequestSchema>;
+
+export const testCasePatchRequestSchema = requireAtLeastOneField(
+  z
+    .object({
+      name: nonEmptyStringSchema.optional(),
+      input_variables: metadataSchema.optional(),
+      expected_output: z.unknown().nullable().optional(),
+      checks: z.array(qualityCheckDefinitionSchema).min(1).optional()
+    })
+    .strict()
+);
+export type TestCasePatchRequest = z.infer<typeof testCasePatchRequestSchema>;
+
+export const testCaseMutationResponseSchema = z
+  .object({
+    test_case: testCaseSchema,
+    production_recommendation_allowed: z.boolean(),
+    production_blockers: z.array(nonEmptyStringSchema)
+  })
+  .strict();
+export type TestCaseMutationResponse = z.infer<typeof testCaseMutationResponseSchema>;
 
 export const evalRunCreateRequestSchema = evalRunSchema
   .pick({

@@ -85,12 +85,13 @@ export const evalVerdictSchema = z.enum(["pass", "fail", "blocked"]);
 export type EvalVerdict = z.infer<typeof evalVerdictSchema>;
 
 export const testCheckTypeSchema = z.enum([
+  "exact",
   "json_schema",
   "regex",
   "required_phrase",
-  "exact_label",
+  "forbidden_phrase",
   "llm_judge",
-  "human_review"
+  "human"
 ]);
 export type TestCheckType = z.infer<typeof testCheckTypeSchema>;
 
@@ -406,12 +407,31 @@ export const optimizationCandidateSchema = z
   .strict();
 export type OptimizationCandidate = z.infer<typeof optimizationCandidateSchema>;
 
+export const qualityCheckDefinitionSchema = z
+  .object({
+    id: idSchema,
+    type: testCheckTypeSchema,
+    description: z.string().min(1),
+    must_pass: z.boolean(),
+    field_path: z.string().min(1).nullable(),
+    expected_value: z.unknown().nullable(),
+    pattern: z.string().min(1).nullable(),
+    placeholder_note: z.string().min(1).nullable()
+  })
+  .strict();
+export type QualityCheckDefinition = z.infer<typeof qualityCheckDefinitionSchema>;
+
 export const qualityContractSchema = z
   .object({
     id: idSchema,
     project_id: idSchema,
+    task: z.string().min(1),
+    required_output: z.string().min(1),
+    must_preserve: z.array(z.string().min(1)),
+    forbidden_behavior: z.array(z.string().min(1)),
     pass_threshold: z.number().min(0).max(1),
     must_pass_check_ids: z.array(idSchema),
+    check_definitions: z.array(qualityCheckDefinitionSchema).min(1),
     notes: z.string().min(1).nullable(),
     is_mock: z.boolean(),
     created_at: isoDateTimeSchema,
@@ -420,17 +440,7 @@ export const qualityContractSchema = z
   .strict();
 export type QualityContract = z.infer<typeof qualityContractSchema>;
 
-export const testCaseCheckSchema = z
-  .object({
-    id: idSchema,
-    type: testCheckTypeSchema,
-    description: z.string().min(1),
-    must_pass: z.boolean(),
-    field_path: z.string().min(1).nullable(),
-    expected_value: z.unknown().nullable(),
-    pattern: z.string().min(1).nullable()
-  })
-  .strict();
+export const testCaseCheckSchema = qualityCheckDefinitionSchema;
 export type TestCaseCheck = z.infer<typeof testCaseCheckSchema>;
 
 export const testCaseSchema = z

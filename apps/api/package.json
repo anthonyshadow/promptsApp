@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@promptopts/admin-core": "workspace:*",
+    "@promptopts/eval-core": "workspace:*",
     "@promptopts/prompt-core": "workspace:*",
     "@promptopts/shared": "workspace:*",
     "hono": "^4.6.16",
