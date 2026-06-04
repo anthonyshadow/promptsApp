@@ -34,3 +34,7 @@ Same-provider model comparison is the MVP default. Support OpenAI, Anthropic, an
 ## Implementation Posture
 
 Use React + TypeScript for the frontend, Hono + TypeScript for APIs, Bun for tooling/runtime/workers, shared Zod schemas for contracts, Postgres for durable data, Redis or equivalent queue for async jobs, and object storage for report artifacts. Do not add app code or dependencies until the implementation task explicitly asks for it.
+
+## React Styling
+
+Use `@emotion/css` for app-owned React styles. Component files keep component code first, then `export default ComponentName;`, then bottom-only `css({ ... })` constants. Avoid app-owned CSS files, styled components, Emotion `css` prop, and inline styles unless values are truly dynamic.
