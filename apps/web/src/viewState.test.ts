@@ -1,7 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import { getAdminGateCopy, getAdminGateStateFromSearch } from "./adminGate";
 import { getRegistryNotice, renderApiStatus } from "./apiViewState";
-import { formatModelFit, formatProvider, formatTaskType, getRouteTitle, getStepCardTitle } from "./formatters";
+import {
+  formatAuditCostEstimate,
+  formatModelFit,
+  formatProvider,
+  formatSensitiveFinding,
+  formatSuggestedRole,
+  formatTaskType,
+  getRouteTitle,
+  getStepCardTitle
+} from "./formatters";
+import { demoAudit } from "./mockData";
 import { detectPromptVariables, estimatePromptTokens, splitPromptIntoSegments } from "./promptView";
 import { parsePublicRoute, stepperItems } from "./routes";
 import type { ApiState } from "./viewTypes";
@@ -47,6 +57,23 @@ describe("web view helpers", () => {
     expect(formatModelFit("overpowered")).toBe("Overpowered");
     expect(formatTaskType("rag")).toBe("RAG");
     expect(formatTaskType("classification")).toBe("Classification");
+    expect(formatAuditCostEstimate(demoAudit)).toBe("Blocked");
+    expect(
+      formatSensitiveFinding({
+        type: "pii",
+        severity: "medium",
+        label: "Email address",
+        redactedPreview: "ops@...om",
+        reasonCode: "pii_email"
+      })
+    ).toBe("Email address: ops@...om");
+    const firstSuggestedRole = demoAudit.suggestedModelRoles[0];
+
+    expect(firstSuggestedRole).toBeDefined();
+
+    if (firstSuggestedRole) {
+      expect(formatSuggestedRole(firstSuggestedRole)).toBe("Baseline: openai-demo-frontier");
+    }
   });
 
   test("detects prompt variables and creates highlight segments", () => {

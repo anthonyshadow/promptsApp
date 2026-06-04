@@ -18,6 +18,8 @@ export function createApp(dependencies: AppDependencies = {}) {
 export const app = createApp();
 export type ApiApp = typeof app;
 export type {
+  AuditRequest,
+  AuditResponse,
   ModelsResponse,
   PromptCreateRequest,
   PromptCreateResponse

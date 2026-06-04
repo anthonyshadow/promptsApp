@@ -130,6 +130,63 @@ describe("public API routes", () => {
     expect(promptResponse.version.variables).toEqual(["invoice_text"]);
   });
 
+  test("POST /audits runs prompt-core audit and persists an analysis for saved prompts", async () => {
+    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const app = createApp({ repository });
+    const promptResponse = await expectOkJson(
+      await app.request(
+        "/prompts",
+        jsonRequest({
+          workspace_id: DEMO_IDS.workspace,
+          name: "Sensitive support triage",
+          task_type: "support",
+          provider: "openai",
+          model_id: "openai-demo-balanced",
+          prompt_text:
+            "Classify {{customer_message}}. Return JSON. Return JSON only. Customer email: ops@example.com.",
+          variables: ["customer_message"]
+        })
+      )
+    );
+    const beforeAnalyses = await repository.prompt_analyses.list();
+
+    const audit = await expectOkJson(
+      await app.request(
+        "/audits",
+        jsonRequest({
+          provider: "openai",
+          modelId: "openai-demo-balanced",
+          prompt:
+            "Classify {{customer_message}}. Return JSON. Return JSON only. Customer email: ops@example.com.",
+          taskType: "support",
+          monthlyCalls: 250000,
+          priority: "balanced",
+          promptVersionId: promptResponse.version.id,
+          constraints: {
+            requiresJson: true,
+            usesTools: false,
+            usesImages: false,
+            needsStructuredOutput: true,
+            maxLatencyMs: null,
+            minContextWindow: null
+          }
+        })
+      )
+    );
+    const afterAnalyses = await repository.prompt_analyses.list();
+    const storedAnalysis = await repository.prompt_analyses.get(audit.id);
+
+    expect(audit.inputTokens).toBeGreaterThan(0);
+    expect(audit.estimatedOutputTokens).toBeGreaterThan(0);
+    expect(audit.monthlyCostEstimate.estimateStatus).toBe("unverified");
+    expect(audit.sensitiveFindings.map((finding: { type: string }) => finding.type)).toContain("pii");
+    expect(audit.compressionGuardrails.join(" ")).toContain("provider call");
+    expect(audit.suggestedNextAction).toContain("Redact");
+    expect(afterAnalyses).toHaveLength(beforeAnalyses.length + 1);
+    expect(storedAnalysis?.prompt_version_id).toBe(promptResponse.version.id);
+    expect(storedAnalysis?.risk_level).toBe(audit.riskLevel);
+  });
+
   test("implements the public route map with seed or mock data", async () => {
     const app = createTestApp();
 
@@ -158,6 +215,8 @@ describe("public API routes", () => {
       )
     );
     expect(audit.riskLevel).toBe("medium");
+    expect(audit.monthlyCostEstimate.estimateStatus).toBe("unverified");
+    expect(audit.suggestedNextAction).toContain("Verify registry metadata");
 
     const promptResponse = await expectOkJson(
       await app.request(

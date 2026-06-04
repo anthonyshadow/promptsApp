@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { runPromptModelAudit } from "@promptopts/prompt-core";
 import {
   createHealthResponse,
   providerSchema,
@@ -7,8 +8,10 @@ import {
   taskTypeSchema,
   type EvalRun,
   type OptimizationCandidate,
+  type PromptAnalysis,
   type PromptProject,
   type PromptVersion,
+  type PromptOptsRepository,
   type RecommendationReport
 } from "@promptopts/shared";
 import {
@@ -27,7 +30,6 @@ import {
 import type { ApiEnv } from "./context";
 import {
   createId,
-  estimateTokens,
   getEvalRunDetail,
   notFound,
   nowIso,
@@ -86,22 +88,55 @@ export function createPublicApiRoutes() {
         return body.response;
       }
 
-      const suggestedModels = (await c.var.repository.model_registry.list())
-        .filter((model) => model.provider === body.data.provider)
-        .map((model) => model.model_id);
+      const modelRegistryRecords = await c.var.repository.model_registry.list();
+      const audit = runPromptModelAudit({
+        ...body.data,
+        modelRegistryRecords
+      });
+      const promptVersionId = await resolvePromptVersionId(
+        c.var.repository,
+        body.data.prompt,
+        body.data.promptVersionId
+      );
 
       const response = auditResponseSchema.parse({
         id: createId("audit"),
-        inputTokens: estimateTokens(body.data.prompt),
-        estimatedOutputTokens: Math.max(64, Math.ceil(estimateTokens(body.data.prompt) * 0.8)),
-        modelFit: "appropriate",
-        wasteFindings: ["TODO: run prompt audit heuristics before provider calls."],
-        riskLevel: "medium",
-        compressionGuardrails: ["Preserve task semantics and output contract before claiming savings."],
-        suggestedModels,
-        registryFreshness: suggestedModels.length > 0 ? "unverified" : "stale",
+        inputTokens: audit.inputTokens,
+        estimatedOutputTokens: audit.estimatedOutputTokens,
+        monthlyCostEstimate: audit.monthlyCostEstimate,
+        modelFit: audit.modelFit,
+        modelFitReasons: audit.modelFitReasons,
+        wasteFindings: audit.wasteFindings,
+        riskLevel: audit.riskLevel,
+        sensitiveFindings: audit.sensitiveFindings,
+        compressionGuardrails: audit.compressionGuardrails,
+        suggestedModels: audit.suggestedModels,
+        suggestedModelRoles: audit.suggestedModelRoles,
+        suggestedNextAction: audit.suggestedNextAction,
+        registryFreshness: audit.registryFreshness,
         createdAt: nowIso()
       });
+
+      if (promptVersionId) {
+        const analysis: PromptAnalysis = {
+          id: response.id,
+          prompt_version_id: promptVersionId,
+          provider: body.data.provider,
+          model_id: body.data.modelId,
+          task_type: body.data.taskType,
+          input_tokens: response.inputTokens,
+          estimated_output_tokens: response.estimatedOutputTokens,
+          model_fit: response.modelFit,
+          waste_findings: response.wasteFindings,
+          risk_level: response.riskLevel,
+          compression_guardrails: response.compressionGuardrails,
+          registry_freshness: response.registryFreshness,
+          is_mock: true,
+          created_at: response.createdAt
+        };
+
+        await c.var.repository.prompt_analyses.create(analysis);
+      }
 
       return c.json(response);
     })
@@ -319,4 +354,22 @@ export function createPublicApiRoutes() {
         })
       );
     });
+}
+
+async function resolvePromptVersionId(
+  repository: PromptOptsRepository,
+  promptText: string,
+  requestedPromptVersionId: string | undefined
+): Promise<string | null> {
+  if (requestedPromptVersionId) {
+    const requested = await repository.prompt_versions.get(requestedPromptVersionId);
+
+    return requested?.id ?? null;
+  }
+
+  const matchingVersion = (await repository.prompt_versions.list()).find(
+    (version) => version.prompt_text === promptText
+  );
+
+  return matchingVersion?.id ?? null;
 }

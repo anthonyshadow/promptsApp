@@ -1,6 +1,8 @@
 import { hc } from "hono/client";
 import type {
   ApiApp,
+  AuditRequest,
+  AuditResponse,
   ModelsResponse,
   PromptCreateRequest,
   PromptCreateResponse
@@ -19,6 +21,7 @@ export type PromptOptsApiClient = {
   health: () => Promise<HealthResponse>;
   models: (filters?: ModelRegistryFilters) => Promise<RegistryResponse>;
   createPrompt: (request: PromptCreateRequest) => Promise<PromptCreateResponse>;
+  runAudit: (request: AuditRequest) => Promise<AuditResponse>;
 };
 
 export function createPromptOptsApiClient(baseUrl: string): PromptOptsApiClient {
@@ -51,6 +54,15 @@ export function createPromptOptsApiClient(baseUrl: string): PromptOptsApiClient 
       }
 
       return (await response.json()) as unknown as PromptCreateResponse;
+    },
+    async runAudit(request) {
+      const response = await client.audits.$post({ json: request });
+
+      if (!response.ok) {
+        throw new Error(`Audit returned ${response.status}`);
+      }
+
+      return (await response.json()) as unknown as AuditResponse;
     }
   };
 }

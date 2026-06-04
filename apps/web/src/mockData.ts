@@ -94,18 +94,51 @@ export const demoAudit: AuditResponse = {
   id: "audit_demo_support",
   inputTokens: 32,
   estimatedOutputTokens: 96,
+  monthlyCostEstimate: {
+    estimatedMonthlyCostUsd: null,
+    inputCostUsd: null,
+    outputCostUsd: null,
+    estimateStatus: "unverified",
+    unverified: true,
+    registryFreshness: "unverified",
+    metadataWarnings: ["Demo registry rows are unverified."],
+    pricingNote: "Demo placeholder price; unverified registry row."
+  },
   modelFit: "overpowered",
+  modelFitReasons: ["frontier_model_for_bounded_task", "same_provider_benchmark_recommended"],
   wasteFindings: [
     "High-capability model appears unnecessary for a constrained classification task.",
     "Output contract is compact enough to test with lower-cost same-provider models."
   ],
   riskLevel: "medium",
+  sensitiveFindings: [],
   compressionGuardrails: [
     "Keep strict JSON.",
     "Preserve urgency labels.",
     "Do not remove routing_group."
   ],
   suggestedModels: ["openai-demo-balanced", "openai-demo-economy"],
+  suggestedModelRoles: [
+    {
+      role: "baseline",
+      modelId: "openai-demo-frontier",
+      registryRecordId: "model_record_openai_frontier",
+      reason: "Current prompt and model remain the regression baseline."
+    },
+    {
+      role: "cheaper_candidate",
+      modelId: "openai-demo-balanced",
+      registryRecordId: "model_record_openai_balanced",
+      reason: "Same-provider candidate for eval benchmarking, not a production switch recommendation."
+    },
+    {
+      role: "stronger_fallback",
+      modelId: "openai-demo-frontier",
+      registryRecordId: "model_record_openai_frontier",
+      reason: "Fallback role for quality risk evaluation."
+    }
+  ],
+  suggestedNextAction: "Define the success contract, then benchmark cheaper same-provider candidates through evals.",
   registryFreshness: "unverified",
   createdAt: demoCreatedAt
 };

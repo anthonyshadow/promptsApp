@@ -59,6 +59,8 @@ export const modelsResponseSchema = z
   })
   .strict();
 export type ModelsResponse = z.infer<typeof modelsResponseSchema>;
+export type AuditRequest = z.infer<typeof auditRequestSchema>;
+export type AuditResponse = z.infer<typeof auditResponseSchema>;
 
 export const promptCreateRequestSchema = z
   .object({

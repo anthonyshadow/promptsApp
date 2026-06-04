@@ -32,11 +32,32 @@ describe("shared domain schemas", () => {
       id: "audit_response_demo",
       inputTokens: 42,
       estimatedOutputTokens: 80,
+      monthlyCostEstimate: {
+        estimatedMonthlyCostUsd: 4.2,
+        inputCostUsd: 1.2,
+        outputCostUsd: 3,
+        estimateStatus: "unverified",
+        unverified: true,
+        registryFreshness: "unverified",
+        metadataWarnings: ["Registry row is demo/mock metadata."],
+        pricingNote: "Demo placeholder pricing only."
+      },
       modelFit: "overpowered",
+      modelFitReasons: ["frontier_model_for_bounded_task"],
       wasteFindings: ["Instruction repeats the JSON shape twice."],
       riskLevel: "medium",
+      sensitiveFindings: [],
       compressionGuardrails: ["Preserve required JSON keys."],
       suggestedModels: ["openai-demo-balanced"],
+      suggestedModelRoles: [
+        {
+          role: "baseline",
+          modelId: "openai-demo-frontier",
+          registryRecordId: "model_registry_openai_frontier",
+          reason: "Current prompt and model remain the regression baseline."
+        }
+      ],
+      suggestedNextAction: "Define the success contract before generating candidates.",
       registryFreshness: "unverified",
       createdAt: timestamp
     });

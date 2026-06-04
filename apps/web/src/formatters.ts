@@ -1,4 +1,10 @@
-import type { Provider, TaskType } from "@promptopts/shared";
+import type {
+  AuditResponse,
+  Provider,
+  SensitiveFinding,
+  SuggestedModelRole,
+  TaskType
+} from "@promptopts/shared";
 import { demoWorkspace } from "./mockData";
 import type { ProductStepKey, PublicRoute } from "./routes";
 
@@ -86,6 +92,52 @@ export function formatTaskType(taskType: TaskType): string {
 
 export function formatModelFit(value: string): string {
   return value.replace(/^\w/, (letter) => letter.toUpperCase());
+}
+
+export function formatRiskLevel(riskLevel: AuditResponse["riskLevel"]): string {
+  switch (riskLevel) {
+    case "low":
+      return "Low";
+    case "medium":
+      return "Medium";
+    case "high":
+      return "High";
+    case "critical":
+      return "Critical";
+  }
+}
+
+export function formatAuditCostEstimate(audit: AuditResponse): string {
+  const estimate = audit.monthlyCostEstimate.estimatedMonthlyCostUsd;
+
+  if (estimate === null) {
+    return "Blocked";
+  }
+
+  const formatted = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2
+  }).format(estimate);
+
+  return audit.monthlyCostEstimate.unverified ? `${formatted} unverified` : formatted;
+}
+
+export function formatSensitiveFinding(finding: SensitiveFinding): string {
+  return `${finding.label}: ${finding.redactedPreview}`;
+}
+
+export function formatSuggestedRole(role: SuggestedModelRole): string {
+  switch (role.role) {
+    case "baseline":
+      return `Baseline: ${role.modelId}`;
+    case "cheaper_candidate":
+      return `Cheaper candidate: ${role.modelId}`;
+    case "stronger_fallback":
+      return `Stronger fallback: ${role.modelId}`;
+    case "registry_verification":
+      return `Registry verification: ${role.modelId}`;
+  }
 }
 
 export function formatStrategy(strategy: string): string {
