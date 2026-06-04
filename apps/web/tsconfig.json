@@ -5,11 +5,12 @@
     "rootDir": ".",
     "outDir": "./dist/types",
     "jsx": "react-jsx",
-    "types": ["vite/client"],
+    "types": ["vite/client", "bun"],
     "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo"
   },
   "include": ["src", "vite.config.ts"],
   "references": [
+    { "path": "../api" },
     { "path": "../../packages/shared" }
   ]
 }

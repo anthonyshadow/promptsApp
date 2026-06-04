@@ -3,6 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/app.ts",
+      "import": "./src/app.ts"
+    }
+  },
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "build": "tsc -b && bun build src/index.ts --target bun --outdir dist",

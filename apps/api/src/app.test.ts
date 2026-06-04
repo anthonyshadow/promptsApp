@@ -421,6 +421,15 @@ describe("admin API routes", () => {
     expect(after.length).toBe(before.length + 2);
     expect(after.at(-1)?.target_type).toBe("audit_logs");
   });
+
+  test("keeps public and admin namespaces separated", async () => {
+    const app = createTestApp();
+
+    expect((await app.request("/admin-api/health", adminGetRequest())).status).toBe(404);
+    expect((await app.request("/accounts")).status).toBe(404);
+    expect((await app.request("/models")).status).toBe(200);
+    expect((await app.request("/admin-api/models", adminGetRequest())).status).toBe(200);
+  });
 });
 
 describe("route request validation", () => {
