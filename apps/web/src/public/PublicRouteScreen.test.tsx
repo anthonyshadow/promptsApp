@@ -6,6 +6,40 @@ import type { ApiState } from "../viewTypes";
 import PublicRouteScreen from "./PublicRouteScreen";
 
 describe("public route screens", () => {
+  test("renders every public product-loop route without exposing admin navigation", () => {
+    const apiState: ApiState = { status: "not-configured" };
+    const routes = [
+      ["/app", "Same-provider optimization path"],
+      ["/app/setup", "Provider and model setup"],
+      ["/app/prompts/prompt_demo_support", "Prompt baseline"],
+      ["/app/projects/project_demo_support/audit", "Prompt and model audit"],
+      ["/app/projects/project_demo_support/success", "Quality contract"],
+      ["/app/projects/project_demo_support/candidates", "Prompt candidates"],
+      ["/app/projects/project_demo_support/models", "Model shortlist"],
+      ["/app/eval-runs/eval_demo_support", "Eval matrix"],
+      ["/app/reports/report_demo_support", "Recommendation report"],
+      ["/app/reports/report_demo_support/export", "Deploy package export"],
+      ["/does-not-exist", "Route unavailable"]
+    ] as const;
+
+    for (const [path, expectedCopy] of routes) {
+      const html = renderToString(
+        <PublicRouteScreen
+          apiClient={null}
+          apiState={apiState}
+          appState={createInitialPublicAppState()}
+          registryModels={demoModelRegistry}
+          route={parsePublicRoute(path)}
+          updateAppState={() => undefined}
+          onNavigate={() => undefined}
+        />
+      );
+
+      expect(html).toContain(expectedCopy);
+      expect(html).not.toContain("/__admin");
+    }
+  });
+
   test("renders the free model-fit audit acquisition screen", () => {
     const apiState: ApiState = { status: "not-configured" };
     const html = renderToString(

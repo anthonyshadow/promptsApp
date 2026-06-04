@@ -20,8 +20,9 @@ import {
   sidebarStyle
 } from "../styles";
 import type { ApiState, NavigateHandler } from "../viewTypes";
+import ExpertControls from "./ExpertControls";
 import ProductStepper from "./ProductStepper";
-import PublicRouteScreen, { ExpertControls } from "./PublicRouteScreen";
+import PublicRouteScreen from "./PublicRouteScreen";
 import ShellHeader from "./ShellHeader";
 
 function PublicShell({ path, onNavigate }: { path: string; onNavigate: NavigateHandler }) {

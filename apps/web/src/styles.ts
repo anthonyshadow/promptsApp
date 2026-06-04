@@ -408,27 +408,6 @@ export const promptEditorGridStyle = css({
   }
 });
 
-export const promptPreviewStyle = css({
-  minHeight: "220px",
-  overflow: "auto",
-  whiteSpace: "pre-wrap",
-  overflowWrap: "anywhere",
-  border: "1px solid #d7d6ca",
-  borderRadius: "8px",
-  background: "#fffef9",
-  color: "#202722",
-  padding: "14px",
-  lineHeight: 1.55
-});
-
-export const promptVariableStyle = css({
-  borderRadius: "6px",
-  background: "#e2f3d3",
-  color: "#162015",
-  padding: "1px 4px",
-  fontWeight: 800
-});
-
 export const metaGridStyle = css({
   display: "grid",
   gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
@@ -474,40 +453,6 @@ export const listPanelStyle = css({
   padding: "18px"
 });
 
-export const testCardStyle = css({
-  minHeight: "150px",
-  border: "1px solid #d7d6ca",
-  borderRadius: "8px",
-  background: "#fffef9",
-  padding: "16px"
-});
-
-export const candidateCardStyle = css({
-  minHeight: "190px",
-  border: "1px solid #d7d6ca",
-  borderRadius: "8px",
-  background: "#fffef9",
-  padding: "16px"
-});
-
-export const candidateHeaderStyle = css({
-  display: "flex",
-  justifyContent: "space-between",
-  gap: "12px",
-  alignItems: "center",
-  marginBottom: "14px"
-});
-
-export const riskPillStyle = css({
-  border: "1px solid #caa463",
-  borderRadius: "999px",
-  background: "#fff4dc",
-  color: "#6d4a11",
-  padding: "4px 8px",
-  fontSize: "0.78rem",
-  fontWeight: 700
-});
-
 export const checkboxLabelStyle = css({
   display: "flex",
   alignItems: "center",
@@ -542,12 +487,6 @@ export const cardTextStyle = css({
   margin: "10px 0 0",
   color: "#4d5750",
   lineHeight: 1.5
-});
-
-export const metricLineStyle = css({
-  margin: "14px 0 0",
-  color: "#263128",
-  fontWeight: 700
 });
 
 export const tableWrapStyle = css({
@@ -600,23 +539,6 @@ export const decisionCardStyle = css({
   borderRadius: "8px",
   background: "#fffef9",
   padding: "16px"
-});
-
-export const expertPanelStyle = css({
-  display: "grid",
-  gap: "16px",
-  marginTop: "48px",
-  borderTop: "1px solid #d7d6ca",
-  paddingTop: "22px"
-});
-
-export const expertGridStyle = css({
-  display: "grid",
-  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-  gap: "12px",
-  "@media (max-width: 820px)": {
-    gridTemplateColumns: "1fr"
-  }
 });
 
 export const statusLabelStyle = css({
