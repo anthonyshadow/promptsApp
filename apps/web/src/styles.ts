@@ -231,6 +231,11 @@ export const primaryButtonStyle = css({
   ":hover": {
     background: "#304131"
   },
+  ":disabled": {
+    cursor: "not-allowed",
+    borderColor: "#8d938e",
+    background: "#8d938e"
+  },
   ":focus-visible": {
     outline: "2px solid #6b8cff",
     outlineOffset: "2px"
@@ -350,6 +355,33 @@ export const fieldControlStyle = css({
   }
 });
 
+export const detailsPanelStyle = css({
+  border: "1px solid #d7d6ca",
+  borderRadius: "8px",
+  background: "#fffef9",
+  padding: "16px"
+});
+
+export const detailsSummaryStyle = css({
+  cursor: "pointer",
+  color: "#151b17",
+  fontWeight: 800,
+  ":focus-visible": {
+    outline: "2px solid #6b8cff",
+    outlineOffset: "4px"
+  }
+});
+
+export const checkboxGridStyle = css({
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gap: "12px",
+  marginTop: "16px",
+  "@media (max-width: 820px)": {
+    gridTemplateColumns: "1fr"
+  }
+});
+
 export const promptTextareaStyle = css({
   width: "100%",
   minHeight: "220px",
@@ -363,6 +395,75 @@ export const promptTextareaStyle = css({
   ":focus": {
     borderColor: "#6b8cff",
     outline: "2px solid #dfe6ff"
+  }
+});
+
+export const promptEditorGridStyle = css({
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1.2fr) minmax(320px, 0.8fr)",
+  gap: "14px",
+  alignItems: "stretch",
+  "@media (max-width: 920px)": {
+    gridTemplateColumns: "1fr"
+  }
+});
+
+export const promptPreviewStyle = css({
+  minHeight: "220px",
+  overflow: "auto",
+  whiteSpace: "pre-wrap",
+  overflowWrap: "anywhere",
+  border: "1px solid #d7d6ca",
+  borderRadius: "8px",
+  background: "#fffef9",
+  color: "#202722",
+  padding: "14px",
+  lineHeight: 1.55
+});
+
+export const promptVariableStyle = css({
+  borderRadius: "6px",
+  background: "#e2f3d3",
+  color: "#162015",
+  padding: "1px 4px",
+  fontWeight: 800
+});
+
+export const metaGridStyle = css({
+  display: "grid",
+  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+  gap: "10px",
+  "@media (max-width: 920px)": {
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))"
+  },
+  "@media (max-width: 560px)": {
+    gridTemplateColumns: "1fr"
+  }
+});
+
+export const chipListStyle = css({
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "8px",
+  marginTop: "12px"
+});
+
+export const chipStyle = css({
+  border: "1px solid #c7d5bc",
+  borderRadius: "999px",
+  background: "#f2f8ed",
+  color: "#263128",
+  padding: "5px 9px",
+  fontSize: "0.84rem",
+  fontWeight: 700
+});
+
+export const actionRowStyle = css({
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: "10px",
+  "@media (max-width: 640px)": {
+    display: "grid"
   }
 });
 

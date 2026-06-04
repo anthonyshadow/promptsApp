@@ -76,6 +76,60 @@ describe("public API routes", () => {
     expect(healthResponseSchema.parse(body).status).toBe("ok");
   });
 
+  test("GET /models filters registry rows by provider, task, and stability", async () => {
+    const app = createTestApp();
+
+    const supportModels = await expectOkJson(
+      await app.request("/models?provider=openai&task_type=support&stability=unverified")
+    );
+    expect(supportModels.models.map((model: { model_id: string }) => model.model_id)).toEqual([
+      "openai-demo-balanced"
+    ]);
+
+    const codingModels = await expectOkJson(
+      await app.request("/models?provider=openai&task_type=coding&stability=unverified")
+    );
+    expect(codingModels.models).toHaveLength(0);
+
+    expect((await app.request("/models?provider=openai&task_type=unknown")).status).toBe(400);
+    expect((await app.request("/models?provider=openai&stability=retired")).status).toBe(400);
+  });
+
+  test("POST /prompts persists project, prompt, and raw prompt version records", async () => {
+    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const app = createApp({ repository });
+    const beforeProjects = await repository.projects.list();
+    const beforePrompts = await repository.prompts.list();
+    const beforeVersions = await repository.prompt_versions.list();
+
+    const promptResponse = await expectOkJson(
+      await app.request(
+        "/prompts",
+        jsonRequest({
+          workspace_id: DEMO_IDS.workspace,
+          name: "Extraction prompt",
+          task_type: "extraction",
+          provider: "gemini",
+          model_id: "gemini-demo-balanced",
+          prompt_text: "Extract invoice fields from {{invoice_text}} as JSON.",
+          variables: ["invoice_text"]
+        })
+      )
+    );
+
+    const afterProjects = await repository.projects.list();
+    const afterPrompts = await repository.prompts.list();
+    const afterVersions = await repository.prompt_versions.list();
+    const storedVersion = await repository.prompt_versions.get(promptResponse.version.id);
+
+    expect(afterProjects).toHaveLength(beforeProjects.length + 1);
+    expect(afterPrompts).toHaveLength(beforePrompts.length + 1);
+    expect(afterVersions).toHaveLength(beforeVersions.length + 1);
+    expect(storedVersion?.prompt_text).toBe("Extract invoice fields from {{invoice_text}} as JSON.");
+    expect(promptResponse.project.current_provider).toBe("gemini");
+    expect(promptResponse.version.variables).toEqual(["invoice_text"]);
+  });
+
   test("implements the public route map with seed or mock data", async () => {
     const app = createTestApp();
 

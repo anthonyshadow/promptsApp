@@ -13,15 +13,28 @@ import type {
   RecommendationReport,
   ReportArtifact,
   TestCase,
+  TaskType,
   Workspace
 } from "@promptopts/shared";
 
 export type PublicAppState = {
+  projectName: string;
+  projectId: string;
+  promptId: string;
+  promptVersionId: string;
   provider: Provider;
   currentModelId: string;
+  taskType: TaskType;
   priority: Priority;
   monthlyCalls: number;
+  requiresJson: boolean;
+  usesTools: boolean;
+  usesImages: boolean;
+  maxLatencyMs: number | null;
+  minContextWindow: number | null;
+  setupSavedAt: string | null;
   promptText: string;
+  promptVariables: string[];
   passThreshold: number;
   selectedCandidateIds: string[];
   selectedModelIds: string[];
@@ -289,11 +302,23 @@ export const demoReportArtifacts: ReportArtifact[] = [
 
 export function createInitialPublicAppState(): PublicAppState {
   return {
+    projectName: demoProject.name,
+    projectId: demoProject.id,
+    promptId: demoPrompt.id,
+    promptVersionId: demoPromptVersion.id,
     provider: demoProject.current_provider,
     currentModelId: demoProject.current_model_id,
+    taskType: demoProject.task_type,
     priority: "balanced",
     monthlyCalls: 250000,
+    requiresJson: true,
+    usesTools: false,
+    usesImages: false,
+    maxLatencyMs: null,
+    minContextWindow: null,
+    setupSavedAt: null,
     promptText: demoPromptVersion.prompt_text,
+    promptVariables: demoPromptVersion.variables,
     passThreshold: demoQualityContract.pass_threshold,
     selectedCandidateIds: demoEvalRun.candidate_ids,
     selectedModelIds: demoEvalRun.model_registry_record_ids

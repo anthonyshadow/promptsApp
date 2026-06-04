@@ -31,14 +31,15 @@ function PublicShell({ path, onNavigate }: { path: string; onNavigate: NavigateH
   const [apiState, setApiState] = useState<ApiState>(
     apiUrl ? { status: "checking" } : { status: "not-configured" }
   );
+  const apiClient = useMemo(() => (apiUrl ? createPromptOptsApiClient(apiUrl) : null), [apiUrl]);
 
   useEffect(() => {
-    if (!apiUrl) {
+    if (!apiClient) {
       return;
     }
 
     let isMounted = true;
-    const client = createPromptOptsApiClient(apiUrl);
+    const client = apiClient;
 
     async function checkApi() {
       try {
@@ -62,7 +63,7 @@ function PublicShell({ path, onNavigate }: { path: string; onNavigate: NavigateH
     return () => {
       isMounted = false;
     };
-  }, [apiUrl]);
+  }, [apiClient]);
 
   function updateAppState(next: Partial<PublicAppState>) {
     setAppState((current) => ({ ...current, ...next }));
@@ -91,6 +92,7 @@ function PublicShell({ path, onNavigate }: { path: string; onNavigate: NavigateH
       <main className={mainStyle}>
         <ShellHeader apiState={apiState} appState={appState} route={route} />
         <PublicRouteScreen
+          apiClient={apiClient}
           apiState={apiState}
           appState={appState}
           onNavigate={onNavigate}

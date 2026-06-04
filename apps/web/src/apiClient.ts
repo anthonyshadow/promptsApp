@@ -1,15 +1,24 @@
 import { hc } from "hono/client";
-import type { ApiApp } from "@promptopts/api";
-import type { HealthResponse, ModelRegistryRecord } from "@promptopts/shared";
+import type {
+  ApiApp,
+  ModelsResponse,
+  PromptCreateRequest,
+  PromptCreateResponse
+} from "@promptopts/api";
+import type { HealthResponse, Provider, StabilityStatus, TaskType } from "@promptopts/shared";
 
-export type RegistryResponse = {
-  models: ModelRegistryRecord[];
-  registry_note: string;
+export type RegistryResponse = ModelsResponse;
+
+export type ModelRegistryFilters = {
+  provider?: Provider;
+  taskType?: TaskType;
+  stability?: StabilityStatus[];
 };
 
 export type PromptOptsApiClient = {
   health: () => Promise<HealthResponse>;
-  models: () => Promise<RegistryResponse>;
+  models: (filters?: ModelRegistryFilters) => Promise<RegistryResponse>;
+  createPrompt: (request: PromptCreateRequest) => Promise<PromptCreateResponse>;
 };
 
 export function createPromptOptsApiClient(baseUrl: string): PromptOptsApiClient {
@@ -25,14 +34,43 @@ export function createPromptOptsApiClient(baseUrl: string): PromptOptsApiClient 
 
       return response.json();
     },
-    async models() {
-      const response = await client.models.$get();
+    async models(filters = {}) {
+      const response = await fetch(`${baseUrl}/models${createModelQuery(filters)}`);
 
       if (!response.ok) {
         throw new Error(`Model registry returned ${response.status}`);
       }
 
-      return (await response.json()) as unknown as RegistryResponse;
+      return (await response.json()) as RegistryResponse;
+    },
+    async createPrompt(request) {
+      const response = await client.prompts.$post({ json: request });
+
+      if (!response.ok) {
+        throw new Error(`Prompt save returned ${response.status}`);
+      }
+
+      return (await response.json()) as unknown as PromptCreateResponse;
     }
   };
+}
+
+function createModelQuery(filters: ModelRegistryFilters): string {
+  const params = new URLSearchParams();
+
+  if (filters.provider) {
+    params.set("provider", filters.provider);
+  }
+
+  if (filters.taskType) {
+    params.set("task_type", filters.taskType);
+  }
+
+  if (filters.stability && filters.stability.length > 0) {
+    params.set("stability", filters.stability.join(","));
+  }
+
+  const value = params.toString();
+
+  return value ? `?${value}` : "";
 }

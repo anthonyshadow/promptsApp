@@ -1,16 +1,19 @@
-import type { ModelRegistryRecord, Priority, Provider } from "@promptopts/shared";
+import { useEffect, useMemo, useState } from "react";
+import type { ModelRegistryRecord, Priority, Provider, TaskType } from "@promptopts/shared";
 import DecisionCard from "../components/DecisionCard";
 import EmptyState from "../components/EmptyState";
 import Field from "../components/Field";
 import ModelFitPanel, { RiskSummary, SavingsSummary } from "../components/SummaryPanels";
 import StatusBadge from "../components/StatusBadge";
 import StatusNotice from "../components/StatusNotice";
+import type { PromptOptsApiClient } from "../apiClient";
 import { getRegistryNotice } from "../apiViewState";
 import {
   formatCandidateId,
   formatProvider,
   formatModelFit,
   formatStrategy,
+  formatTaskType,
   getStepCardTitle
 } from "../formatters";
 import {
@@ -19,15 +22,19 @@ import {
   demoEvalResults,
   demoEvalRun,
   demoProject,
+  demoPrompt,
   demoPromptVersion,
   demoQualityContract,
+  demoWorkspace,
   demoReport,
   demoReportArtifacts,
   demoTestCases,
   type PublicAppState
 } from "../mockData";
+import { detectPromptVariables, estimatePromptTokens, splitPromptIntoSegments } from "../promptView";
 import { stepperItems, type PublicRoute } from "../routes";
 import {
+  actionRowStyle,
   cardGridStyle,
   cardKickerStyle,
   cardTextStyle,
@@ -35,10 +42,15 @@ import {
   candidateCardStyle,
   candidateHeaderStyle,
   checkboxLabelStyle,
+  checkboxGridStyle,
   checkboxStyle,
+  chipListStyle,
+  chipStyle,
   compactTitleStyle,
   contentStackStyle,
   decisionGridStyle,
+  detailsPanelStyle,
+  detailsSummaryStyle,
   emptyStateStyle,
   expertGridStyle,
   expertPanelStyle,
@@ -49,11 +61,15 @@ import {
   loopCardLabelStyle,
   loopCardStyle,
   loopCardTitleStyle,
+  metaGridStyle,
   metricLineStyle,
   panelTitleStyle,
   plainListStyle,
   primaryButtonStyle,
+  promptEditorGridStyle,
   promptTextareaStyle,
+  promptPreviewStyle,
+  promptVariableStyle,
   riskPillStyle,
   sectionEyebrowStyle,
   sectionTextStyle,
@@ -67,6 +83,7 @@ import {
 import type { ApiState, NavigateHandler } from "../viewTypes";
 
 function PublicRouteScreen({
+  apiClient,
   apiState,
   appState,
   onNavigate,
@@ -74,6 +91,7 @@ function PublicRouteScreen({
   route,
   updateAppState
 }: {
+  apiClient: PromptOptsApiClient | null;
   apiState: ApiState;
   appState: PublicAppState;
   onNavigate: NavigateHandler;
@@ -90,6 +108,7 @@ function PublicRouteScreen({
       return (
         <SetupScreen
           apiState={apiState}
+          apiClient={apiClient}
           appState={appState}
           onNavigate={onNavigate}
           registryModels={registryModels}
@@ -97,7 +116,14 @@ function PublicRouteScreen({
         />
       );
     case "prompt":
-      return <PromptScreen appState={appState} updateAppState={updateAppState} />;
+      return (
+        <PromptScreen
+          apiClient={apiClient}
+          appState={appState}
+          onNavigate={onNavigate}
+          updateAppState={updateAppState}
+        />
+      );
     case "audit":
       return <AuditScreen appState={appState} onNavigate={onNavigate} />;
     case "success":
@@ -118,6 +144,40 @@ function PublicRouteScreen({
 }
 
 export default PublicRouteScreen;
+
+const taskTypeOptions: TaskType[] = [
+  "support",
+  "summarization",
+  "extraction",
+  "coding",
+  "rag",
+  "agent",
+  "classification",
+  "other"
+];
+
+function filterModelsForSetup(
+  registryModels: ModelRegistryRecord[],
+  provider: Provider,
+  taskType: TaskType
+): ModelRegistryRecord[] {
+  return registryModels.filter((model) => {
+    return model.provider === provider && model.recommended_task_types.includes(taskType);
+  });
+}
+
+function formatPromptSaveState(state: "idle" | "saving" | "saved" | "error"): string {
+  switch (state) {
+    case "idle":
+      return "Not saved";
+    case "saving":
+      return "Saving";
+    case "saved":
+      return "Saved";
+    case "error":
+      return "API required";
+  }
+}
 
 function WorkspaceScreen({ appState, onNavigate }: { appState: PublicAppState; onNavigate: NavigateHandler }) {
   return (
@@ -225,19 +285,132 @@ function FreeAuditScreen({
 }
 
 function SetupScreen({
+  apiClient,
   apiState,
   appState,
   onNavigate,
   registryModels,
   updateAppState
 }: {
+  apiClient: PromptOptsApiClient | null;
   apiState: ApiState;
   appState: PublicAppState;
   onNavigate: NavigateHandler;
   registryModels: ModelRegistryRecord[];
   updateAppState: (next: Partial<PublicAppState>) => void;
 }) {
-  const sameProviderModels = registryModels.filter((model) => model.provider === appState.provider);
+  const [draft, setDraft] = useState({
+    provider: appState.provider,
+    currentModelId: appState.currentModelId,
+    taskType: appState.taskType,
+    monthlyCalls: appState.monthlyCalls,
+    priority: appState.priority,
+    requiresJson: appState.requiresJson,
+    usesTools: appState.usesTools,
+    usesImages: appState.usesImages,
+    maxLatencyMs: appState.maxLatencyMs,
+    minContextWindow: appState.minContextWindow
+  });
+  const [setupModels, setSetupModels] = useState<ModelRegistryRecord[]>(() =>
+    filterModelsForSetup(registryModels, appState.provider, appState.taskType)
+  );
+  const [modelLoadState, setModelLoadState] = useState<"idle" | "loading" | "error">("idle");
+  const selectedModelId = draft.currentModelId || setupModels[0]?.model_id || "";
+
+  useEffect(() => {
+    setDraft({
+      provider: appState.provider,
+      currentModelId: appState.currentModelId,
+      taskType: appState.taskType,
+      monthlyCalls: appState.monthlyCalls,
+      priority: appState.priority,
+      requiresJson: appState.requiresJson,
+      usesTools: appState.usesTools,
+      usesImages: appState.usesImages,
+      maxLatencyMs: appState.maxLatencyMs,
+      minContextWindow: appState.minContextWindow
+    });
+  }, [
+    appState.currentModelId,
+    appState.maxLatencyMs,
+    appState.minContextWindow,
+    appState.monthlyCalls,
+    appState.priority,
+    appState.provider,
+    appState.requiresJson,
+    appState.taskType,
+    appState.usesImages,
+    appState.usesTools
+  ]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadModels() {
+      if (!apiClient) {
+        setSetupModels(filterModelsForSetup(registryModels, draft.provider, draft.taskType));
+        setModelLoadState("idle");
+        return;
+      }
+
+      setModelLoadState("loading");
+
+      try {
+        const registry = await apiClient.models({
+          provider: draft.provider,
+          taskType: draft.taskType
+        });
+
+        if (!isMounted) {
+          return;
+        }
+
+        setSetupModels(registry.models);
+        setModelLoadState("idle");
+        setDraft((current) => {
+          if (current.provider !== draft.provider || current.taskType !== draft.taskType) {
+            return current;
+          }
+
+          const hasCurrentModel = registry.models.some((model) => model.model_id === current.currentModelId);
+
+          return hasCurrentModel
+            ? current
+            : {
+                ...current,
+                currentModelId: registry.models[0]?.model_id ?? ""
+              };
+        });
+      } catch {
+        if (isMounted) {
+          setSetupModels(filterModelsForSetup(registryModels, draft.provider, draft.taskType));
+          setModelLoadState("error");
+        }
+      }
+    }
+
+    void loadModels();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [apiClient, draft.provider, draft.taskType, registryModels]);
+
+  function updateDraft(next: Partial<typeof draft>) {
+    setDraft((current) => ({ ...current, ...next }));
+  }
+
+  function commitSetup() {
+    const nextSelectedModelIds = setupModels.map((model) => model.id).slice(0, 3);
+
+    updateAppState({
+      ...draft,
+      currentModelId: selectedModelId,
+      selectedModelIds: nextSelectedModelIds.length > 0 ? nextSelectedModelIds : appState.selectedModelIds,
+      setupSavedAt: new Date().toISOString()
+    });
+    onNavigate(`/app/prompts/${appState.promptId}`);
+  }
 
   return (
     <div className={contentStackStyle}>
@@ -251,7 +424,7 @@ function SetupScreen({
             OpenAI, Anthropic, and Gemini stay in scope; model metadata comes from the registry.
           </p>
         </div>
-        <button className={primaryButtonStyle} type="button" onClick={() => onNavigate("/app/prompts/prompt_demo_support")}>
+        <button className={primaryButtonStyle} disabled={!selectedModelId} type="button" onClick={commitSetup}>
           Continue to prompt
         </button>
       </section>
@@ -260,11 +433,12 @@ function SetupScreen({
         <Field label="Provider">
           <select
             className={fieldControlStyle}
-            value={appState.provider}
+            value={draft.provider}
             onChange={(event) => {
               const provider = event.target.value as Provider;
-              const nextModel = registryModels.find((model) => model.provider === provider)?.model_id;
-              updateAppState({ provider, currentModelId: nextModel ?? appState.currentModelId });
+              const nextModel = filterModelsForSetup(registryModels, provider, draft.taskType)[0]?.model_id ?? "";
+
+              updateDraft({ provider, currentModelId: nextModel });
             }}
           >
             <option value="openai">OpenAI</option>
@@ -275,46 +449,193 @@ function SetupScreen({
         <Field label="Current model">
           <select
             className={fieldControlStyle}
-            value={appState.currentModelId}
-            onChange={(event) => updateAppState({ currentModelId: event.target.value })}
+            disabled={setupModels.length === 0}
+            value={selectedModelId}
+            onChange={(event) => updateDraft({ currentModelId: event.target.value })}
           >
-            {sameProviderModels.map((model) => (
+            {setupModels.map((model) => (
               <option key={model.id} value={model.model_id}>
                 {model.display_name}
               </option>
             ))}
           </select>
         </Field>
+        <Field label="Task type">
+          <select
+            className={fieldControlStyle}
+            value={draft.taskType}
+            onChange={(event) => {
+              const taskType = event.target.value as TaskType;
+              const nextModel = filterModelsForSetup(registryModels, draft.provider, taskType)[0]?.model_id ?? "";
+
+              updateDraft({ taskType, currentModelId: nextModel });
+            }}
+          >
+            {taskTypeOptions.map((taskType) => (
+              <option key={taskType} value={taskType}>
+                {formatTaskType(taskType)}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Monthly calls">
+          <input
+            className={fieldControlStyle}
+            min={1}
+            type="number"
+            value={draft.monthlyCalls}
+            onChange={(event) => updateDraft({ monthlyCalls: Number(event.target.value) })}
+          />
+        </Field>
         <Field label="Priority">
           <select
             className={fieldControlStyle}
-            value={appState.priority}
-            onChange={(event) => updateAppState({ priority: event.target.value as Priority })}
+            value={draft.priority}
+            onChange={(event) => updateDraft({ priority: event.target.value as Priority })}
           >
-            <option value="balanced">Balanced</option>
             <option value="cost">Cost</option>
             <option value="quality">Quality</option>
             <option value="latency">Latency</option>
+            <option value="balanced">Balanced</option>
           </select>
         </Field>
       </section>
 
+      <details className={detailsPanelStyle}>
+        <summary className={detailsSummaryStyle}>Advanced constraints</summary>
+        <div className={checkboxGridStyle}>
+          <label className={checkboxLabelStyle}>
+            <input
+              checked={draft.requiresJson}
+              className={checkboxStyle}
+              type="checkbox"
+              onChange={(event) => updateDraft({ requiresJson: event.target.checked })}
+            />
+            JSON output
+          </label>
+          <label className={checkboxLabelStyle}>
+            <input
+              checked={draft.usesTools}
+              className={checkboxStyle}
+              type="checkbox"
+              onChange={(event) => updateDraft({ usesTools: event.target.checked })}
+            />
+            Tools
+          </label>
+          <label className={checkboxLabelStyle}>
+            <input
+              checked={draft.usesImages}
+              className={checkboxStyle}
+              type="checkbox"
+              onChange={(event) => updateDraft({ usesImages: event.target.checked })}
+            />
+            Images
+          </label>
+          <Field label="Latency target">
+            <input
+              className={fieldControlStyle}
+              min={1}
+              placeholder="Milliseconds"
+              type="number"
+              value={draft.maxLatencyMs ?? ""}
+              onChange={(event) =>
+                updateDraft({ maxLatencyMs: event.target.value ? Number(event.target.value) : null })
+              }
+            />
+          </Field>
+          <Field label="Context size">
+            <input
+              className={fieldControlStyle}
+              min={1}
+              placeholder="Minimum tokens"
+              type="number"
+              value={draft.minContextWindow ?? ""}
+              onChange={(event) =>
+                updateDraft({ minContextWindow: event.target.value ? Number(event.target.value) : null })
+              }
+            />
+          </Field>
+        </div>
+      </details>
+
       <StatusNotice
-        tone={apiState.status === "online" ? "good" : "warn"}
+        tone={apiState.status === "online" && modelLoadState !== "error" ? "good" : "warn"}
         title="Registry status"
-        body={getRegistryNotice(apiState)}
+        body={`${getRegistryNotice(apiState)} ${
+          modelLoadState === "loading"
+            ? "Loading filtered model rows."
+            : `${setupModels.length} matching registry row${setupModels.length === 1 ? "" : "s"}.`
+        }`}
       />
     </div>
   );
 }
 
 function PromptScreen({
+  apiClient,
   appState,
+  onNavigate,
   updateAppState
 }: {
+  apiClient: PromptOptsApiClient | null;
   appState: PublicAppState;
+  onNavigate: NavigateHandler;
   updateAppState: (next: Partial<PublicAppState>) => void;
 }) {
+  const [promptText, setPromptText] = useState(appState.promptText);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const detectedVariables = useMemo(() => detectPromptVariables(promptText), [promptText]);
+  const promptSegments = useMemo(() => splitPromptIntoSegments(promptText), [promptText]);
+  const tokenEstimate = estimatePromptTokens(promptText);
+
+  useEffect(() => {
+    setPromptText(appState.promptText);
+  }, [appState.promptText]);
+
+  async function runAudit() {
+    const variables = detectedVariables;
+
+    updateAppState({
+      promptText,
+      promptVariables: variables
+    });
+
+    if (!apiClient) {
+      setSaveState("error");
+      return;
+    }
+
+    setSaveState("saving");
+
+    try {
+      const response = await apiClient.createPrompt({
+        workspace_id: demoWorkspace.id,
+        name: appState.projectName || demoPrompt.name,
+        task_type: appState.taskType,
+        provider: appState.provider,
+        model_id: appState.currentModelId,
+        prompt_text: promptText,
+        variables
+      });
+
+      updateAppState({
+        projectId: response.project.id,
+        promptId: response.prompt.id,
+        promptVersionId: response.version.id,
+        projectName: response.project.name,
+        taskType: response.project.task_type,
+        provider: response.project.current_provider,
+        currentModelId: response.project.current_model_id,
+        promptText: response.version.prompt_text,
+        promptVariables: response.version.variables
+      });
+      setSaveState("saved");
+      onNavigate(`/app/projects/${response.project.id}/audit`);
+    } catch {
+      setSaveState("error");
+    }
+  }
+
   return (
     <div className={contentStackStyle}>
       <section className={heroBandStyle} aria-labelledby="prompt-title">
@@ -324,25 +645,78 @@ function PromptScreen({
             Prompt baseline
           </h2>
           <p className={sectionTextStyle}>
-            Variables: {demoPromptVersion.variables.map((variable) => `{{${variable}}}`).join(", ")}
+            Current provider/model: {formatProvider(appState.provider)} / {appState.currentModelId}
           </p>
         </div>
         <StatusBadge label="Current model" value={appState.currentModelId} tone="neutral" />
       </section>
 
-      <Field label="Prompt text">
-        <textarea
-          className={promptTextareaStyle}
-          value={appState.promptText}
-          onChange={(event) => updateAppState({ promptText: event.target.value })}
+      <section className={promptEditorGridStyle} aria-label="Prompt editor">
+        <Field label="Prompt editor">
+          <textarea
+            className={promptTextareaStyle}
+            value={promptText}
+            onChange={(event) => {
+              setPromptText(event.target.value);
+              setSaveState("idle");
+            }}
+          />
+        </Field>
+        <section className={promptPreviewStyle} aria-label="Variable-highlighted prompt preview">
+          {promptSegments.map((segment, index) =>
+            segment.kind === "variable" ? (
+              <mark className={promptVariableStyle} key={`${segment.text}-${index}`}>
+                {segment.text}
+              </mark>
+            ) : (
+              <span key={`text-${index}`}>{segment.text}</span>
+            )
+          )}
+        </section>
+      </section>
+
+      <section className={metaGridStyle} aria-label="Prompt estimates and warnings">
+        <StatusBadge label="Input estimate" value={`${tokenEstimate.toLocaleString()} tokens`} tone="neutral" />
+        <StatusBadge label="Output estimate" value="Pending audit" tone="warn" />
+        <StatusBadge label="Task type" value={formatTaskType(appState.taskType)} tone="neutral" />
+        <StatusBadge
+          label="Save state"
+          value={formatPromptSaveState(saveState)}
+          tone={saveState === "saved" ? "good" : saveState === "error" ? "warn" : "neutral"}
         />
-      </Field>
+      </section>
+
+      <section className={listPanelStyle} aria-label="Detected variables">
+        <h3 className={panelTitleStyle}>Detected variables</h3>
+        {detectedVariables.length === 0 ? (
+          <p className={cardTextStyle}>No variable patterns detected yet.</p>
+        ) : (
+          <div className={chipListStyle}>
+            {detectedVariables.map((variable) => (
+              <span className={chipStyle} key={variable}>
+                {`{{${variable}}}`}
+              </span>
+            ))}
+          </div>
+        )}
+      </section>
 
       <StatusNotice
         tone="warn"
-        title="Risk check"
-        body="Prompt content remains customer-owned. Admin views stay redacted by default and raw prompt browsing is not a normal support workflow."
+        title="Secret and PII warning"
+        body="Placeholder scanner only: treat pasted prompts as sensitive. Admin views remain redacted by default, and provider calls are not live yet."
       />
+
+      <div className={actionRowStyle}>
+        <button
+          className={primaryButtonStyle}
+          disabled={promptText.trim().length === 0 || saveState === "saving"}
+          type="button"
+          onClick={() => void runAudit()}
+        >
+          {saveState === "saving" ? "Saving prompt" : "Run audit"}
+        </button>
+      </div>
     </div>
   );
 }

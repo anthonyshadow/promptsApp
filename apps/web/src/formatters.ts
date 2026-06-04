@@ -1,4 +1,4 @@
-import type { Provider } from "@promptopts/shared";
+import type { Provider, TaskType } from "@promptopts/shared";
 import { demoWorkspace } from "./mockData";
 import type { ProductStepKey, PublicRoute } from "./routes";
 
@@ -60,6 +60,27 @@ export function formatProvider(provider: Provider): string {
       return "Anthropic";
     case "gemini":
       return "Gemini";
+  }
+}
+
+export function formatTaskType(taskType: TaskType): string {
+  switch (taskType) {
+    case "support":
+      return "Support";
+    case "summarization":
+      return "Summarization";
+    case "extraction":
+      return "Extraction";
+    case "coding":
+      return "Coding";
+    case "rag":
+      return "RAG";
+    case "agent":
+      return "Agent";
+    case "classification":
+      return "Classification";
+    case "other":
+      return "Other";
   }
 }
 

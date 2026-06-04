@@ -17,5 +17,10 @@ export function createApp(dependencies: AppDependencies = {}) {
 
 export const app = createApp();
 export type ApiApp = typeof app;
+export type {
+  ModelsResponse,
+  PromptCreateRequest,
+  PromptCreateResponse
+} from "./contracts";
 
 export default app;

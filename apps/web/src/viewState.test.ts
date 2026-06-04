@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { getAdminGateCopy, getAdminGateStateFromSearch } from "./adminGate";
 import { getRegistryNotice, renderApiStatus } from "./apiViewState";
-import { formatModelFit, formatProvider, getRouteTitle, getStepCardTitle } from "./formatters";
+import { formatModelFit, formatProvider, formatTaskType, getRouteTitle, getStepCardTitle } from "./formatters";
+import { detectPromptVariables, estimatePromptTokens, splitPromptIntoSegments } from "./promptView";
 import { parsePublicRoute, stepperItems } from "./routes";
 import type { ApiState } from "./viewTypes";
 
@@ -44,6 +45,21 @@ describe("web view helpers", () => {
     expect(formatProvider("anthropic")).toBe("Anthropic");
     expect(formatProvider("gemini")).toBe("Gemini");
     expect(formatModelFit("overpowered")).toBe("Overpowered");
+    expect(formatTaskType("rag")).toBe("RAG");
+    expect(formatTaskType("classification")).toBe("Classification");
+  });
+
+  test("detects prompt variables and creates highlight segments", () => {
+    const prompt = "Summarize {{ticket_text}} for {{ account_tier }}. Route {{ticket_text}}.";
+
+    expect(detectPromptVariables(prompt)).toEqual(["ticket_text", "account_tier"]);
+    expect(splitPromptIntoSegments(prompt).filter((segment) => segment.kind === "variable")).toEqual([
+      { kind: "variable", text: "{{ticket_text}}", variable: "ticket_text" },
+      { kind: "variable", text: "{{ account_tier }}", variable: "account_tier" },
+      { kind: "variable", text: "{{ticket_text}}", variable: "ticket_text" }
+    ]);
+    expect(estimatePromptTokens(prompt)).toBe(Math.ceil(prompt.length / 4));
+    expect(estimatePromptTokens("   ")).toBe(0);
   });
 
   test("maps admin gate query states to stable copy", () => {

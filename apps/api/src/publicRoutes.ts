@@ -3,6 +3,8 @@ import {
   createHealthResponse,
   providerSchema,
   reportArtifactFormatSchema,
+  stabilityStatusSchema,
+  taskTypeSchema,
   type EvalRun,
   type OptimizationCandidate,
   type PromptProject,
@@ -40,14 +42,34 @@ export function createPublicApiRoutes() {
     .get("/models", async (c) => {
       const providerQuery = c.req.query("provider");
       const providerResult = providerQuery ? providerSchema.safeParse(providerQuery) : undefined;
+      const taskTypeQuery = c.req.query("task_type") ?? c.req.query("task");
+      const taskTypeResult = taskTypeQuery ? taskTypeSchema.safeParse(taskTypeQuery) : undefined;
+      const stabilityQuery = c.req.query("stability") ?? c.req.query("stability_status");
+      const stabilityValues = stabilityQuery ? stabilityQuery.split(",").filter(Boolean) : [];
+      const stabilityResults = stabilityValues.map((value) => stabilityStatusSchema.safeParse(value));
 
       if (providerResult && !providerResult.success) {
         return validationProblem(c, providerResult.error);
       }
+      if (taskTypeResult && !taskTypeResult.success) {
+        return validationProblem(c, taskTypeResult.error);
+      }
+      for (const result of stabilityResults) {
+        if (!result.success) {
+          return validationProblem(c, result.error);
+        }
+      }
 
       const provider = providerResult?.data;
+      const taskType = taskTypeResult?.data;
+      const stabilityStatuses = stabilityValues.map((value) => stabilityStatusSchema.parse(value));
       const models = (await c.var.repository.model_registry.list()).filter((model) => {
-        return provider ? model.provider === provider : true;
+        const providerMatches = provider ? model.provider === provider : true;
+        const taskMatches = taskType ? model.recommended_task_types.includes(taskType) : true;
+        const stabilityMatches =
+          stabilityStatuses.length > 0 ? stabilityStatuses.includes(model.stability_status) : true;
+
+        return providerMatches && taskMatches && stabilityMatches;
       });
 
       return c.json(
