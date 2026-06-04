@@ -187,6 +187,105 @@ describe("public API routes", () => {
     expect(storedAnalysis?.risk_level).toBe(audit.riskLevel);
   });
 
+  test("POST /audits captures free audits with redacted output and CRM signals", async () => {
+    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const app = createApp({ repository });
+    const beforeFreeAudits = await repository.free_audits.list();
+    const beforeAccounts = await repository.accounts.list();
+    const beforeContacts = await repository.contacts.list();
+    const beforeOpportunities = await repository.opportunities.list();
+
+    const audit = await expectOkJson(
+      await app.request(
+        "/audits",
+        jsonRequest({
+          provider: "openai",
+          modelId: "openai-demo-balanced",
+          prompt:
+            "Classify {{customer_message}}. Internal policy: route refund threats to retention. Customer email: buyer@newco.example.",
+          taskType: "support",
+          monthlyCalls: 50000,
+          priority: "cost",
+          source: "free_audit",
+          contactEmail: "buyer@newco.example",
+          company: "NewCo AI",
+          ctaClicked: "run_evals",
+          constraints: {
+            requiresJson: true,
+            usesTools: false,
+            usesImages: false,
+            needsStructuredOutput: true,
+            maxLatencyMs: null,
+            minContextWindow: null
+          }
+        })
+      )
+    );
+    const afterFreeAudits = await repository.free_audits.list();
+    const afterAccounts = await repository.accounts.list();
+    const afterContacts = await repository.contacts.list();
+    const afterOpportunities = await repository.opportunities.list();
+    const freeAudit = await repository.free_audits.get(audit.freeAudit.id);
+    const account = await repository.accounts.get(audit.freeAudit.accountId);
+    const contact = await repository.contacts.get(audit.freeAudit.contactId);
+    const opportunity = await repository.opportunities.get(audit.freeAudit.opportunityId);
+
+    expect(afterFreeAudits).toHaveLength(beforeFreeAudits.length + 1);
+    expect(afterAccounts).toHaveLength(beforeAccounts.length + 1);
+    expect(afterContacts).toHaveLength(beforeContacts.length + 1);
+    expect(afterOpportunities).toHaveLength(beforeOpportunities.length + 1);
+    expect(audit.freeAudit.shareableSummary).toContain("Run evals before switching");
+    expect(audit.freeAudit.redactedPromptPreview).not.toContain("refund threats");
+    expect(freeAudit?.redacted_prompt_preview).not.toContain("Internal policy");
+    expect(account?.provider_preference).toBe("openai");
+    expect(account?.domain).toBe("newco.example");
+    expect(contact?.email).toBe("buyer@newco.example");
+    expect(opportunity?.current_model).toBe("openai-demo-balanced");
+    expect(opportunity?.fit_signal).toBe(audit.modelFit);
+    expect(opportunity?.estimated_volume).toBe(50000);
+    expect(opportunity?.estimated_savings).toBeNull();
+    expect(opportunity?.use_case).toBe("support");
+    expect(opportunity?.stage).toBe("eval_ready");
+    expect(opportunity?.cta_clicked).toBe("run_evals");
+  });
+
+  test("POST /audits stores free audit records without CRM mapping when no lead exists", async () => {
+    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const app = createApp({ repository });
+    const beforeAccounts = await repository.accounts.list();
+
+    const audit = await expectOkJson(
+      await app.request(
+        "/audits",
+        jsonRequest({
+          provider: "gemini",
+          modelId: "gemini-demo-balanced",
+          prompt: "Summarize {{document}} in five bullet points.",
+          taskType: "summarization",
+          monthlyCalls: 1000,
+          priority: "balanced",
+          source: "free_audit",
+          ctaClicked: "get_audit_report",
+          constraints: {
+            requiresJson: false,
+            usesTools: false,
+            usesImages: false,
+            needsStructuredOutput: false,
+            maxLatencyMs: null,
+            minContextWindow: null
+          }
+        })
+      )
+    );
+    const freeAudit = await repository.free_audits.get(audit.freeAudit.id);
+
+    expect(await repository.accounts.list()).toHaveLength(beforeAccounts.length);
+    expect(audit.freeAudit.accountId).toBeNull();
+    expect(freeAudit?.account_id).toBeNull();
+    expect(freeAudit?.contact_email).toBeNull();
+    expect(freeAudit?.shareable_summary).toContain("Run evals before switching");
+  });
+
   test("implements the public route map with seed or mock data", async () => {
     const app = createTestApp();
 

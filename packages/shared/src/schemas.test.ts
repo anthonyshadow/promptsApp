@@ -18,6 +18,10 @@ describe("shared domain schemas", () => {
       taskType: "support",
       monthlyCalls: 10000,
       priority: "balanced",
+      source: "free_audit",
+      contactEmail: "ops@example.com",
+      company: "Example AI",
+      ctaClicked: "get_audit_report",
       constraints: {
         requiresJson: true,
         usesTools: false,
@@ -59,11 +63,22 @@ describe("shared domain schemas", () => {
       ],
       suggestedNextAction: "Define the success contract before generating candidates.",
       registryFreshness: "unverified",
+      freeAudit: {
+        id: "free_audit_response_demo",
+        accountId: "account_example_ai",
+        contactId: "contact_example_ops",
+        opportunityId: "opportunity_example_ai",
+        ctaClicked: "get_audit_report",
+        redactedPromptPreview: "Prompt redacted (48 chars)",
+        shareableSummary: "Redacted free audit summary. Run evals before switching."
+      },
       createdAt: timestamp
     });
 
     expect(request.provider).toBe(providerSchema.parse("openai"));
+    expect(request.source).toBe("free_audit");
     expect(response.riskLevel).toBe("medium");
+    expect(response.freeAudit?.shareableSummary).toContain("Run evals");
   });
 
   test("parse admin action context with explicit scope and redaction state", () => {

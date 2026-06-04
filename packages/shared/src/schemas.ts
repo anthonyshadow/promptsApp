@@ -22,6 +22,17 @@ export type TaskType = z.infer<typeof taskTypeSchema>;
 export const prioritySchema = z.enum(["cost", "quality", "latency", "balanced"]);
 export type Priority = z.infer<typeof prioritySchema>;
 
+export const auditSourceSchema = z.enum(["app", "free_audit"]);
+export type AuditSource = z.infer<typeof auditSourceSchema>;
+
+export const freeAuditCtaSchema = z.enum([
+  "preview",
+  "get_audit_report",
+  "create_project",
+  "run_evals"
+]);
+export type FreeAuditCta = z.infer<typeof freeAuditCtaSchema>;
+
 export const riskLevelSchema = z.enum(["low", "medium", "high", "critical"]);
 export type RiskLevel = z.infer<typeof riskLevelSchema>;
 
@@ -223,7 +234,11 @@ export const auditRequestSchema = z
     monthlyCalls: z.number().positive(),
     priority: prioritySchema,
     constraints: auditConstraintsSchema,
-    promptVersionId: idSchema.optional()
+    promptVersionId: idSchema.optional(),
+    source: auditSourceSchema.optional(),
+    contactEmail: z.string().email().optional(),
+    company: z.string().min(1).optional(),
+    ctaClicked: freeAuditCtaSchema.optional()
   })
   .strict();
 export type AuditRequest = z.infer<typeof auditRequestSchema>;
@@ -272,6 +287,19 @@ export const suggestedModelRoleSchema = z
   .strict();
 export type SuggestedModelRole = z.infer<typeof suggestedModelRoleSchema>;
 
+export const freeAuditCaptureSchema = z
+  .object({
+    id: idSchema,
+    accountId: idSchema.nullable(),
+    contactId: idSchema.nullable(),
+    opportunityId: idSchema.nullable(),
+    ctaClicked: freeAuditCtaSchema,
+    redactedPromptPreview: z.string().min(1),
+    shareableSummary: z.string().min(1)
+  })
+  .strict();
+export type FreeAuditCapture = z.infer<typeof freeAuditCaptureSchema>;
+
 export const auditResponseSchema = z
   .object({
     id: idSchema,
@@ -288,6 +316,7 @@ export const auditResponseSchema = z
     suggestedModelRoles: z.array(suggestedModelRoleSchema),
     suggestedNextAction: z.string().min(1),
     registryFreshness: registryFreshnessSchema,
+    freeAudit: freeAuditCaptureSchema.optional(),
     createdAt: isoDateTimeSchema
   })
   .strict();
@@ -523,6 +552,7 @@ export const accountSchema = z
     name: z.string().min(1),
     workspace_id: idSchema.nullable(),
     stage: accountStageSchema,
+    provider_preference: providerSchema.nullable().optional(),
     owner_admin_user_id: idSchema.nullable(),
     domain: z.string().min(1).nullable(),
     redacted_prompt_preview: z.string().min(1).nullable(),
@@ -555,8 +585,14 @@ export const opportunitySchema = z
     stage: opportunityStageSchema,
     provider: providerSchema,
     current_model_id: z.string().min(1),
+    current_model: z.string().min(1).optional(),
+    fit_signal: modelFitSchema.optional(),
     estimated_monthly_calls: z.number().int().nonnegative(),
+    estimated_volume: z.number().int().nonnegative().optional(),
     savings_opportunity_usd: z.number().nonnegative().nullable(),
+    estimated_savings: z.number().nonnegative().nullable().optional(),
+    use_case: taskTypeSchema.optional(),
+    cta_clicked: freeAuditCtaSchema.optional(),
     eval_readiness: evalReadinessSchema,
     is_mock: z.boolean(),
     created_at: isoDateTimeSchema,
@@ -622,8 +658,8 @@ export type UsageLedgerEntry = z.infer<typeof usageLedgerEntrySchema>;
 export const freeAuditSchema = z
   .object({
     id: idSchema,
-    account_id: idSchema,
-    project_id: idSchema,
+    account_id: idSchema.nullable(),
+    project_id: idSchema.nullable(),
     provider: providerSchema,
     current_model_id: z.string().min(1),
     task_type: taskTypeSchema,
@@ -631,8 +667,11 @@ export const freeAuditSchema = z
     model_fit: modelFitSchema,
     savings_opportunity_usd: z.number().nonnegative().nullable(),
     eval_readiness: evalReadinessSchema,
-    contact_email: z.string().email(),
+    contact_email: z.string().email().nullable(),
+    company: z.string().min(1).nullable(),
+    cta_clicked: freeAuditCtaSchema,
     redacted_prompt_preview: z.string().min(1),
+    shareable_summary: z.string().min(1),
     is_mock: z.boolean(),
     created_at: isoDateTimeSchema
   })
