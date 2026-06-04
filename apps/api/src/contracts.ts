@@ -244,6 +244,33 @@ export const revokeSessionsResponseSchema = z
   .strict();
 export type RevokeSessionsResponse = z.infer<typeof revokeSessionsResponseSchema>;
 
+export const impersonationResponseSchema = z
+  .object({
+    user_id: idSchema,
+    impersonation_started: z.boolean(),
+    todo: nonEmptyStringSchema
+  })
+  .strict();
+export type ImpersonationResponse = z.infer<typeof impersonationResponseSchema>;
+
+export const promptRevealResponseSchema = z
+  .object({
+    prompt_id: idSchema,
+    redacted_preview: nonEmptyStringSchema,
+    raw_prompt: z.null(),
+    todo: nonEmptyStringSchema
+  })
+  .strict();
+export type PromptRevealResponse = z.infer<typeof promptRevealResponseSchema>;
+
+export const breakGlassResponseSchema = z
+  .object({
+    break_glass_started: z.boolean(),
+    todo: nonEmptyStringSchema
+  })
+  .strict();
+export type BreakGlassResponse = z.infer<typeof breakGlassResponseSchema>;
+
 export const workspacePatchRequestSchema = requireAtLeastOneField(
   z
     .object({

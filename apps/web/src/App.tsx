@@ -8,15 +8,36 @@ type ApiState =
   | { status: "online"; health: HealthResponse }
   | { status: "offline"; message: string };
 
-function normalizeApiUrl(value: string | undefined): string | undefined {
-  if (!value) {
-    return undefined;
-  }
-
-  return value.replace(/\/+$/, "");
-}
+type AdminGateState =
+  | "not-signed-in"
+  | "not-admin"
+  | "mfa-required"
+  | "authorized"
+  | "sudo-required";
 
 function App() {
+  const [path, setPath] = useState(() => window.location.pathname);
+
+  useEffect(() => {
+    function syncPath() {
+      setPath(window.location.pathname);
+    }
+
+    window.addEventListener("popstate", syncPath);
+
+    return () => {
+      window.removeEventListener("popstate", syncPath);
+    };
+  }, []);
+
+  if (path.startsWith("/__admin")) {
+    return <AdminRouteTree />;
+  }
+
+  return <PublicShell />;
+}
+
+function PublicShell() {
   const apiUrl = useMemo(() => normalizeApiUrl(import.meta.env.VITE_API_URL), []);
   const [apiState, setApiState] = useState<ApiState>(
     apiUrl ? { status: "checking" } : { status: "not-configured" }
@@ -90,6 +111,63 @@ function App() {
   );
 }
 
+function AdminRouteTree() {
+  const gateState = getAdminGateState();
+
+  return (
+    <main className={adminRootStyle}>
+      <section className={adminShellStyle} aria-labelledby="admin-title">
+        <p className={adminEyebrowStyle}>Internal only</p>
+        <h1 className={adminTitleStyle} id="admin-title">
+          PromptOpts Admin
+        </h1>
+        <AdminGateStateView state={gateState} />
+      </section>
+    </main>
+  );
+}
+
+function AdminGateStateView({ state }: { state: AdminGateState }) {
+  const copy = getAdminGateCopy(state);
+
+  return (
+    <div className={gatePanelStyle}>
+      <div className={gateHeaderStyle}>
+        <span className={gateStatusStyle}>{copy.status}</span>
+        <strong className={gateTitleStyle}>{copy.title}</strong>
+      </div>
+      <p className={gateBodyStyle}>{copy.body}</p>
+      {state === "sudo-required" ? (
+        <form className={sudoFormStyle}>
+          <label className={sudoLabelStyle} htmlFor="sudo-reason">
+            Reason code
+          </label>
+          <input
+            className={sudoInputStyle}
+            id="sudo-reason"
+            name="sudo-reason"
+            placeholder="required before dangerous action"
+            type="text"
+          />
+          <button className={sudoButtonStyle} type="button">
+            Request sudo
+          </button>
+        </form>
+      ) : null}
+    </div>
+  );
+}
+
+export default App;
+
+function normalizeApiUrl(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  return value.replace(/\/+$/, "");
+}
+
 function renderApiStatus(apiState: ApiState): string {
   switch (apiState.status) {
     case "not-configured":
@@ -103,7 +181,59 @@ function renderApiStatus(apiState: ApiState): string {
   }
 }
 
-export default App;
+function getAdminGateState(): AdminGateState {
+  const state = new URLSearchParams(window.location.search).get("state");
+
+  if (
+    state === "not-admin" ||
+    state === "mfa-required" ||
+    state === "authorized" ||
+    state === "sudo-required"
+  ) {
+    return state;
+  }
+
+  return "not-signed-in";
+}
+
+function getAdminGateCopy(state: AdminGateState): {
+  status: string;
+  title: string;
+  body: string;
+} {
+  switch (state) {
+    case "not-signed-in":
+      return {
+        status: "Blocked",
+        title: "Admin session required",
+        body: "This internal surface requires a valid server-side admin session before any admin data can load."
+      };
+    case "not-admin":
+      return {
+        status: "Blocked",
+        title: "Admin role required",
+        body: "The current session is signed in but does not have an admin role or action scopes."
+      };
+    case "mfa-required":
+      return {
+        status: "Step-up",
+        title: "MFA required",
+        body: "Admin access requires MFA before the API will authorize internal routes."
+      };
+    case "authorized":
+      return {
+        status: "Authorized",
+        title: "Redacted admin view",
+        body: "Admin metadata can load, but prompts, provider keys, and report contents remain redacted by default."
+      };
+    case "sudo-required":
+      return {
+        status: "Step-up",
+        title: "Sudo required",
+        body: "Dangerous actions require a reason code and time-boxed sudo before the API will proceed."
+      };
+  }
+}
 
 injectGlobal({
   ":root": {
@@ -205,4 +335,106 @@ const statusValueStyle = css({
   color: "#18201a",
   fontSize: "0.98rem",
   lineHeight: 1.35
+});
+
+const adminRootStyle = css({
+  minHeight: "100vh",
+  padding: "28px",
+  background: "#111714",
+  color: "#eef4ed",
+  "@media (max-width: 720px)": {
+    padding: "18px"
+  }
+});
+
+const adminShellStyle = css({
+  width: "min(100%, 880px)",
+  margin: "0 auto",
+  paddingTop: "8vh"
+});
+
+const adminEyebrowStyle = css({
+  margin: "0 0 12px",
+  color: "#9fbaaa",
+  fontSize: "0.78rem",
+  fontWeight: 700,
+  letterSpacing: 0,
+  textTransform: "uppercase"
+});
+
+const adminTitleStyle = css({
+  margin: 0,
+  fontSize: "clamp(2rem, 6vw, 3rem)",
+  lineHeight: 1,
+  letterSpacing: 0
+});
+
+const gatePanelStyle = css({
+  marginTop: "28px",
+  border: "1px solid #415149",
+  borderRadius: "8px",
+  background: "#17211d",
+  padding: "24px"
+});
+
+const gateHeaderStyle = css({
+  display: "grid",
+  gap: "8px"
+});
+
+const gateStatusStyle = css({
+  width: "fit-content",
+  border: "1px solid #6f8878",
+  borderRadius: "8px",
+  padding: "4px 8px",
+  color: "#c7ddcf",
+  fontSize: "0.8rem"
+});
+
+const gateTitleStyle = css({
+  color: "#ffffff",
+  fontSize: "1.35rem",
+  lineHeight: 1.25
+});
+
+const gateBodyStyle = css({
+  maxWidth: "680px",
+  margin: "16px 0 0",
+  color: "#c7d6ce",
+  lineHeight: 1.6
+});
+
+const sudoFormStyle = css({
+  display: "grid",
+  gridTemplateColumns: "minmax(180px, 1fr) auto",
+  gap: "10px",
+  marginTop: "20px",
+  "@media (max-width: 640px)": {
+    gridTemplateColumns: "1fr"
+  }
+});
+
+const sudoLabelStyle = css({
+  gridColumn: "1 / -1",
+  color: "#dfeae3",
+  fontSize: "0.9rem"
+});
+
+const sudoInputStyle = css({
+  minHeight: "42px",
+  border: "1px solid #657b6e",
+  borderRadius: "8px",
+  background: "#101713",
+  color: "#ffffff",
+  padding: "0 12px"
+});
+
+const sudoButtonStyle = css({
+  minHeight: "42px",
+  border: "1px solid #b8d1c0",
+  borderRadius: "8px",
+  background: "#dcebe0",
+  color: "#101713",
+  padding: "0 14px",
+  fontWeight: 700
 });

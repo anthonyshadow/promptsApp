@@ -10,5 +10,9 @@
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@promptopts/shared": "workspace:*",
+    "hono": "^4.6.16"
   }
 }

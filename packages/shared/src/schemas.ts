@@ -98,7 +98,8 @@ export const adminActionScopeSchema = z.enum([
   "delete_report",
   "issue_billing_credit",
   "impersonate_user",
-  "revoke_user"
+  "revoke_user",
+  "break_glass"
 ]);
 export type AdminActionScope = z.infer<typeof adminActionScopeSchema>;
 

@@ -9,6 +9,7 @@
   },
   "include": ["src"],
   "references": [
+    { "path": "../../packages/admin-core" },
     { "path": "../../packages/shared" }
   ]
 }

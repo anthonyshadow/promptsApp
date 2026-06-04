@@ -2,15 +2,22 @@ import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { cors } from "hono/cors";
 import { z } from "zod";
 import {
+  redactPromptPreview,
+  requireActionScope,
+  requireAdminRole,
+  requireMfa,
+  requireSession,
+  requireSudo,
+  writeAdminAuditEvent,
+  type AdminSecurityHonoEnv
+} from "@promptopts/admin-core";
+import {
   createDemoRepositorySeed,
   createHealthResponse,
   createMemoryRepository,
   providerSchema,
   reportArtifactFormatSchema,
   type Account,
-  type AdminActionContext,
-  type AdminAuditLog,
-  type AdminActionScope,
   type EvalRun,
   type ModelRegistryRecord,
   type OptimizationCandidate,
@@ -48,6 +55,9 @@ import {
   promptCreateResponseSchema,
   promptOptimizeRequestSchema,
   promptOptimizeResponseSchema,
+  promptRevealResponseSchema,
+  breakGlassResponseSchema,
+  impersonationResponseSchema,
   regenerateReportResponseSchema,
   reportCreateRequestSchema,
   reportDeleteRequestSchema,
@@ -58,12 +68,7 @@ import {
   workspaceSchema
 } from "./contracts";
 
-type ApiEnv = {
-  Variables: {
-    repository: PromptOptsRepository;
-    adminActionContext: AdminActionContext;
-  };
-};
+type ApiEnv = AdminSecurityHonoEnv;
 
 type AppDependencies = {
   repository?: PromptOptsRepository;
@@ -78,19 +83,6 @@ type ValidatedJson<TValue> =
       success: false;
       response: Response;
     };
-
-const MOCK_ADMIN_CONTEXT: AdminActionContext = {
-  admin_user_id: "admin_user_mock",
-  session_id: "admin_session_mock",
-  workspace_id: null,
-  account_id: null,
-  action_scope: "read_metadata",
-  reason_code: "mock_admin_middleware",
-  sudo_request_id: null,
-  ip_address: "127.0.0.1",
-  user_agent: "PromptOpts API test harness",
-  redaction_state: "redacted"
-};
 
 export function createApp(dependencies: AppDependencies = {}) {
   const repository = dependencies.repository ?? createMemoryRepository(createDemoRepositorySeed());
@@ -369,8 +361,8 @@ function createAdminApi() {
     .use("*", requireMfa)
     .use("*", requireAdminRole)
     .use("*", requireActionScope)
-    .use("*", requireSudoForDangerousAction)
-    .use("*", writeAdminAuditEvent)
+    .use("*", requireSudo())
+    .use("*", writeAdminAuditEvent())
     .get("/overview", async (c) => {
       const [accounts, evalRuns, reports, models] = await Promise.all([
         c.var.repository.accounts.list(),
@@ -396,6 +388,19 @@ function createAdminApi() {
             repository: "memory",
             admin_auth: "mocked"
           }
+        })
+      );
+    })
+    .post("/break-glass", async (c) => {
+      const body = await validateJson(c, adminReasonRequestSchema);
+      if (!body.success) {
+        return body.response;
+      }
+
+      return c.json(
+        breakGlassResponseSchema.parse({
+          break_glass_started: false,
+          todo: `Break-glass is a placeholder only. Reason captured: ${body.data.reason_code}`
         })
       );
     })
@@ -490,6 +495,25 @@ function createAdminApi() {
         })
       );
     })
+    .post("/users/:id/impersonate", async (c) => {
+      const body = await validateJson(c, adminReasonRequestSchema);
+      if (!body.success) {
+        return body.response;
+      }
+
+      const user = await c.var.repository.users.get(c.req.param("id"));
+      if (!user) {
+        return notFound(c, "User not found");
+      }
+
+      return c.json(
+        impersonationResponseSchema.parse({
+          user_id: user.id,
+          impersonation_started: false,
+          todo: `User impersonation is a placeholder only. Reason captured: ${body.data.reason_code}`
+        })
+      );
+    })
     .patch("/workspaces/:id", async (c) => {
       const body = await validateJson(c, workspacePatchRequestSchema);
       if (!body.success) {
@@ -578,6 +602,26 @@ function createAdminApi() {
         regenerateReportResponseSchema.parse({
           report,
           todo: "Report regeneration is mocked until report-generator is implemented."
+        })
+      );
+    })
+    .get("/prompts/:id/reveal", async (c) => {
+      const prompt = await c.var.repository.prompts.get(c.req.param("id"));
+      if (!prompt || !prompt.current_version_id) {
+        return notFound(c, "Prompt not found");
+      }
+
+      const version = await c.var.repository.prompt_versions.get(prompt.current_version_id);
+      if (!version) {
+        return notFound(c, "Prompt version not found");
+      }
+
+      return c.json(
+        promptRevealResponseSchema.parse({
+          prompt_id: prompt.id,
+          redacted_preview: redactPromptPreview(version.prompt_text),
+          raw_prompt: null,
+          todo: "Raw prompt reveal is gated by sudo and remains placeholder-only in this foundation."
         })
       );
     })
@@ -714,72 +758,6 @@ const injectRepository =
     await next();
   };
 
-const requireSession: MiddlewareHandler<ApiEnv> = async (c, next) => {
-  c.set("adminActionContext", MOCK_ADMIN_CONTEXT);
-  await next();
-};
-
-const requireMfa: MiddlewareHandler<ApiEnv> = async (_c, next) => {
-  await next();
-};
-
-const requireAdminRole: MiddlewareHandler<ApiEnv> = async (_c, next) => {
-  await next();
-};
-
-const requireActionScope: MiddlewareHandler<ApiEnv> = async (c, next) => {
-  c.set("adminActionContext", {
-    ...c.var.adminActionContext,
-    action_scope: scopeForAdminRequest(c.req.method, c.req.path)
-  });
-  await next();
-};
-
-const requireSudoForDangerousAction: MiddlewareHandler<ApiEnv> = async (c, next) => {
-  if (isDangerousAdminAction(c.req.method, c.req.path)) {
-    c.set("adminActionContext", {
-      ...c.var.adminActionContext,
-      sudo_request_id: "sudo_request_mock",
-      redaction_state: "redacted"
-    });
-  }
-
-  await next();
-};
-
-const writeAdminAuditEvent: MiddlewareHandler<ApiEnv> = async (c, next) => {
-  await next();
-
-  if (c.res.status >= 500) {
-    return;
-  }
-
-  const adminContext = c.var.adminActionContext;
-  const auditLog: AdminAuditLog = {
-    id: createId("admin_audit_log"),
-    admin_user_id: adminContext.admin_user_id,
-    workspace_id: adminContext.workspace_id,
-    account_id: adminContext.account_id,
-    target_type: "admin_route",
-    target_id: c.req.path,
-    action: `${c.req.method.toLowerCase()} ${c.req.path}`,
-    action_scope: adminContext.action_scope,
-    reason_code: adminContext.reason_code,
-    sudo_request_id: adminContext.sudo_request_id,
-    ip_address: adminContext.ip_address,
-    user_agent: adminContext.user_agent,
-    redaction_state: "redacted",
-    metadata: {
-      status: c.res.status,
-      mocked: true
-    },
-    is_mock: true,
-    created_at: nowIso()
-  };
-
-  await c.var.repository.admin_audit_logs.append(auditLog);
-};
-
 async function validateJson<TSchema extends z.ZodTypeAny>(
   c: Context<ApiEnv>,
   schema: TSchema
@@ -858,41 +836,6 @@ async function handleEvalRunStatusUpdate(
   }
 
   return c.json(evalRunActionResponseSchema.parse({ eval_run: evalRun, todo }));
-}
-
-function scopeForAdminRequest(method: string, path: string): AdminActionScope {
-  if (method === "GET") {
-    return "read_metadata";
-  }
-
-  if (path.includes("/models")) {
-    return "manage_model_registry";
-  }
-
-  if (path.includes("/eval-runs")) {
-    return "retry_eval";
-  }
-
-  if (path.includes("/reports")) {
-    return "delete_report";
-  }
-
-  if (path.includes("/billing")) {
-    return "issue_billing_credit";
-  }
-
-  if (path.includes("/users")) {
-    return "revoke_user";
-  }
-
-  return "manage_workspace";
-}
-
-function isDangerousAdminAction(method: string, path: string): boolean {
-  return (
-    method !== "GET" &&
-    (path.includes("/reports") || path.includes("/billing") || path.includes("/models"))
-  );
 }
 
 function unitForFeature(feature: UsageLedgerEntry["feature"]): UsageLedgerEntry["unit"] {

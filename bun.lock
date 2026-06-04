@@ -13,6 +13,7 @@
       "name": "@promptopts/api",
       "version": "0.0.0",
       "dependencies": {
+        "@promptopts/admin-core": "workspace:*",
         "@promptopts/shared": "workspace:*",
         "hono": "^4.6.16",
         "zod": "^3.24.1",
@@ -37,6 +38,10 @@
     "packages/admin-core": {
       "name": "@promptopts/admin-core",
       "version": "0.0.0",
+      "dependencies": {
+        "@promptopts/shared": "workspace:*",
+        "hono": "^4.6.16",
+      },
     },
     "packages/eval-core": {
       "name": "@promptopts/eval-core",
