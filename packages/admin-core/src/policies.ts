@@ -87,6 +87,13 @@ export function resolveAdminRoutePolicy(method: string, path: string): AdminRout
     };
   }
 
+  if (normalizedPath.match(/^\/admin-api\/accounts\/[^/]+$/) && normalizedMethod === "GET") {
+    return {
+      ...readPolicy("accounts"),
+      sensitive_read: true
+    };
+  }
+
   if (normalizedPath.includes("/workspaces") && normalizedMethod !== "GET") {
     return {
       route_scope: "workspaces",

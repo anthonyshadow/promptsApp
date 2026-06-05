@@ -329,7 +329,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   workspace_id TEXT REFERENCES workspaces(id),
-  stage TEXT NOT NULL CHECK (stage IN ('free_audit', 'trial', 'qualified', 'customer', 'churned', 'internal')),
+  stage TEXT NOT NULL CHECK (stage IN ('new_audit', 'qualified', 'eval_ready', 'trial', 'paid', 'needs_review')),
   provider_preference TEXT CHECK (provider_preference IN ('openai', 'anthropic', 'gemini')),
   owner_admin_user_id TEXT,
   domain TEXT,
@@ -389,6 +389,7 @@ CREATE TABLE IF NOT EXISTS crm_notes (
   body_redacted TEXT NOT NULL,
   redaction_state TEXT NOT NULL DEFAULT 'redacted' CHECK (redaction_state IN ('redacted', 'revealed', 'not_sensitive')),
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  is_mock BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -401,6 +402,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   status TEXT NOT NULL CHECK (status IN ('open', 'done', 'cancelled')),
   due_at TIMESTAMPTZ,
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  is_mock BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { css } from "@emotion/css";
 import type { AdminOverviewResponse } from "@promptopts/api";
+import { createLocalMockAdminHeaders } from "./adminApi";
 
 function AdminOverviewScreen({ apiBaseUrl }: { apiBaseUrl?: string | undefined }) {
   const [overviewState, setOverviewState] = useState<{
@@ -260,18 +261,6 @@ function createLocalAdminOverview(): AdminOverviewResponse {
       "Overview is redacted metadata only.",
       "Revenue, provider spend, queue, worker, and storage health are placeholders."
     ]
-  };
-}
-
-function createLocalMockAdminHeaders(): HeadersInit {
-  return {
-    "x-admin-session-id": "admin_session_mock",
-    "x-admin-user-id": "admin_user_mock",
-    "x-admin-role": "owner",
-    "x-admin-mfa": "true",
-    "x-admin-action-scopes": "read_metadata",
-    "x-admin-ip-address": "127.0.0.1",
-    "x-admin-user-agent": "PromptOpts admin overview local mock"
   };
 }
 

@@ -28,6 +28,8 @@ import {
   taskTypeSchema,
   type Account,
   type Contact,
+  type CrmNote,
+  type CrmTask,
   type EvalResult,
   type EvalRun,
   type FreeAudit,
@@ -1179,6 +1181,18 @@ async function createFreeAuditCapture(
   };
 
   await repository.free_audits.create(freeAudit);
+  if (account && opportunity) {
+    await createFreeAuditCrmActivity(repository, {
+      accountId: account.id,
+      opportunityId: opportunity.id,
+      provider: input.provider,
+      modelId: input.modelId,
+      modelFit: input.modelFit,
+      ctaClicked: input.ctaClicked,
+      redactedPromptPreview,
+      timestamp: input.timestamp
+    });
+  }
 
   return {
     id: freeAudit.id,
@@ -1189,6 +1203,66 @@ async function createFreeAuditCapture(
     redactedPromptPreview,
     shareableSummary
   };
+}
+
+async function createFreeAuditCrmActivity(
+  repository: PromptOptsRepository,
+  input: {
+    accountId: string;
+    opportunityId: string;
+    provider: FreeAudit["provider"];
+    modelId: string;
+    modelFit: FreeAudit["model_fit"];
+    ctaClicked: FreeAudit["cta_clicked"];
+    redactedPromptPreview: string;
+    timestamp: string;
+  }
+): Promise<void> {
+  const note: CrmNote = {
+    id: createId("crm_note"),
+    account_id: input.accountId,
+    opportunity_id: input.opportunityId,
+    author_admin_user_id: null,
+    body_redacted: `Free audit captured ${input.modelFit} fit for ${input.provider}/${input.modelId}; prompt remains ${input.redactedPromptPreview}.`,
+    redaction_state: "redacted",
+    metadata: {
+      source: "free_audit",
+      cta_clicked: input.ctaClicked
+    },
+    is_mock: true,
+    created_at: input.timestamp
+  };
+  const task: CrmTask = {
+    id: createId("task"),
+    account_id: input.accountId,
+    opportunity_id: input.opportunityId,
+    assignee_admin_user_id: null,
+    title: getFreeAuditTaskTitle(input.ctaClicked),
+    status: "open",
+    due_at: null,
+    metadata: {
+      source: "free_audit",
+      cta_clicked: input.ctaClicked
+    },
+    is_mock: true,
+    created_at: input.timestamp,
+    updated_at: input.timestamp
+  };
+
+  await Promise.all([repository.crm_notes.create(note), repository.tasks.create(task)]);
+}
+
+function getFreeAuditTaskTitle(ctaClicked: FreeAudit["cta_clicked"]): string {
+  switch (ctaClicked) {
+    case "run_evals":
+      return "Help lead run evals before switching";
+    case "create_project":
+      return "Help lead create a project from free audit";
+    case "get_audit_report":
+      return "Follow up on redacted audit report";
+    case "preview":
+      return "Review free audit preview signal";
+  }
 }
 
 async function upsertFreeAuditAccount(
@@ -1224,7 +1298,7 @@ async function upsertFreeAuditAccount(
     id: createId("account"),
     name: input.company ?? input.domain ?? "Free audit lead",
     workspace_id: null,
-    stage: "free_audit",
+    stage: "new_audit",
     provider_preference: input.provider,
     owner_admin_user_id: null,
     domain: input.domain,

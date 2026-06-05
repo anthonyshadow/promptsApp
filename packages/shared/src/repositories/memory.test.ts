@@ -46,6 +46,12 @@ describe("memory repository", () => {
     });
     expect(await repo.test_cases.list()).toHaveLength(5);
     expect(await repo.model_registry.list()).toHaveLength(5);
+    expect(await repo.crm_notes.get(DEMO_IDS.crmNote)).toMatchObject({
+      redaction_state: "redacted"
+    });
+    expect(await repo.tasks.get(DEMO_IDS.task)).toMatchObject({
+      status: "open"
+    });
     expect(await repo.reports.get(DEMO_IDS.report)).toMatchObject({
       status: "blocked",
       production_recommendation_allowed: false

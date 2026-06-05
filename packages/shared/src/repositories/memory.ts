@@ -3,6 +3,7 @@ import {
   accountSchema,
   adminAuditLogSchema,
   contactSchema,
+  crmNoteSchema,
   entitlementSchema,
   evalResultSchema,
   evalRunSchema,
@@ -17,6 +18,7 @@ import {
   qualityContractSchema,
   recommendationReportSchema,
   reportArtifactSchema,
+  taskSchema,
   testCaseSchema,
   usageLedgerEntrySchema,
   userSchema,
@@ -24,6 +26,8 @@ import {
   type Account,
   type AdminAuditLog,
   type Contact,
+  type CrmNote,
+  type CrmTask,
   type Entitlement,
   type EvalResult,
   type EvalRun,
@@ -185,6 +189,8 @@ export function createMemoryRepository(seed: RepositorySeed = {}): PromptOptsRep
     accounts: new MemoryCrudRepository<Account>(accountSchema, seed.accounts),
     contacts: new MemoryCrudRepository<Contact>(contactSchema, seed.contacts),
     opportunities: new MemoryCrudRepository<Opportunity>(opportunitySchema, seed.opportunities),
+    crm_notes: new MemoryCrudRepository<CrmNote>(crmNoteSchema, seed.crm_notes),
+    tasks: new MemoryCrudRepository<CrmTask>(taskSchema, seed.tasks),
     admin_audit_logs: new MemoryAppendOnlyRepository<AdminAuditLog>(
       adminAuditLogSchema,
       seed.admin_audit_logs

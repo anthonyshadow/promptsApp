@@ -233,6 +233,8 @@ describe("public API routes", () => {
     const beforeAccounts = await repository.accounts.list();
     const beforeContacts = await repository.contacts.list();
     const beforeOpportunities = await repository.opportunities.list();
+    const beforeNotes = await repository.crm_notes.list();
+    const beforeTasks = await repository.tasks.list();
 
     const audit = await expectOkJson(
       await app.request(
@@ -264,18 +266,25 @@ describe("public API routes", () => {
     const afterAccounts = await repository.accounts.list();
     const afterContacts = await repository.contacts.list();
     const afterOpportunities = await repository.opportunities.list();
+    const afterNotes = await repository.crm_notes.list();
+    const afterTasks = await repository.tasks.list();
     const freeAudit = await repository.free_audits.get(audit.freeAudit.id);
     const account = await repository.accounts.get(audit.freeAudit.accountId);
     const contact = await repository.contacts.get(audit.freeAudit.contactId);
     const opportunity = await repository.opportunities.get(audit.freeAudit.opportunityId);
+    const note = afterNotes.find((item) => !beforeNotes.some((existing) => existing.id === item.id));
+    const task = afterTasks.find((item) => !beforeTasks.some((existing) => existing.id === item.id));
 
     expect(afterFreeAudits).toHaveLength(beforeFreeAudits.length + 1);
     expect(afterAccounts).toHaveLength(beforeAccounts.length + 1);
     expect(afterContacts).toHaveLength(beforeContacts.length + 1);
     expect(afterOpportunities).toHaveLength(beforeOpportunities.length + 1);
+    expect(afterNotes).toHaveLength(beforeNotes.length + 1);
+    expect(afterTasks).toHaveLength(beforeTasks.length + 1);
     expect(audit.freeAudit.shareableSummary).toContain("Run evals before switching");
     expect(audit.freeAudit.redactedPromptPreview).not.toContain("refund threats");
     expect(freeAudit?.redacted_prompt_preview).not.toContain("Internal policy");
+    expect(account?.stage).toBe("new_audit");
     expect(account?.provider_preference).toBe("openai");
     expect(account?.domain).toBe("newco.example");
     expect(contact?.email).toBe("buyer@newco.example");
@@ -286,6 +295,9 @@ describe("public API routes", () => {
     expect(opportunity?.use_case).toBe("support");
     expect(opportunity?.stage).toBe("eval_ready");
     expect(opportunity?.cta_clicked).toBe("run_evals");
+    expect(note?.body_redacted).toContain("Prompt redacted");
+    expect(JSON.stringify(note)).not.toContain("Internal policy");
+    expect(task?.title).toContain("run evals");
   });
 
   test("POST /audits stores free audit records without CRM mapping when no lead exists", async () => {
@@ -734,7 +746,21 @@ describe("admin API routes", () => {
     const app = createTestApp();
 
     await expectOkJson(await app.request("/admin-api/overview", adminGetRequest()));
-    await expectOkJson(await app.request("/admin-api/accounts", adminGetRequest()));
+    const accounts = await expectOkJson(await app.request("/admin-api/accounts", adminGetRequest()));
+    expect(accounts.stages).toEqual([
+      "new_audit",
+      "qualified",
+      "eval_ready",
+      "trial",
+      "paid",
+      "needs_review"
+    ]);
+    expect(accounts.accounts[0]).toMatchObject({
+      account: "Acme AI",
+      provider: "openai",
+      fit_signal: "overpowered",
+      stage: "new_audit"
+    });
 
     const account = await expectOkJson(
       await app.request(
@@ -754,6 +780,40 @@ describe("admin API routes", () => {
     await expectOkJson(
       await app.request(`/admin-api/accounts/${DEMO_IDS.account}`, adminGetRequest())
     );
+    const accountDetail = await expectOkJson(
+      await app.request(`/admin-api/accounts/${DEMO_IDS.account}`, adminGetRequest())
+    );
+    expect(accountDetail.header.provider).toBe("openai");
+    expect(accountDetail.workspace_health.projects).toBe(1);
+    expect(accountDetail.projects[0].redacted_prompt_preview).toContain("Classifies");
+    expect(accountDetail.reports[0].redacted_summary).toContain("Report metadata");
+    expect(accountDetail.billing.placeholder).toContain("Billing tab is placeholder-only");
+    expect(accountDetail.support_timeline.map((event: { type: string }) => event.type)).toContain("task");
+    expect(accountDetail.redacted_previews[0].redacted_preview).not.toContain("{{customer_message}}");
+
+    const noteResponse = await expectOkJson(
+      await app.request(
+        `/admin-api/accounts/${DEMO_IDS.account}/notes`,
+        adminJsonRequest({
+          body: "Manual note without raw prompt content.",
+          opportunity_id: DEMO_IDS.opportunity
+        })
+      )
+    );
+    expect(noteResponse.note.body_redacted).toContain("Admin note redacted");
+
+    const taskResponse = await expectOkJson(
+      await app.request(
+        `/admin-api/accounts/${DEMO_IDS.account}/tasks`,
+        adminJsonRequest({
+          title: "Schedule eval-readiness follow-up",
+          opportunity_id: DEMO_IDS.opportunity,
+          assignee_admin_user_id: "admin_user_mock"
+        })
+      )
+    );
+    expect(taskResponse.task.status).toBe("open");
+
     const patchedAccount = await expectOkJson(
       await app.request(
         `/admin-api/accounts/${DEMO_IDS.account}`,
@@ -914,6 +974,21 @@ describe("admin API routes", () => {
     expect(accountDetail.account.redacted_prompt_preview).toContain("Support classifier");
   });
 
+  test("redacts Account 360 contact and prompt metadata for support role", async () => {
+    const accountDetail = await expectOkJson(
+      await createTestApp().request(
+        `/admin-api/accounts/${DEMO_IDS.account}`,
+        adminGetRequest({ role: "support" })
+      )
+    );
+    const serialized = JSON.stringify(accountDetail);
+
+    expect(serialized).not.toContain("ops@acme-ai.example");
+    expect(serialized).not.toContain("Support classifier prompt with variables only.");
+    expect(accountDetail.contacts[0].email).toContain("@promptopts.invalid");
+    expect(accountDetail.account.redacted_prompt_preview).toContain("Prompt redacted");
+  });
+
   test("enforces session, MFA, action scope, and sudo on admin routes", async () => {
     const app = createTestApp();
 
@@ -983,6 +1058,30 @@ describe("admin API routes", () => {
     expect(after.at(-1)?.target_type).toBe("audit_logs");
   });
 
+  test("audits Account 360 sensitive reads and CRM mutations", async () => {
+    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const app = createApp({ repository });
+    const before = await repository.admin_audit_logs.list();
+
+    await app.request(`/admin-api/accounts/${DEMO_IDS.account}`, adminGetRequest());
+    await app.request(
+      `/admin-api/accounts/${DEMO_IDS.account}/notes`,
+      adminJsonRequest({ body: "Follow up on eval readiness.", opportunity_id: DEMO_IDS.opportunity })
+    );
+    await app.request(
+      `/admin-api/accounts/${DEMO_IDS.account}/tasks`,
+      adminJsonRequest({ title: "Invite eval run", opportunity_id: DEMO_IDS.opportunity })
+    );
+
+    const after = await repository.admin_audit_logs.list();
+    expect(after.length).toBe(before.length + 3);
+    expect(after.slice(-3).map((log) => log.target_type)).toEqual([
+      "accounts",
+      "accounts",
+      "accounts"
+    ]);
+  });
+
   test("keeps public and admin namespaces separated", async () => {
     const app = createTestApp();
 
@@ -1004,6 +1103,8 @@ describe("route request validation", () => {
       { method: "POST", path: "/reports" },
       { method: "POST", path: "/admin-api/accounts" },
       { method: "PATCH", path: `/admin-api/accounts/${DEMO_IDS.account}` },
+      { method: "POST", path: `/admin-api/accounts/${DEMO_IDS.account}/notes` },
+      { method: "POST", path: `/admin-api/accounts/${DEMO_IDS.account}/tasks` },
       { method: "POST", path: `/admin-api/users/${DEMO_IDS.user}/revoke-sessions` },
       { method: "PATCH", path: `/admin-api/workspaces/${DEMO_IDS.workspace}` },
       { method: "POST", path: `/admin-api/eval-runs/${DEMO_IDS.evalRun}/retry` },

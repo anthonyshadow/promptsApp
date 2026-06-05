@@ -119,12 +119,12 @@ export const redactionStateSchema = z.enum(["redacted", "revealed", "not_sensiti
 export type RedactionState = z.infer<typeof redactionStateSchema>;
 
 export const accountStageSchema = z.enum([
-  "free_audit",
-  "trial",
+  "new_audit",
   "qualified",
-  "customer",
-  "churned",
-  "internal"
+  "eval_ready",
+  "trial",
+  "paid",
+  "needs_review"
 ]);
 export type AccountStage = z.infer<typeof accountStageSchema>;
 
@@ -615,6 +615,38 @@ export const opportunitySchema = z
   })
   .strict();
 export type Opportunity = z.infer<typeof opportunitySchema>;
+
+export const crmNoteSchema = z
+  .object({
+    id: idSchema,
+    account_id: idSchema,
+    opportunity_id: idSchema.nullable(),
+    author_admin_user_id: idSchema.nullable(),
+    body_redacted: z.string().min(1),
+    redaction_state: redactionStateSchema,
+    metadata: metadataSchema,
+    is_mock: z.boolean(),
+    created_at: isoDateTimeSchema
+  })
+  .strict();
+export type CrmNote = z.infer<typeof crmNoteSchema>;
+
+export const taskSchema = z
+  .object({
+    id: idSchema,
+    account_id: idSchema.nullable(),
+    opportunity_id: idSchema.nullable(),
+    assignee_admin_user_id: idSchema.nullable(),
+    title: z.string().min(1),
+    status: z.enum(["open", "done", "cancelled"]),
+    due_at: isoDateTimeSchema.nullable(),
+    metadata: metadataSchema,
+    is_mock: z.boolean(),
+    created_at: isoDateTimeSchema,
+    updated_at: isoDateTimeSchema
+  })
+  .strict();
+export type CrmTask = z.infer<typeof taskSchema>;
 
 export const adminAuditLogSchema = z
   .object({

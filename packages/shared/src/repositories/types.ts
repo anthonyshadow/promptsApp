@@ -2,6 +2,8 @@ import type {
   Account,
   AdminAuditLog,
   Contact,
+  CrmNote,
+  CrmTask,
   Entitlement,
   EvalResult,
   EvalRun,
@@ -59,6 +61,8 @@ export type RepositoryCollections = {
   accounts: Account;
   contacts: Contact;
   opportunities: Opportunity;
+  crm_notes: CrmNote;
+  tasks: CrmTask;
   entitlements: Entitlement;
   usage_ledger: UsageLedgerEntry;
 };
@@ -88,6 +92,8 @@ export interface PromptOptsRepository {
   accounts: CrudRepository<Account>;
   contacts: CrudRepository<Contact>;
   opportunities: CrudRepository<Opportunity>;
+  crm_notes: CrudRepository<CrmNote>;
+  tasks: CrudRepository<CrmTask>;
   admin_audit_logs: AppendOnlyRepository<AdminAuditLog>;
   entitlements: CrudRepository<Entitlement>;
   usage_ledger: CrudRepository<UsageLedgerEntry>;

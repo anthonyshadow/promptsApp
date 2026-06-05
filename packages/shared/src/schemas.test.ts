@@ -104,6 +104,9 @@ describe("shared domain schemas", () => {
 
     expect(seed.workspaces[0]?.name).toBe("Acme AI");
     expect(seed.projects[0]?.name).toBe("Support classifier");
+    expect(seed.accounts[0]?.stage).toBe("new_audit");
+    expect(seed.crm_notes[0]?.body_redacted).toContain("prompt details remain redacted");
+    expect(seed.tasks[0]?.title).toContain("run evals");
     expect(seed.test_cases).toHaveLength(5);
     expect(seed.reports[0]?.production_recommendation_allowed).toBe(false);
 

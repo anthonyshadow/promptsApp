@@ -2,11 +2,14 @@ import { css } from "@emotion/css";
 import { getAdminGateCopy, getAdminGateStateFromSearch } from "../adminGate";
 import { normalizeApiUrl } from "../apiViewState";
 import type { AdminGateState } from "../viewTypes";
+import AdminAccountDetailScreen from "./AdminAccountDetailScreen";
+import AdminAccountsScreen from "./AdminAccountsScreen";
 import AdminOverviewScreen from "./AdminOverviewScreen";
 
 function AdminRouteTree() {
   const gateState = getAdminGateStateFromSearch(window.location.search);
   const apiBaseUrl = normalizeApiUrl(import.meta.env.VITE_API_URL);
+  const route = getAdminRoute(window.location.pathname);
 
   return (
     <main className={rootStyle}>
@@ -15,8 +18,9 @@ function AdminRouteTree() {
         <h1 className={titleStyle} id="admin-title">
           PromptOpts Admin
         </h1>
+        {gateState === "authorized" ? <AdminInternalNav activeRoute={route.kind} /> : null}
         {gateState === "authorized" ? (
-          <AdminOverviewScreen apiBaseUrl={apiBaseUrl} />
+          renderAuthorizedAdminRoute(route, apiBaseUrl)
         ) : (
           <AdminGateStateView state={gateState} />
         )}
@@ -26,6 +30,36 @@ function AdminRouteTree() {
 }
 
 export default AdminRouteTree;
+
+function renderAuthorizedAdminRoute(
+  route: AdminRoute,
+  apiBaseUrl: string | undefined
+): JSX.Element {
+  switch (route.kind) {
+    case "accounts":
+      return <AdminAccountsScreen apiBaseUrl={apiBaseUrl} />;
+    case "account-detail":
+      return <AdminAccountDetailScreen accountId={route.accountId} apiBaseUrl={apiBaseUrl} />;
+    case "overview":
+      return <AdminOverviewScreen apiBaseUrl={apiBaseUrl} />;
+  }
+}
+
+function AdminInternalNav({ activeRoute }: { activeRoute: AdminRoute["kind"] }) {
+  return (
+    <nav className={navStyle} aria-label="Internal admin navigation">
+      <a className={activeRoute === "overview" ? activeNavLinkStyle : navLinkStyle} href="/__admin/overview?state=authorized">
+        Overview
+      </a>
+      <a
+        className={activeRoute === "accounts" || activeRoute === "account-detail" ? activeNavLinkStyle : navLinkStyle}
+        href="/__admin/accounts?state=authorized"
+      >
+        Accounts
+      </a>
+    </nav>
+  );
+}
 
 function AdminGateStateView({ state }: { state: AdminGateState }) {
   const copy = getAdminGateCopy(state);
@@ -56,6 +90,39 @@ function AdminGateStateView({ state }: { state: AdminGateState }) {
       ) : null}
     </div>
   );
+}
+
+type AdminRoute =
+  | {
+      kind: "overview";
+    }
+  | {
+      kind: "accounts";
+    }
+  | {
+      kind: "account-detail";
+      accountId: string;
+    };
+
+function getAdminRoute(pathname: string): AdminRoute {
+  const parts = pathname.split("/").filter(Boolean);
+
+  if (parts[0] === "__admin" && parts[1] === "accounts" && parts[2]) {
+    return {
+      kind: "account-detail",
+      accountId: decodeURIComponent(parts[2])
+    };
+  }
+
+  if (parts[0] === "__admin" && parts[1] === "accounts") {
+    return {
+      kind: "accounts"
+    };
+  }
+
+  return {
+    kind: "overview"
+  };
 }
 
 const rootStyle = css({
@@ -99,6 +166,37 @@ const gatePanelStyle = css({
   borderRadius: "8px",
   background: "#17211d",
   padding: "24px"
+});
+
+const navStyle = css({
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "8px",
+  marginTop: "18px"
+});
+
+const navLinkStyle = css({
+  border: "1px solid #526a5d",
+  borderRadius: "8px",
+  color: "#dcebe0",
+  padding: "8px 11px",
+  textDecoration: "none",
+  fontSize: "0.9rem",
+  fontWeight: 800,
+  ":hover": {
+    background: "#17211d"
+  }
+});
+
+const activeNavLinkStyle = css({
+  border: "1px solid #b8d1c0",
+  borderRadius: "8px",
+  background: "#dcebe0",
+  color: "#101713",
+  padding: "8px 11px",
+  textDecoration: "none",
+  fontSize: "0.9rem",
+  fontWeight: 800
 });
 
 const gateHeaderStyle = css({

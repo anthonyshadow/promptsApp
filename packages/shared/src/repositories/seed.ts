@@ -17,7 +17,9 @@ export const DEMO_IDS = {
   evalRun: "eval_run_support_classifier_demo",
   report: "report_support_classifier_shell",
   reportArtifact: "report_artifact_support_classifier_json",
-  freeAudit: "free_audit_acme_support_classifier"
+  freeAudit: "free_audit_acme_support_classifier",
+  crmNote: "crm_note_acme_free_audit",
+  task: "task_acme_eval_followup"
 } as const;
 
 export function createDemoRepositorySeed(): Required<RepositorySeed> {
@@ -476,11 +478,39 @@ export function createDemoRepositorySeed(): Required<RepositorySeed> {
         id: DEMO_IDS.account,
         name: "Acme AI",
         workspace_id: DEMO_IDS.workspace,
-        stage: "free_audit",
+        stage: "new_audit",
         provider_preference: "openai",
         owner_admin_user_id: null,
         domain: "acme-ai.example",
         redacted_prompt_preview: "Support classifier prompt with variables only.",
+        is_mock: true,
+        created_at: DEMO_TIMESTAMP,
+        updated_at: DEMO_TIMESTAMP
+      }
+    ],
+    crm_notes: [
+      {
+        id: DEMO_IDS.crmNote,
+        account_id: DEMO_IDS.account,
+        opportunity_id: DEMO_IDS.opportunity,
+        author_admin_user_id: "admin_user_demo",
+        body_redacted: "Free audit captured overpowered fit; prompt details remain redacted.",
+        redaction_state: "redacted",
+        metadata: { source: "free_audit" },
+        is_mock: true,
+        created_at: DEMO_TIMESTAMP
+      }
+    ],
+    tasks: [
+      {
+        id: DEMO_IDS.task,
+        account_id: DEMO_IDS.account,
+        opportunity_id: DEMO_IDS.opportunity,
+        assignee_admin_user_id: null,
+        title: "Invite Acme AI to run evals before switching",
+        status: "open",
+        due_at: null,
+        metadata: { source: "free_audit", action: "run_evals" },
         is_mock: true,
         created_at: DEMO_TIMESTAMP,
         updated_at: DEMO_TIMESTAMP

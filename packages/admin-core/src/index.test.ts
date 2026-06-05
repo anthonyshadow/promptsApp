@@ -124,6 +124,10 @@ describe("admin route policies", () => {
       action_scope: "read_metadata",
       sensitive_read: true
     });
+    expect(resolveAdminRoutePolicy("GET", "/admin-api/accounts/account_1")).toMatchObject({
+      action_scope: "read_metadata",
+      sensitive_read: true
+    });
   });
 });
 
