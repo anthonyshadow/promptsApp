@@ -45,6 +45,23 @@ describe("eval runner", () => {
     expect(result.results[0]?.candidate_id).toContain("candidate");
   });
 
+  test("runs only selected test cases when a subset is provided", async () => {
+    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const evalRun = await repository.eval_runs.get(DEMO_IDS.evalRun);
+
+    if (!evalRun) {
+      throw new Error("Missing demo eval run");
+    }
+
+    const result = await runEvalRun(repository, evalRun, {
+      testCaseIds: ["missing_test_case_id"]
+    });
+
+    expect(result.evalRun.status).toBe("failed");
+    expect(result.results).toHaveLength(0);
+    expect(result.retryHints.join(" ")).toContain("Add test cases");
+  });
+
   test("fails queued evals without test cases and returns retry hints", async () => {
     const repository = createMemoryRepository(createDemoRepositorySeed());
     const timestamp = "2026-06-05T12:00:00.000Z";

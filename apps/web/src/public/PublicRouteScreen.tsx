@@ -96,7 +96,16 @@ function PublicRouteScreen({
     case "models":
       return <ModelsScreen appState={appState} registryModels={registryModels} updateAppState={updateAppState} />;
     case "eval-run":
-      return <EvalRunScreen onNavigate={onNavigate} />;
+      return (
+        <EvalRunScreen
+          apiClient={apiClient}
+          appState={appState}
+          evalRunId={route.evalRunId}
+          onNavigate={onNavigate}
+          registryModels={registryModels}
+          updateAppState={updateAppState}
+        />
+      );
     case "report":
       return <ReportScreen onNavigate={onNavigate} />;
     case "report-export":

@@ -153,4 +153,28 @@ describe("public route screens", () => {
     expect(html).toContain("Stale/demo warning");
     expect(html).toContain("No exact savings claim");
   });
+
+  test("renders eval setup, polling state, matrix, and cost-quality frontier", () => {
+    const apiState: ApiState = { status: "not-configured" };
+    const html = renderToString(
+      <PublicRouteScreen
+        apiClient={null}
+        apiState={apiState}
+        appState={createInitialPublicAppState()}
+        registryModels={demoModelRegistry}
+        route={parsePublicRoute("/app/eval-runs/eval_demo_support")}
+        updateAppState={() => undefined}
+        onNavigate={() => undefined}
+      />
+    );
+
+    expect(html).toContain("Eval setup and polling");
+    expect(html).toContain("Selected prompts");
+    expect(html).toContain("Selected models");
+    expect(html).toContain("Selected test cases");
+    expect(html).toContain("Queue/cache state");
+    expect(html).toContain("Cost-quality frontier");
+    expect(html).toContain("Winner candidate");
+    expect(html).toContain("Failed checks");
+  });
 });

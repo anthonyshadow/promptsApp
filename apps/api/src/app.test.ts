@@ -445,6 +445,10 @@ describe("public API routes", () => {
           baseline_prompt_version_id: DEMO_IDS.promptVersion,
           candidate_ids: ["candidate_support_classifier_balanced"],
           model_registry_record_ids: ["model_registry_openai_demo_balanced"],
+          test_case_ids: [
+            "test_case_support_classifier_billing",
+            "test_case_support_classifier_outage"
+          ],
           pass_threshold: 0.95
         })
       )
@@ -456,6 +460,11 @@ describe("public API routes", () => {
     expect(afterResults.length).toBeGreaterThan(beforeResults.length);
     expect(detail.eval_run.id).toBe(evalRun.id);
     expect(detail.results).toHaveLength(2);
+    expect(detail.frontier_points).toHaveLength(2);
+    expect(detail.frontier_points.map((point: { role: string }) => point.role)).toEqual([
+      "baseline",
+      "winner_candidate"
+    ]);
     expect(detail.results.map((result: { verdict: string }) => result.verdict)).toEqual([
       "pass",
       "pass"
@@ -618,6 +627,7 @@ describe("public API routes", () => {
     const evalDetail = await expectOkJson(await app.request(`/eval-runs/${evalRun.id}`));
     expect(evalDetail.eval_run.id).toBe(evalRun.id);
     expect(evalDetail.results.length).toBeGreaterThan(0);
+    expect(evalDetail.frontier_points.length).toBe(evalDetail.results.length);
     expect(evalDetail.status_note).toContain("Mock eval runner completed");
 
     const report = await expectOkJson(

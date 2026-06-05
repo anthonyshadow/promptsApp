@@ -28,6 +28,7 @@ export type EvalRunnerResult = {
 export type EvalRunnerOptions = {
   adapter?: ProviderAdapter;
   maxRuns?: number;
+  testCaseIds?: string[];
 };
 
 export async function runQueuedEvalRuns(
@@ -53,9 +54,14 @@ export async function runEvalRun(
 ): Promise<EvalRunnerResult> {
   const timestamp = nowIso();
   const contract = await repository.quality_contracts.get(evalRun.quality_contract_id);
-  const testCases = (await repository.test_cases.list()).filter(
-    (testCase) => testCase.quality_contract_id === evalRun.quality_contract_id
-  );
+  const selectedTestCaseIds = new Set(options.testCaseIds ?? []);
+  const testCases = (await repository.test_cases.list()).filter((testCase) => {
+    if (testCase.quality_contract_id !== evalRun.quality_contract_id) {
+      return false;
+    }
+
+    return selectedTestCaseIds.size === 0 || selectedTestCaseIds.has(testCase.id);
+  });
 
   await repository.eval_runs.update(evalRun.id, {
     status: "running",

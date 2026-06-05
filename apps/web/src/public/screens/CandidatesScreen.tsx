@@ -93,6 +93,7 @@ function CandidatesScreen({
           status: "ready"
         });
         setActiveCandidateId(candidates[0]?.id ?? "");
+        updateAppState({ selectedCandidateIds: candidates.map((candidate) => candidate.id) });
       } catch {
         if (isMounted) {
           const candidates = createDemoCandidateViews();

@@ -26,6 +26,7 @@ import {
   auditResponseSchema,
   candidateStrategySchema,
   evalResultSchema,
+  costEstimateStatusSchema,
   idSchema,
   isoDateTimeSchema,
   metadataSchema,
@@ -183,6 +184,9 @@ export const evalRunCreateRequestSchema = evalRunSchema
     model_registry_record_ids: true,
     pass_threshold: true
   })
+  .extend({
+    test_case_ids: z.array(idSchema).min(1).optional()
+  })
   .strict();
 export type EvalRunCreateRequest = z.infer<typeof evalRunCreateRequestSchema>;
 
@@ -190,6 +194,25 @@ export const evalRunDetailResponseSchema = z
   .object({
     eval_run: evalRunSchema,
     results: z.array(evalResultSchema),
+    frontier_points: z.array(
+      z
+        .object({
+          result_id: idSchema,
+          candidate_id: idSchema,
+          model_id: nonEmptyStringSchema,
+          label: nonEmptyStringSchema,
+          quality_score: z.number().min(0).max(1),
+          pass_rate: z.number().min(0).max(1),
+          estimated_cost_usd: z.number().nonnegative().nullable(),
+          cost_estimate_status: costEstimateStatusSchema,
+          latency_ms: z.number().int().nonnegative().nullable(),
+          verdict: z.enum(["pass", "fail", "blocked"]),
+          role: z.enum(["baseline", "safe", "winner_candidate", "failed"]),
+          is_baseline: z.boolean(),
+          notes: z.array(nonEmptyStringSchema)
+        })
+        .strict()
+    ),
     failures: z.array(
       z
         .object({

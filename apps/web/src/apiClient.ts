@@ -3,6 +3,8 @@ import type {
   ApiApp,
   AuditRequest,
   AuditResponse,
+  EvalRunCreateRequest,
+  EvalRunDetailResponse,
   ModelsResponse,
   PromptCreateRequest,
   PromptCreateResponse,
@@ -15,7 +17,7 @@ import type {
   TestCasePatchRequest
 } from "@promptopts/api";
 import type { ModelModality } from "@promptopts/model-registry";
-import type { HealthResponse, Provider, StabilityStatus, TaskType } from "@promptopts/shared";
+import type { EvalRun, HealthResponse, Provider, StabilityStatus, TaskType } from "@promptopts/shared";
 
 export type RegistryResponse = ModelsResponse;
 
@@ -50,6 +52,8 @@ export type PromptOptsApiClient = {
     testCaseId: string,
     request: TestCasePatchRequest
   ) => Promise<TestCaseMutationResponse>;
+  createEvalRun: (request: EvalRunCreateRequest) => Promise<EvalRun>;
+  getEvalRun: (evalRunId: string) => Promise<EvalRunDetailResponse>;
 };
 
 export function createPromptOptsApiClient(baseUrl: string): PromptOptsApiClient {
@@ -155,6 +159,24 @@ export function createPromptOptsApiClient(baseUrl: string): PromptOptsApiClient 
       }
 
       return (await response.json()) as TestCaseMutationResponse;
+    },
+    async createEvalRun(request) {
+      const response = await client["eval-runs"].$post({ json: request });
+
+      if (!response.ok) {
+        throw new Error(`Eval run create returned ${response.status}`);
+      }
+
+      return (await response.json()) as unknown as EvalRun;
+    },
+    async getEvalRun(evalRunId) {
+      const response = await fetch(`${baseUrl}/eval-runs/${encodeURIComponent(evalRunId)}`);
+
+      if (!response.ok) {
+        throw new Error(`Eval run detail returned ${response.status}`);
+      }
+
+      return (await response.json()) as EvalRunDetailResponse;
     }
   };
 }

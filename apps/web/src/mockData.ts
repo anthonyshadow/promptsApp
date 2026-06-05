@@ -38,6 +38,8 @@ export type PublicAppState = {
   passThreshold: number;
   selectedCandidateIds: string[];
   selectedModelIds: string[];
+  selectedTestCaseIds: string[];
+  activeEvalRunId: string;
 };
 
 const demoCreatedAt = "2026-06-03T12:00:00.000Z";
@@ -408,7 +410,9 @@ export function createInitialPublicAppState(): PublicAppState {
     promptVariables: demoPromptVersion.variables,
     passThreshold: demoQualityContract.pass_threshold,
     selectedCandidateIds: demoEvalRun.candidate_ids,
-    selectedModelIds: demoEvalRun.model_registry_record_ids
+    selectedModelIds: demoEvalRun.model_registry_record_ids,
+    selectedTestCaseIds: demoTestCases.map((testCase) => testCase.id),
+    activeEvalRunId: demoEvalRun.id
   };
 }
 

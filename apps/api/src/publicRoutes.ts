@@ -515,7 +515,11 @@ export function createPublicApiRoutes() {
       };
 
       await c.var.repository.eval_runs.create(evalRun);
-      const runResult = await runEvalRun(c.var.repository, evalRun);
+      const runResult = await runEvalRun(
+        c.var.repository,
+        evalRun,
+        body.data.test_case_ids ? { testCaseIds: body.data.test_case_ids } : {}
+      );
 
       return c.json(runResult.evalRun, 201);
     })

@@ -67,10 +67,97 @@ export async function getEvalRunDetail(repository: PromptOptsRepository, evalRun
   return {
     eval_run: evalRun,
     results,
+    frontier_points: createEvalFrontierPoints(evalRun, results),
     failures,
     retry_hints: getEvalRetryHints(evalRun, results, failures.length),
     status_note: getEvalStatusNote(evalRun, results)
   };
+}
+
+function createEvalFrontierPoints(evalRun: EvalRun, results: EvalResult[]) {
+  const passingNonBaseline = results
+    .filter((result) => result.verdict === "pass" && !isBaselineResult(evalRun, result))
+    .sort(compareFrontierCandidates);
+  const winnerCandidateId = passingNonBaseline[0]?.id ?? null;
+
+  return results.map((result) => {
+    const isBaseline = isBaselineResult(evalRun, result);
+    const failed = result.verdict !== "pass" || result.must_pass_failures > 0;
+    const notes = getFrontierNotes(result, isBaseline, winnerCandidateId === result.id);
+
+    return {
+      result_id: result.id,
+      candidate_id: result.candidate_id,
+      model_id: result.model_id,
+      label: getFrontierLabel(result, isBaseline),
+      quality_score: result.quality_score,
+      pass_rate: result.pass_rate,
+      estimated_cost_usd: result.estimated_cost_usd,
+      cost_estimate_status: result.cost_estimate_status,
+      latency_ms: result.latency_ms,
+      verdict: result.verdict,
+      role: isBaseline
+        ? "baseline"
+        : failed
+          ? "failed"
+          : winnerCandidateId === result.id
+            ? "winner_candidate"
+            : "safe",
+      is_baseline: isBaseline,
+      notes
+    };
+  });
+}
+
+function compareFrontierCandidates(left: EvalResult, right: EvalResult): number {
+  if (right.quality_score !== left.quality_score) {
+    return right.quality_score - left.quality_score;
+  }
+
+  return getComparableCost(left) - getComparableCost(right);
+}
+
+function getComparableCost(result: EvalResult): number {
+  return result.estimated_cost_usd ?? Number.POSITIVE_INFINITY;
+}
+
+function isBaselineResult(evalRun: EvalRun, result: EvalResult): boolean {
+  void evalRun;
+  return result.candidate_id.includes("baseline");
+}
+
+function getFrontierLabel(result: EvalResult, isBaseline: boolean): string {
+  if (isBaseline) {
+    return "Baseline";
+  }
+
+  return result.candidate_id
+    .replace(/^candidate[_-]?/u, "")
+    .replaceAll("_", " ")
+    .replaceAll("-", " ")
+    .replace(/\b\w/gu, (letter) => letter.toUpperCase());
+}
+
+function getFrontierNotes(result: EvalResult, isBaseline: boolean, isWinnerCandidate: boolean): string[] {
+  const notes: string[] = [];
+
+  if (isBaseline) {
+    notes.push("Regression control: original prompt plus current model.");
+  }
+
+  if (result.verdict !== "pass") {
+    notes.push(getEvalFailureReason(result));
+  } else if (isWinnerCandidate) {
+    notes.push("Best passing non-baseline candidate in this mock matrix; still provisional until report rules run.");
+  } else {
+    notes.push("Passing combo stays visible as a safe benchmark option.");
+  }
+
+  if (result.cost_estimate_status !== "verified") {
+    notes.push("Cost metadata is not verified; exact savings claims stay disabled.");
+  }
+
+  return notes;
 }
 
 function getEvalFailureReason(result: EvalResult): string {
