@@ -3,6 +3,8 @@ import { z } from "zod";
 export * from "./schemas";
 export * from "./repositories/types";
 export * from "./repositories/memory";
+export * from "./repositories/postgres";
+export * from "./storage/reportArtifacts";
 
 export const APP_NAME = "PromptOpts";
 
