@@ -212,6 +212,7 @@ CREATE TABLE IF NOT EXISTS model_registry_versions (
   approved_by_admin_user_id TEXT,
   approved_at TIMESTAMPTZ,
   change_reason TEXT NOT NULL,
+  is_mock BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (model_registry_id, version_number)
 );

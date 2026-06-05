@@ -58,6 +58,15 @@ export type LatencyTier = z.infer<typeof latencyTierSchema>;
 export const qualityTierSchema = z.enum(["economy", "balanced", "frontier", "unknown"]);
 export type QualityTier = z.infer<typeof qualityTierSchema>;
 
+export const modelRegistryApprovalStateSchema = z.enum([
+  "draft",
+  "pending_review",
+  "approved",
+  "rejected",
+  "superseded"
+]);
+export type ModelRegistryApprovalState = z.infer<typeof modelRegistryApprovalStateSchema>;
+
 export const promptStatusSchema = z.enum(["draft", "active", "archived"]);
 export type PromptStatus = z.infer<typeof promptStatusSchema>;
 
@@ -213,6 +222,25 @@ export const modelRegistryRecordSchema = z
   })
   .strict();
 export type ModelRegistryRecord = z.infer<typeof modelRegistryRecordSchema>;
+
+export const modelRegistryVersionSchema = z
+  .object({
+    id: idSchema,
+    model_registry_id: idSchema,
+    version_number: z.number().int().positive(),
+    registry_payload: metadataSchema,
+    source_url: z.string().url(),
+    last_verified_at: isoDateTimeSchema.nullable(),
+    verified_by: z.string().min(1).nullable(),
+    approval_state: modelRegistryApprovalStateSchema,
+    approved_by_admin_user_id: idSchema.nullable(),
+    approved_at: isoDateTimeSchema.nullable(),
+    change_reason: z.string().min(1),
+    is_mock: z.boolean(),
+    created_at: isoDateTimeSchema
+  })
+  .strict();
+export type ModelRegistryVersion = z.infer<typeof modelRegistryVersionSchema>;
 
 export const auditConstraintsSchema = z
   .object({

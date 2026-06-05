@@ -7,7 +7,14 @@ import {
 } from "@promptopts/shared";
 import { createMockAdminHeaders } from "@promptopts/admin-core";
 import { createApp } from "./app";
-import { adminOverviewResponseSchema } from "./contracts";
+import {
+  adminEvalRunDetailResponseSchema,
+  adminEvalRunsResponseSchema,
+  adminModelRegistryResponseSchema,
+  adminOverviewResponseSchema,
+  modelApproveResponseSchema,
+  modelPatchResponseSchema
+} from "./contracts";
 
 function createTestApp() {
   return createApp({
@@ -852,10 +859,34 @@ describe("admin API routes", () => {
     );
     expect(workspace.name).toBe("Acme AI Ops");
 
-    await expectOkJson(await app.request("/admin-api/eval-runs", adminGetRequest()));
-    await expectOkJson(
-      await app.request(`/admin-api/eval-runs/${DEMO_IDS.evalRun}`, adminGetRequest())
+    const evalJobs = adminEvalRunsResponseSchema.parse(
+      await expectOkJson(await app.request("/admin-api/eval-runs", adminGetRequest()))
     );
+    expect(evalJobs.queue_summary.queued).toBe(1);
+    expect(evalJobs.queue_summary.rate_limited).toBe(0);
+    expect(evalJobs.worker_health.map((item) => item.component)).toEqual([
+      "eval-runner",
+      "provider-adapter",
+      "scoring",
+      "report-generator"
+    ]);
+    expect(evalJobs.jobs[0]).toMatchObject({
+      id: DEMO_IDS.evalRun,
+      workspace: "Acme AI Ops",
+      provider: "openai",
+      action: "cancel",
+      redaction_state: "redacted"
+    });
+
+    const evalJobDetail = adminEvalRunDetailResponseSchema.parse(
+      await expectOkJson(
+        await app.request(`/admin-api/eval-runs/${DEMO_IDS.evalRun}`, adminGetRequest())
+      )
+    );
+    expect(evalJobDetail.sanitized_payload.candidate_ids).toHaveLength(2);
+    expect(evalJobDetail.model_ids).toEqual(["openai-demo-balanced"]);
+    expect(evalJobDetail.test_count).toBe(5);
+    expect(JSON.stringify(evalJobDetail)).not.toContain("{{customer_message}}");
 
     const retried = await expectOkJson(
       await app.request(
@@ -889,35 +920,52 @@ describe("admin API routes", () => {
     );
     expect(reveal.raw_prompt).toBeNull();
 
-    await expectOkJson(await app.request("/admin-api/models", adminGetRequest()));
-    const patchedModel = await expectOkJson(
-      await app.request(
-        "/admin-api/models/model_registry_openai_demo_balanced",
-        adminPatchJsonRequest(
-          {
-            display_name: "OpenAI Demo Balanced Internal"
-          },
-          { sudo_grant: { reason_code: "registry_edit" } }
-        )
-      )
+    const registry = adminModelRegistryResponseSchema.parse(
+      await expectOkJson(await app.request("/admin-api/models", adminGetRequest()))
     );
-    expect(patchedModel.display_name).toBe("OpenAI Demo Balanced Internal");
+    expect(registry.freshness_summary.unverified).toBeGreaterThan(0);
+    const firstProposal = registry.proposed_changes.at(0);
+    expect(firstProposal).toBeDefined();
+    expect(firstProposal?.approval_actions.approve_enabled).toBe(true);
+    expect(firstProposal?.diff.length).toBeGreaterThan(0);
 
-    const approvedModel = await expectOkJson(
-      await app.request(
-        "/admin-api/models/model_registry_openai_demo_balanced/approve",
-        adminJsonRequest(
-          {
-            verified_by: "admin_user_mock",
-            source_url: "https://example.com/verified",
-            last_verified_at: "2026-01-16T12:00:00.000Z",
-            reason_code: "registry_review"
-          },
-          { sudo_grant: { reason_code: "registry_review" } }
+    const patchedModel = modelPatchResponseSchema.parse(
+      await expectOkJson(
+        await app.request(
+          "/admin-api/models/model_registry_openai_demo_balanced",
+          adminPatchJsonRequest(
+            {
+              display_name: "OpenAI Demo Balanced Internal",
+              source_url: "https://example.com/verified"
+            },
+            { sudo_grant: { reason_code: "registry_edit" } }
+          )
         )
       )
     );
-    expect(approvedModel.freshness_status).toBe("fresh");
+    expect(patchedModel.model.display_name).toBe("OpenAI Demo Balanced");
+    expect(patchedModel.proposal.approval_state).toBe("pending_review");
+    expect(patchedModel.diff.map((entry) => entry.field)).toContain("display_name");
+
+    const approvedModel = modelApproveResponseSchema.parse(
+      await expectOkJson(
+        await app.request(
+          "/admin-api/models/model_registry_openai_demo_balanced/approve",
+          adminJsonRequest(
+            {
+              verified_by: "admin_user_mock",
+              source_url: "https://example.com/verified",
+              last_verified_at: "2026-01-16T12:00:00.000Z",
+              reason_code: "registry_review"
+            },
+            { sudo_grant: { reason_code: "registry_review" } }
+          )
+        )
+      )
+    );
+    expect(approvedModel.model.display_name).toBe("OpenAI Demo Balanced Internal");
+    expect(approvedModel.model.freshness_status).toBe("fresh");
+    expect(approvedModel.approved_version.approval_state).toBe("approved");
 
     await expectOkJson(await app.request("/admin-api/reports", adminGetRequest()));
     const deleteResponse = await expectOkJson(
@@ -1082,6 +1130,64 @@ describe("admin API routes", () => {
     ]);
   });
 
+  test("returns sanitized eval job detail and audits retry/cancel actions", async () => {
+    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const app = createApp({ repository });
+    const timestamp = "2026-01-16T12:00:00.000Z";
+    await repository.eval_runs.update(DEMO_IDS.evalRun, {
+      status: "failed",
+      started_at: timestamp,
+      completed_at: timestamp
+    });
+    await repository.eval_results.create({
+      id: "eval_result_provider_error_demo",
+      eval_run_id: DEMO_IDS.evalRun,
+      candidate_id: "candidate_support_classifier_balanced",
+      prompt_version_id: DEMO_IDS.promptVersion,
+      model_registry_record_id: "model_registry_openai_demo_balanced",
+      provider: "openai",
+      model_id: "openai-demo-balanced",
+      quality_score: 0,
+      pass_rate: 0,
+      must_pass_failures: 1,
+      input_tokens: 22,
+      output_tokens: 0,
+      estimated_cost_usd: null,
+      cost_estimate_status: "blocked",
+      latency_ms: null,
+      risk_level: "high",
+      verdict: "blocked",
+      failed_check_ids: ["provider_error_rate_limited_demo"],
+      is_mock: true,
+      created_at: timestamp
+    });
+
+    const before = await repository.admin_audit_logs.list();
+    const detail = adminEvalRunDetailResponseSchema.parse(
+      await expectOkJson(
+        await app.request(`/admin-api/eval-runs/${DEMO_IDS.evalRun}`, adminGetRequest())
+      )
+    );
+    expect(detail.failed_checks).toHaveLength(1);
+    expect(detail.sanitized_provider_error).toContain("[redacted]");
+    expect(JSON.stringify(detail)).not.toContain("sk-demo-secret");
+    expect(JSON.stringify(detail)).not.toContain("Classify the inbound support message");
+
+    await app.request(
+      `/admin-api/eval-runs/${DEMO_IDS.evalRun}/retry`,
+      adminJsonRequest({ reason_code: "retry_failed_provider_error" })
+    );
+    await app.request(
+      `/admin-api/eval-runs/${DEMO_IDS.evalRun}/cancel`,
+      adminJsonRequest({ reason_code: "cancel_stuck_job" })
+    );
+
+    const after = await repository.admin_audit_logs.list();
+    expect(after.length).toBe(before.length + 3);
+    expect(after.slice(-2).map((log) => log.target_type)).toEqual(["eval_runs", "eval_runs"]);
+    expect(after.slice(-2).map((log) => log.action_scope)).toEqual(["retry_eval", "retry_eval"]);
+  });
+
   test("keeps public and admin namespaces separated", async () => {
     const app = createTestApp();
 
@@ -1132,7 +1238,22 @@ describe("route request validation", () => {
       "/admin-api/models/model_registry_openai_demo_balanced",
       adminPatchJsonRequest(
         {
-          input_price_per_million_tokens: 2
+          input_price_per_million_tokens: 2,
+          source_url: "https://example.com/verified"
+        },
+        { sudo_grant: { reason_code: "registry_validation" } }
+      )
+    );
+
+    expect(response.status).toBe(400);
+  });
+
+  test("requires official source URL for any model registry change", async () => {
+    const response = await createTestApp().request(
+      "/admin-api/models/model_registry_openai_demo_balanced",
+      adminPatchJsonRequest(
+        {
+          display_name: "Missing Source"
         },
         { sudo_grant: { reason_code: "registry_validation" } }
       )

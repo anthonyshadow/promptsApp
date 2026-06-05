@@ -128,6 +128,14 @@ describe("admin route policies", () => {
       action_scope: "read_metadata",
       sensitive_read: true
     });
+    expect(resolveAdminRoutePolicy("POST", "/admin-api/eval-runs/eval_1/retry")).toMatchObject({
+      action_scope: "retry_eval",
+      requires_sudo: false
+    });
+    expect(resolveAdminRoutePolicy("PATCH", "/admin-api/models/model_1")).toMatchObject({
+      action_scope: "manage_model_registry",
+      requires_sudo: true
+    });
   });
 });
 

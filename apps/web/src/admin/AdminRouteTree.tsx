@@ -4,6 +4,8 @@ import { normalizeApiUrl } from "../apiViewState";
 import type { AdminGateState } from "../viewTypes";
 import AdminAccountDetailScreen from "./AdminAccountDetailScreen";
 import AdminAccountsScreen from "./AdminAccountsScreen";
+import AdminEvalJobsScreen from "./AdminEvalJobsScreen";
+import AdminModelRegistryScreen from "./AdminModelRegistryScreen";
 import AdminOverviewScreen from "./AdminOverviewScreen";
 
 function AdminRouteTree() {
@@ -40,6 +42,10 @@ function renderAuthorizedAdminRoute(
       return <AdminAccountsScreen apiBaseUrl={apiBaseUrl} />;
     case "account-detail":
       return <AdminAccountDetailScreen accountId={route.accountId} apiBaseUrl={apiBaseUrl} />;
+    case "eval-jobs":
+      return <AdminEvalJobsScreen apiBaseUrl={apiBaseUrl} />;
+    case "model-registry":
+      return <AdminModelRegistryScreen apiBaseUrl={apiBaseUrl} />;
     case "overview":
       return <AdminOverviewScreen apiBaseUrl={apiBaseUrl} />;
   }
@@ -56,6 +62,12 @@ function AdminInternalNav({ activeRoute }: { activeRoute: AdminRoute["kind"] }) 
         href="/__admin/accounts?state=authorized"
       >
         Accounts
+      </a>
+      <a className={activeRoute === "eval-jobs" ? activeNavLinkStyle : navLinkStyle} href="/__admin/eval-jobs?state=authorized">
+        Eval jobs
+      </a>
+      <a className={activeRoute === "model-registry" ? activeNavLinkStyle : navLinkStyle} href="/__admin/model-registry?state=authorized">
+        Model registry
       </a>
     </nav>
   );
@@ -102,6 +114,12 @@ type AdminRoute =
   | {
       kind: "account-detail";
       accountId: string;
+    }
+  | {
+      kind: "eval-jobs";
+    }
+  | {
+      kind: "model-registry";
     };
 
 function getAdminRoute(pathname: string): AdminRoute {
@@ -117,6 +135,18 @@ function getAdminRoute(pathname: string): AdminRoute {
   if (parts[0] === "__admin" && parts[1] === "accounts") {
     return {
       kind: "accounts"
+    };
+  }
+
+  if (parts[0] === "__admin" && parts[1] === "eval-jobs") {
+    return {
+      kind: "eval-jobs"
+    };
+  }
+
+  if (parts[0] === "__admin" && parts[1] === "model-registry") {
+    return {
+      kind: "model-registry"
     };
   }
 

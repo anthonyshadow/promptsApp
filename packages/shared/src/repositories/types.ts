@@ -9,6 +9,7 @@ import type {
   EvalRun,
   FreeAudit,
   ModelRegistryRecord,
+  ModelRegistryVersion,
   OptimizationCandidate,
   Opportunity,
   Prompt,
@@ -57,6 +58,7 @@ export type RepositoryCollections = {
   reports: RecommendationReport;
   report_artifacts: ReportArtifact;
   model_registry: ModelRegistryRecord;
+  model_registry_versions: ModelRegistryVersion;
   free_audits: FreeAudit;
   accounts: Account;
   contacts: Contact;
@@ -88,6 +90,7 @@ export interface PromptOptsRepository {
   reports: CrudRepository<RecommendationReport>;
   report_artifacts: CrudRepository<ReportArtifact>;
   model_registry: CrudRepository<ModelRegistryRecord>;
+  model_registry_versions: CrudRepository<ModelRegistryVersion>;
   free_audits: CrudRepository<FreeAudit>;
   accounts: CrudRepository<Account>;
   contacts: CrudRepository<Contact>;

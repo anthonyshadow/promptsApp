@@ -17,6 +17,7 @@ export const DEMO_IDS = {
   evalRun: "eval_run_support_classifier_demo",
   report: "report_support_classifier_shell",
   reportArtifact: "report_artifact_support_classifier_json",
+  modelRegistryVersion: "model_registry_version_openai_balanced_pending",
   freeAudit: "free_audit_acme_support_classifier",
   crmNote: "crm_note_acme_free_audit",
   task: "task_acme_eval_followup"
@@ -450,6 +451,30 @@ export function createDemoRepositorySeed(): Required<RepositorySeed> {
         model_id: "gemini-demo-balanced",
         display_name: "Gemini Demo Balanced"
       })
+    ],
+    model_registry_versions: [
+      {
+        id: DEMO_IDS.modelRegistryVersion,
+        model_registry_id: openAiModelId,
+        version_number: 1,
+        registry_payload: {
+          display_name: "OpenAI Demo Balanced Verified Draft",
+          input_price_per_million_tokens: 1.1,
+          output_price_per_million_tokens: 4.2,
+          freshness_status: "fresh",
+          stability_status: "stable",
+          pricing_note: "Demo pending verification from official model docs."
+        },
+        source_url: "https://example.com/promptopts/demo-model-registry",
+        last_verified_at: "2026-01-16T12:00:00.000Z",
+        verified_by: "admin_user_demo",
+        approval_state: "pending_review",
+        approved_by_admin_user_id: null,
+        approved_at: null,
+        change_reason: "Demo pending source verification proposal.",
+        is_mock: true,
+        created_at: DEMO_TIMESTAMP
+      }
     ],
     free_audits: [
       {

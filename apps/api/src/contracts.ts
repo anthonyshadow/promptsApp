@@ -10,6 +10,7 @@ import {
   entitlementSchema,
   evalRunSchema,
   modelRegistryRecordSchema,
+  modelRegistryVersionSchema,
   opportunitySchema,
   promptProjectSchema,
   promptSchema,
@@ -648,10 +649,74 @@ export type WorkspacePatchRequest = z.infer<typeof workspacePatchRequestSchema>;
 
 export const adminEvalRunsResponseSchema = z
   .object({
-    eval_runs: z.array(evalRunSchema)
+    queue_summary: z
+      .object({
+        queued: z.number().int().nonnegative(),
+        running: z.number().int().nonnegative(),
+        failed: z.number().int().nonnegative(),
+        retrying: z.number().int().nonnegative(),
+        rate_limited: z.number().int().nonnegative()
+      })
+      .strict(),
+    worker_health: z.array(
+      z
+        .object({
+          component: z.enum(["eval-runner", "provider-adapter", "scoring", "report-generator"]),
+          status: z.enum(["ok", "mocked", "degraded"]),
+          redacted_summary: nonEmptyStringSchema
+        })
+        .strict()
+    ),
+    jobs: z.array(
+      z
+        .object({
+          id: idSchema,
+          workspace: nonEmptyStringSchema,
+          provider: providerSchema,
+          status: z.enum(["queued", "running", "rate_limited", "retrying", "complete", "failed"]),
+          age_seconds: z.number().int().nonnegative(),
+          progress: z.number().min(0).max(1),
+          action: z.enum(["view", "retry", "cancel", "regenerate_report"]),
+          redaction_state: z.enum(["redacted", "revealed", "not_sensitive"])
+        })
+        .strict()
+    ),
+    notes: z.array(nonEmptyStringSchema)
   })
   .strict();
 export type AdminEvalRunsResponse = z.infer<typeof adminEvalRunsResponseSchema>;
+
+export const adminEvalRunDetailResponseSchema = z
+  .object({
+    detail: evalRunDetailResponseSchema,
+    sanitized_payload: z
+      .object({
+        eval_run_id: idSchema,
+        project_id: idSchema,
+        quality_contract_id: idSchema,
+        baseline_prompt_version_id: idSchema,
+        candidate_ids: z.array(idSchema),
+        model_registry_record_ids: z.array(idSchema),
+        redaction_state: z.enum(["redacted", "revealed", "not_sensitive"])
+      })
+      .strict(),
+    model_ids: z.array(nonEmptyStringSchema),
+    test_count: z.number().int().nonnegative(),
+    failed_checks: evalRunDetailResponseSchema.shape.failures,
+    sanitized_provider_error: nonEmptyStringSchema.nullable(),
+    retry_hints: z.array(nonEmptyStringSchema),
+    worker_health: z.array(
+      z
+        .object({
+          component: z.enum(["eval-runner", "provider-adapter", "scoring", "report-generator"]),
+          status: z.enum(["ok", "mocked", "degraded"]),
+          redacted_summary: nonEmptyStringSchema
+        })
+        .strict()
+    )
+  })
+  .strict();
+export type AdminEvalRunDetailResponse = z.infer<typeof adminEvalRunDetailResponseSchema>;
 
 export const evalRunActionResponseSchema = z
   .object({
@@ -668,6 +733,99 @@ export const regenerateReportResponseSchema = z
   })
   .strict();
 export type RegenerateReportResponse = z.infer<typeof regenerateReportResponseSchema>;
+
+const modelRegistryDiffEntrySchema = z
+  .object({
+    field: nonEmptyStringSchema,
+    before: z.unknown(),
+    after: z.unknown()
+  })
+  .strict();
+
+const adminModelRegistryRowSchema = z
+  .object({
+    id: idSchema,
+    provider: providerSchema,
+    model_id: nonEmptyStringSchema,
+    display_name: nonEmptyStringSchema,
+    input_price_per_million_tokens: z.number().nonnegative(),
+    output_price_per_million_tokens: z.number().nonnegative(),
+    cached_input_price_per_million_tokens: z.number().nonnegative().nullable(),
+    context_window: z.number().int().positive(),
+    capabilities: z
+      .object({
+        text: z.boolean(),
+        image: z.boolean(),
+        audio: z.boolean(),
+        video: z.boolean(),
+        tools: z.boolean(),
+        structured_output: z.boolean()
+      })
+      .strict(),
+    stability_status: z.enum(["stable", "preview", "latest", "experimental", "deprecated", "unverified"]),
+    freshness_status: z.enum(["fresh", "stale", "unverified", "deprecated"]),
+    source_url: z.string().url().nullable(),
+    last_verified_at: isoDateTimeSchema.nullable(),
+    verified_by: nonEmptyStringSchema.nullable(),
+    pricing_note: nonEmptyStringSchema,
+    active_for_public_recommendations: z.boolean(),
+    pending_version_id: idSchema.nullable()
+  })
+  .strict();
+
+export const adminModelRegistryResponseSchema = z
+  .object({
+    freshness_summary: z
+      .object({
+        fresh: z.number().int().nonnegative(),
+        stale: z.number().int().nonnegative(),
+        deprecated: z.number().int().nonnegative(),
+        preview_experimental: z.number().int().nonnegative(),
+        unverified: z.number().int().nonnegative()
+      })
+      .strict(),
+    models: z.array(adminModelRegistryRowSchema),
+    proposed_changes: z.array(
+      z
+        .object({
+          version: modelRegistryVersionSchema,
+          model_id: nonEmptyStringSchema,
+          display_name: nonEmptyStringSchema,
+          diff: z.array(modelRegistryDiffEntrySchema),
+          approval_actions: z
+            .object({
+              approve_enabled: z.boolean(),
+              reject_enabled: z.boolean(),
+              note: nonEmptyStringSchema
+            })
+            .strict()
+        })
+        .strict()
+    ),
+    registry_note: nonEmptyStringSchema
+  })
+  .strict();
+export type AdminModelRegistryResponse = z.infer<typeof adminModelRegistryResponseSchema>;
+
+export const modelPatchResponseSchema = z
+  .object({
+    model: modelRegistryRecordSchema,
+    proposal: modelRegistryVersionSchema,
+    diff: z.array(modelRegistryDiffEntrySchema),
+    todo: nonEmptyStringSchema
+  })
+  .strict();
+export type ModelPatchResponse = z.infer<typeof modelPatchResponseSchema>;
+
+export const modelApproveResponseSchema = z
+  .object({
+    model: modelRegistryRecordSchema,
+    approved_version: modelRegistryVersionSchema,
+    diff: z.array(modelRegistryDiffEntrySchema),
+    registry_note: nonEmptyStringSchema
+  })
+  .strict();
+export type ModelApproveResponse = z.infer<typeof modelApproveResponseSchema>;
 
 const modelPatchBaseSchema = z
   .object({
@@ -720,10 +878,17 @@ export const modelPatchRequestSchema = requireAtLeastOneField(modelPatchBaseSche
     ] as const;
     const changesVerifiedMetadata = verifiedFields.some((field) => field in value);
 
-    if (changesVerifiedMetadata && (!value.source_url || !value.last_verified_at)) {
+    if (!value.source_url) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Model metadata edits require source_url and last_verified_at"
+        message: "Model registry changes require source_url"
+      });
+    }
+
+    if (changesVerifiedMetadata && (!value.last_verified_at || !value.verified_by)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Model metadata edits require last_verified_at and verified_by"
       });
     }
   }

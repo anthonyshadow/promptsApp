@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import {
+  redactProviderError,
   redactPromptPreview,
   requireActionScope,
   requireAdminRole,
@@ -14,9 +15,11 @@ import type {
   Contact,
   CrmNote,
   CrmTask,
+  EvalResult,
   EvalRun,
   FreeAudit,
   ModelRegistryRecord,
+  ModelRegistryVersion,
   Opportunity,
   Prompt,
   PromptAnalysis,
@@ -35,9 +38,11 @@ import {
   accountTaskCreateResponseSchema,
   adminAccountDetailResponseSchema,
   adminAccountsResponseSchema,
+  adminEvalRunDetailResponseSchema,
   type AdminAccountDetailResponse,
   type AdminAccountsResponse,
   adminEvalRunsResponseSchema,
+  adminModelRegistryResponseSchema,
   adminOverviewResponseSchema,
   type AdminOverviewResponse,
   adminReasonRequestSchema,
@@ -48,11 +53,11 @@ import {
   billingCreditResponseSchema,
   billingResponseSchema,
   breakGlassResponseSchema,
-  evalRunDetailResponseSchema,
   impersonationResponseSchema,
   modelApproveRequestSchema,
+  modelApproveResponseSchema,
   modelPatchRequestSchema,
-  modelsResponseSchema,
+  modelPatchResponseSchema,
   promptRevealResponseSchema,
   regenerateReportResponseSchema,
   reportDeleteRequestSchema,
@@ -435,10 +440,24 @@ export function createAdminApiRoutes() {
         return c.json(workspaceSchema.parse(workspace));
       })
       .get("/eval-runs", async (c) => {
+        const [evalRuns, projects, workspaces, models, results] = await Promise.all([
+          c.var.repository.eval_runs.list(),
+          c.var.repository.projects.list(),
+          c.var.repository.workspaces.list(),
+          c.var.repository.model_registry.list(),
+          c.var.repository.eval_results.list()
+        ]);
+
         return c.json(
-          adminEvalRunsResponseSchema.parse({
-            eval_runs: await c.var.repository.eval_runs.list()
-          })
+          adminEvalRunsResponseSchema.parse(
+            createAdminEvalRunsResponse({
+              evalRuns,
+              projects,
+              workspaces,
+              models,
+              results
+            })
+          )
         );
       })
       .get("/eval-runs/:id", async (c) => {
@@ -447,7 +466,9 @@ export function createAdminApiRoutes() {
           return notFound(c, "Eval run not found");
         }
 
-        return c.json(evalRunDetailResponseSchema.parse(await getEvalRunDetail(c.var.repository, evalRun)));
+        return c.json(
+          adminEvalRunDetailResponseSchema.parse(await createAdminEvalRunDetail(c.var.repository, evalRun))
+        );
       })
       .post("/eval-runs/:id/retry", async (c) => {
         const body = await validateJson(c, adminReasonRequestSchema);
@@ -526,11 +547,13 @@ export function createAdminApiRoutes() {
         );
       })
       .get("/models", async (c) => {
+        const [models, versions] = await Promise.all([
+          c.var.repository.model_registry.list(),
+          c.var.repository.model_registry_versions.list()
+        ]);
+
         return c.json(
-          modelsResponseSchema.parse({
-            models: await c.var.repository.model_registry.list(),
-            registry_note: "Admin model registry view is metadata-only and redacted by default."
-          })
+          adminModelRegistryResponseSchema.parse(createAdminModelRegistryResponse(models, versions))
         );
       })
       .patch("/models/:id", async (c) => {
@@ -539,16 +562,44 @@ export function createAdminApiRoutes() {
           return body.response;
         }
 
-        const model = await c.var.repository.model_registry.update(c.req.param("id"), {
-          ...(body.data as Partial<Omit<ModelRegistryRecord, "id">>),
-          updated_at: nowIso()
-        });
-
+        const model = await c.var.repository.model_registry.get(c.req.param("id"));
         if (!model) {
           return notFound(c, "Model registry record not found");
         }
 
-        return c.json(model);
+        const versions = await c.var.repository.model_registry_versions.list();
+        const timestamp = nowIso();
+        const payload = stripRegistryPatchMetadata(body.data as Record<string, unknown>);
+        const sourceUrl = body.data.source_url as string;
+        const proposal: ModelRegistryVersion = {
+          id: createId("model_registry_version"),
+          model_registry_id: model.id,
+          version_number: nextModelRegistryVersionNumber(versions, model.id),
+          registry_payload: payload,
+          source_url: sourceUrl,
+          last_verified_at: body.data.last_verified_at ?? null,
+          verified_by: body.data.verified_by ?? null,
+          approval_state: "pending_review",
+          approved_by_admin_user_id: null,
+          approved_at: null,
+          change_reason:
+            typeof body.data.metadata?.change_reason === "string"
+              ? body.data.metadata.change_reason
+              : "Admin registry metadata proposal.",
+          is_mock: true,
+          created_at: timestamp
+        };
+
+        await c.var.repository.model_registry_versions.create(proposal);
+
+        return c.json(
+          modelPatchResponseSchema.parse({
+            model,
+            proposal,
+            diff: createModelRegistryDiff(model, proposal),
+            todo: "PATCH creates a pending registry proposal; public recommendations continue using the active record until approval."
+          })
+        );
       })
       .post("/models/:id/approve", async (c) => {
         const body = await validateJson(c, modelApproveRequestSchema);
@@ -556,19 +607,68 @@ export function createAdminApiRoutes() {
           return body.response;
         }
 
-        const model = await c.var.repository.model_registry.update(c.req.param("id"), {
+        const currentModel = await c.var.repository.model_registry.get(c.req.param("id"));
+        if (!currentModel) {
+          return notFound(c, "Model registry record not found");
+        }
+
+        const versions = await c.var.repository.model_registry_versions.list();
+        const pendingVersion = versions
+          .filter(
+            (version) =>
+              version.model_registry_id === currentModel.id && version.approval_state === "pending_review"
+          )
+          .sort((a, b) => b.version_number - a.version_number)
+          .at(0);
+        const timestamp = nowIso();
+        const model = await c.var.repository.model_registry.update(currentModel.id, {
+          ...(pendingVersion?.registry_payload as Partial<Omit<ModelRegistryRecord, "id">> | undefined),
           freshness_status: "fresh",
           source_url: body.data.source_url,
           last_verified_at: body.data.last_verified_at,
           verified_by: body.data.verified_by,
-          updated_at: nowIso()
+          updated_at: timestamp
         });
 
         if (!model) {
           return notFound(c, "Model registry record not found");
         }
 
-        return c.json(model);
+        const approvedVersion =
+          pendingVersion
+            ? await c.var.repository.model_registry_versions.update(pendingVersion.id, {
+                approval_state: "approved",
+                approved_by_admin_user_id: c.var.adminSession.admin_user_id,
+                approved_at: timestamp,
+                source_url: body.data.source_url,
+                last_verified_at: body.data.last_verified_at,
+                verified_by: body.data.verified_by
+              })
+            : await c.var.repository.model_registry_versions.create({
+                id: createId("model_registry_version"),
+                model_registry_id: model.id,
+                version_number: nextModelRegistryVersionNumber(versions, model.id),
+                registry_payload: {},
+                source_url: body.data.source_url,
+                last_verified_at: body.data.last_verified_at,
+                verified_by: body.data.verified_by,
+                approval_state: "approved",
+                approved_by_admin_user_id: c.var.adminSession.admin_user_id,
+                approved_at: timestamp,
+                change_reason: `Approval without pending diff. Reason: ${body.data.reason_code}`,
+                is_mock: true,
+                created_at: timestamp
+              });
+
+        return c.json(
+          modelApproveResponseSchema.parse({
+            model,
+            approved_version: approvedVersion,
+            diff: approvedVersion ? createModelRegistryDiff(currentModel, approvedVersion) : [],
+            registry_note:
+              "Approved metadata is active for public recommendations; stale/demo savings warnings remain when any selected registry row is not fresh."
+          })
+        );
       })
       .get("/reports", async (c) => {
         return c.json(
@@ -650,6 +750,258 @@ export function createAdminApiRoutes() {
         );
       })
   );
+}
+
+function createAdminEvalRunsResponse(input: {
+  evalRuns: EvalRun[];
+  projects: PromptProject[];
+  workspaces: Workspace[];
+  models: ModelRegistryRecord[];
+  results: EvalResult[];
+}) {
+  return {
+    queue_summary: countEvalJobsWithRateLimits(input.evalRuns),
+    worker_health: createWorkerHealth(input.evalRuns),
+    jobs: input.evalRuns
+      .map((evalRun) => {
+        const project = input.projects.find((item) => item.id === evalRun.project_id) ?? null;
+        const workspace = project
+          ? input.workspaces.find((item) => item.id === project.workspace_id) ?? null
+          : null;
+        const model =
+          input.models.find((item) => evalRun.model_registry_record_ids.includes(item.id)) ?? null;
+        const results = input.results.filter((result) => result.eval_run_id === evalRun.id);
+
+        return {
+          id: evalRun.id,
+          workspace: workspace?.name ?? "Workspace metadata unavailable",
+          provider: model?.provider ?? project?.current_provider ?? "openai",
+          status: evalRun.status,
+          age_seconds: getAgeSeconds(evalRun.queued_at),
+          progress: getEvalProgress(evalRun, results),
+          action: getEvalJobAction(evalRun),
+          redaction_state: "redacted" as const
+        };
+      })
+      .sort((a, b) => b.age_seconds - a.age_seconds),
+    notes: [
+      "Eval job admin payloads are sanitized by default; raw prompts are not returned without sudo.",
+      "Retry, cancel, and report regeneration actions are audited through the admin middleware."
+    ]
+  };
+}
+
+async function createAdminEvalRunDetail(
+  repository: ApiEnv["Variables"]["repository"],
+  evalRun: EvalRun
+) {
+  const [detail, models, testCases] = await Promise.all([
+    getEvalRunDetail(repository, evalRun),
+    repository.model_registry.list(),
+    repository.test_cases.list()
+  ]);
+  const selectedModels = models.filter((model) => evalRun.model_registry_record_ids.includes(model.id));
+  const providerErrorResult = detail.results.find((result) =>
+    result.failed_check_ids.some((checkId) => checkId.startsWith("provider_error_"))
+  );
+  const sanitizedProviderError = providerErrorResult
+    ? redactProviderError(
+        `Provider error for ${providerErrorResult.provider}/${providerErrorResult.model_id}: token=provider-token-demo payload redacted.`
+      )
+    : null;
+
+  return {
+    detail,
+    sanitized_payload: {
+      eval_run_id: evalRun.id,
+      project_id: evalRun.project_id,
+      quality_contract_id: evalRun.quality_contract_id,
+      baseline_prompt_version_id: evalRun.baseline_prompt_version_id,
+      candidate_ids: evalRun.candidate_ids,
+      model_registry_record_ids: evalRun.model_registry_record_ids,
+      redaction_state: "redacted" as const
+    },
+    model_ids: selectedModels.map((model) => model.model_id),
+    test_count: testCases.filter((testCase) => testCase.quality_contract_id === evalRun.quality_contract_id).length,
+    failed_checks: detail.failures,
+    sanitized_provider_error: sanitizedProviderError,
+    retry_hints: detail.retry_hints,
+    worker_health: createWorkerHealth([evalRun])
+  };
+}
+
+function countEvalJobsWithRateLimits(evalRuns: EvalRun[]) {
+  return {
+    queued: evalRuns.filter((evalRun) => evalRun.status === "queued").length,
+    running: evalRuns.filter((evalRun) => evalRun.status === "running").length,
+    failed: evalRuns.filter((evalRun) => evalRun.status === "failed").length,
+    retrying: evalRuns.filter((evalRun) => evalRun.status === "retrying").length,
+    rate_limited: evalRuns.filter((evalRun) => evalRun.status === "rate_limited").length
+  };
+}
+
+function createWorkerHealth(evalRuns: EvalRun[]) {
+  const hasFailures = evalRuns.some((evalRun) => evalRun.status === "failed");
+  const hasRateLimits = evalRuns.some((evalRun) => evalRun.status === "rate_limited");
+
+  return [
+    {
+      component: "eval-runner" as const,
+      status: hasFailures ? "degraded" as const : "mocked" as const,
+      redacted_summary: hasFailures
+        ? "At least one eval job failed; inspect failed checks and retry hints."
+        : "Memory-backed eval runner metadata is available."
+    },
+    {
+      component: "provider-adapter" as const,
+      status: hasRateLimits ? "degraded" as const : "mocked" as const,
+      redacted_summary: hasRateLimits
+        ? "Provider adapter saw rate-limit metadata; raw provider payload is sanitized."
+        : "Provider adapter is mocked; no live provider calls are shown."
+    },
+    {
+      component: "scoring" as const,
+      status: "mocked" as const,
+      redacted_summary: "Deterministic scoring metadata is available from eval results."
+    },
+    {
+      component: "report-generator" as const,
+      status: "mocked" as const,
+      redacted_summary: "Report regeneration is queued as a mocked operator action."
+    }
+  ];
+}
+
+function getEvalProgress(evalRun: EvalRun, results: EvalResult[]): number {
+  const expectedRows = Math.max(1, evalRun.candidate_ids.length * evalRun.model_registry_record_ids.length);
+
+  if (evalRun.status === "complete") {
+    return 1;
+  }
+
+  return Math.min(1, results.length / expectedRows);
+}
+
+function getEvalJobAction(evalRun: EvalRun) {
+  if (evalRun.status === "failed" || evalRun.status === "rate_limited") {
+    return "retry" as const;
+  }
+
+  if (evalRun.status === "queued" || evalRun.status === "running" || evalRun.status === "retrying") {
+    return "cancel" as const;
+  }
+
+  return "regenerate_report" as const;
+}
+
+function getAgeSeconds(isoTimestamp: string): number {
+  const ageMs = Date.now() - Date.parse(isoTimestamp);
+
+  return Number.isFinite(ageMs) ? Math.max(0, Math.floor(ageMs / 1000)) : 0;
+}
+
+function createAdminModelRegistryResponse(
+  models: ModelRegistryRecord[],
+  versions: ModelRegistryVersion[]
+) {
+  const pendingVersions = versions.filter((version) => version.approval_state === "pending_review");
+
+  return {
+    freshness_summary: {
+      fresh: models.filter((model) => model.freshness_status === "fresh").length,
+      stale: models.filter((model) => model.freshness_status === "stale").length,
+      deprecated: models.filter(
+        (model) =>
+          model.freshness_status === "deprecated" || model.stability_status === "deprecated"
+      ).length,
+      preview_experimental: models.filter((model) =>
+        ["preview", "experimental"].includes(model.stability_status)
+      ).length,
+      unverified: models.filter((model) => model.freshness_status === "unverified").length
+    },
+    models: models.map((model) => {
+      const pendingVersion =
+        pendingVersions
+          .filter((version) => version.model_registry_id === model.id)
+          .sort((a, b) => b.version_number - a.version_number)
+          .at(0) ?? null;
+
+      return {
+        id: model.id,
+        provider: model.provider,
+        model_id: model.model_id,
+        display_name: model.display_name,
+        input_price_per_million_tokens: model.input_price_per_million_tokens,
+        output_price_per_million_tokens: model.output_price_per_million_tokens,
+        cached_input_price_per_million_tokens: model.cached_input_price_per_million_tokens,
+        context_window: model.context_window,
+        capabilities: {
+          text: model.supports_text,
+          image: model.supports_image,
+          audio: model.supports_audio,
+          video: model.supports_video,
+          tools: model.supports_tools,
+          structured_output: model.supports_structured_output
+        },
+        stability_status: model.stability_status,
+        freshness_status: model.freshness_status,
+        source_url: model.source_url,
+        last_verified_at: model.last_verified_at,
+        verified_by: model.verified_by,
+        pricing_note: model.pricing_note,
+        active_for_public_recommendations:
+          model.freshness_status === "fresh" &&
+          model.stability_status !== "deprecated" &&
+          !model.is_mock,
+        pending_version_id: pendingVersion?.id ?? null
+      };
+    }),
+    proposed_changes: pendingVersions.map((version) => {
+      const model = models.find((item) => item.id === version.model_registry_id);
+
+      return {
+        version,
+        model_id: model?.model_id ?? version.model_registry_id,
+        display_name: model?.display_name ?? "Unknown model",
+        diff: model ? createModelRegistryDiff(model, version) : [],
+        approval_actions: {
+          approve_enabled: Boolean(model),
+          reject_enabled: false,
+          note: "Approve is implemented; reject remains placeholder-only until a reject route is added."
+        }
+      };
+    }),
+    registry_note:
+      "Admin registry rows are metadata only. PATCH creates pending proposals; approval publishes active metadata used by public recommendations."
+  };
+}
+
+function stripRegistryPatchMetadata(patch: Record<string, unknown>): Record<string, unknown> {
+  const { source_url: _sourceUrl, last_verified_at: _lastVerifiedAt, verified_by: _verifiedBy, ...payload } = patch;
+
+  return stripUndefined(payload);
+}
+
+function nextModelRegistryVersionNumber(
+  versions: ModelRegistryVersion[],
+  modelRegistryId: string
+): number {
+  const latestVersion = versions
+    .filter((version) => version.model_registry_id === modelRegistryId)
+    .sort((a, b) => b.version_number - a.version_number)
+    .at(0);
+
+  return (latestVersion?.version_number ?? 0) + 1;
+}
+
+function createModelRegistryDiff(model: ModelRegistryRecord, version: ModelRegistryVersion) {
+  return Object.entries(version.registry_payload)
+    .filter(([field, after]) => (model as unknown as Record<string, unknown>)[field] !== after)
+    .map(([field, after]) => ({
+      field,
+      before: (model as unknown as Record<string, unknown>)[field] ?? null,
+      after
+    }));
 }
 
 function createAccountPipelineRows(input: {

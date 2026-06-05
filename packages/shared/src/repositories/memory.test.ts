@@ -46,6 +46,9 @@ describe("memory repository", () => {
     });
     expect(await repo.test_cases.list()).toHaveLength(5);
     expect(await repo.model_registry.list()).toHaveLength(5);
+    expect(await repo.model_registry_versions.get(DEMO_IDS.modelRegistryVersion)).toMatchObject({
+      approval_state: "pending_review"
+    });
     expect(await repo.crm_notes.get(DEMO_IDS.crmNote)).toMatchObject({
       redaction_state: "redacted"
     });

@@ -9,6 +9,7 @@ import {
   evalRunSchema,
   freeAuditSchema,
   modelRegistryRecordSchema,
+  modelRegistryVersionSchema,
   optimizationCandidateSchema,
   opportunitySchema,
   promptAnalysisSchema,
@@ -33,6 +34,7 @@ import {
   type EvalRun,
   type FreeAudit,
   type ModelRegistryRecord,
+  type ModelRegistryVersion,
   type OptimizationCandidate,
   type Opportunity,
   type Prompt,
@@ -184,6 +186,10 @@ export function createMemoryRepository(seed: RepositorySeed = {}): PromptOptsRep
     model_registry: new MemoryCrudRepository<ModelRegistryRecord>(
       modelRegistryRecordSchema,
       seed.model_registry
+    ),
+    model_registry_versions: new MemoryCrudRepository<ModelRegistryVersion>(
+      modelRegistryVersionSchema,
+      seed.model_registry_versions
     ),
     free_audits: new MemoryCrudRepository<FreeAudit>(freeAuditSchema, seed.free_audits),
     accounts: new MemoryCrudRepository<Account>(accountSchema, seed.accounts),
