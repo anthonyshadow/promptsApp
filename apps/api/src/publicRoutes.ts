@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { autoDraftQualityContract } from "@promptopts/eval-core";
+import { runEvalRun } from "@promptopts/eval-runner";
 import {
   filterByCapability,
   type ModelCapabilityFilterInput,
@@ -514,8 +515,9 @@ export function createPublicApiRoutes() {
       };
 
       await c.var.repository.eval_runs.create(evalRun);
+      const runResult = await runEvalRun(c.var.repository, evalRun);
 
-      return c.json(evalRun, 201);
+      return c.json(runResult.evalRun, 201);
     })
     .get("/eval-runs/:id", async (c) => {
       const evalRun = await c.var.repository.eval_runs.get(c.req.param("id"));

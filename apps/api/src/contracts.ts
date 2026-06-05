@@ -190,7 +190,20 @@ export const evalRunDetailResponseSchema = z
   .object({
     eval_run: evalRunSchema,
     results: z.array(evalResultSchema),
-    todo: nonEmptyStringSchema
+    failures: z.array(
+      z
+        .object({
+          result_id: idSchema,
+          candidate_id: idSchema,
+          model_id: nonEmptyStringSchema,
+          failed_check_ids: z.array(idSchema),
+          must_pass_failures: z.number().int().nonnegative(),
+          reason: nonEmptyStringSchema
+        })
+        .strict()
+    ),
+    retry_hints: z.array(nonEmptyStringSchema),
+    status_note: nonEmptyStringSchema
   })
   .strict();
 export type EvalRunDetailResponse = z.infer<typeof evalRunDetailResponseSchema>;

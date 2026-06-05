@@ -15,6 +15,7 @@
       "dependencies": {
         "@promptopts/admin-core": "workspace:*",
         "@promptopts/eval-core": "workspace:*",
+        "@promptopts/eval-runner": "workspace:*",
         "@promptopts/model-registry": "workspace:*",
         "@promptopts/prompt-core": "workspace:*",
         "@promptopts/shared": "workspace:*",
@@ -74,6 +75,9 @@
     "packages/provider-adapters": {
       "name": "@promptopts/provider-adapters",
       "version": "0.0.0",
+      "dependencies": {
+        "@promptopts/shared": "workspace:*",
+      },
     },
     "packages/shared": {
       "name": "@promptopts/shared",
@@ -87,6 +91,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@promptopts/eval-core": "workspace:*",
+        "@promptopts/provider-adapters": "workspace:*",
         "@promptopts/shared": "workspace:*",
       },
     },

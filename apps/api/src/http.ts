@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 import { z } from "zod";
-import type { EvalRun, PromptOptsRepository, UsageLedgerEntry } from "@promptopts/shared";
+import type { EvalResult, EvalRun, PromptOptsRepository, UsageLedgerEntry } from "@promptopts/shared";
 import { errorResponseSchema, evalRunActionResponseSchema } from "./contracts";
 import type { ApiEnv, ValidatedJson } from "./context";
 
@@ -53,12 +53,86 @@ export async function getEvalRunDetail(repository: PromptOptsRepository, evalRun
   const results = (await repository.eval_results.list()).filter(
     (result) => result.eval_run_id === evalRun.id
   );
+  const failures = results
+    .filter((result) => result.verdict !== "pass" || result.must_pass_failures > 0)
+    .map((result) => ({
+      result_id: result.id,
+      candidate_id: result.candidate_id,
+      model_id: result.model_id,
+      failed_check_ids: result.failed_check_ids,
+      must_pass_failures: result.must_pass_failures,
+      reason: getEvalFailureReason(result)
+    }));
 
   return {
     eval_run: evalRun,
     results,
-    todo: "Eval execution is mocked until eval-runner and provider adapters are implemented."
+    failures,
+    retry_hints: getEvalRetryHints(evalRun, results, failures.length),
+    status_note: getEvalStatusNote(evalRun, results)
   };
+}
+
+function getEvalFailureReason(result: EvalResult): string {
+  if (result.failed_check_ids.some((checkId) => checkId.startsWith("provider_error_rate_limited"))) {
+    return "Provider rate limit encountered; provider payload was sanitized.";
+  }
+
+  if (result.failed_check_ids.some((checkId) => checkId.startsWith("provider_error_"))) {
+    return "Provider error encountered; raw provider payload was sanitized.";
+  }
+
+  if (result.must_pass_failures > 0) {
+    return "Must-pass failure rejects this prompt/model combo.";
+  }
+
+  if (result.verdict === "blocked") {
+    return "Combo is blocked until missing eval inputs are resolved.";
+  }
+
+  return "Combo did not meet the configured pass threshold.";
+}
+
+function getEvalRetryHints(
+  evalRun: EvalRun,
+  results: EvalResult[],
+  failureCount: number
+): string[] {
+  const hints = new Set<string>();
+
+  if (evalRun.status === "queued" || evalRun.status === "running") {
+    hints.add("Eval run is still in progress; poll for partial rows.");
+  }
+  if (evalRun.status === "rate_limited") {
+    hints.add("Provider rate limit encountered; retry after backoff.");
+  }
+  if (results.length === 0) {
+    hints.add("No eval rows are available yet; verify quality contract, candidates, and model shortlist.");
+  }
+  if (failureCount > 0) {
+    hints.add("Review failed checks before considering any production recommendation.");
+  }
+  if (results.some((result) => result.cost_estimate_status === "unverified")) {
+    hints.add("Registry metadata is stale/demo; exact savings claims remain disabled.");
+  }
+
+  return Array.from(hints);
+}
+
+function getEvalStatusNote(evalRun: EvalRun, results: EvalResult[]): string {
+  if (evalRun.status === "complete") {
+    return "Mock eval runner completed with deterministic checks; production recommendation still requires pass threshold and zero must-pass failures.";
+  }
+
+  if (evalRun.status === "failed") {
+    return "Eval run failed before completing the matrix.";
+  }
+
+  if (evalRun.status === "rate_limited") {
+    return "Eval run paused on sanitized provider rate-limit signal.";
+  }
+
+  return `Eval run is ${evalRun.status}; ${results.length} partial row(s) are available.`;
 }
 
 export async function handleEvalRunStatusUpdate(

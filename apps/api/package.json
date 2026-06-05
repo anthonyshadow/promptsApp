@@ -18,6 +18,7 @@
   "dependencies": {
     "@promptopts/admin-core": "workspace:*",
     "@promptopts/eval-core": "workspace:*",
+    "@promptopts/eval-runner": "workspace:*",
     "@promptopts/model-registry": "workspace:*",
     "@promptopts/prompt-core": "workspace:*",
     "@promptopts/shared": "workspace:*",

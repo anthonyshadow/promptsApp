@@ -10,6 +10,7 @@
   "include": ["src"],
   "references": [
     { "path": "../../packages/admin-core" },
+    { "path": "../../workers/eval-runner" },
     { "path": "../../packages/model-registry" },
     { "path": "../../packages/prompt-core" },
     { "path": "../../packages/shared" }

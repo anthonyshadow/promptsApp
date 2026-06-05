@@ -431,6 +431,40 @@ describe("public API routes", () => {
     expect(updated.test_case.name).toBe("Updated exact label");
   });
 
+  test("POST and GET /eval-runs execute the mocked eval matrix with failures and retry hints", async () => {
+    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const app = createApp({ repository });
+    const beforeResults = await repository.eval_results.list();
+
+    const evalRun = await expectOkJson(
+      await app.request(
+        "/eval-runs",
+        jsonRequest({
+          project_id: DEMO_IDS.project,
+          quality_contract_id: DEMO_IDS.qualityContract,
+          baseline_prompt_version_id: DEMO_IDS.promptVersion,
+          candidate_ids: ["candidate_support_classifier_balanced"],
+          model_registry_record_ids: ["model_registry_openai_demo_balanced"],
+          pass_threshold: 0.95
+        })
+      )
+    );
+    const afterResults = await repository.eval_results.list();
+    const detail = await expectOkJson(await app.request(`/eval-runs/${evalRun.id}`));
+
+    expect(evalRun.status).toBe("complete");
+    expect(afterResults.length).toBeGreaterThan(beforeResults.length);
+    expect(detail.eval_run.id).toBe(evalRun.id);
+    expect(detail.results).toHaveLength(2);
+    expect(detail.results.map((result: { verdict: string }) => result.verdict)).toEqual([
+      "pass",
+      "pass"
+    ]);
+    expect(detail.failures).toHaveLength(0);
+    expect(detail.retry_hints.join(" ")).toContain("Registry metadata");
+    expect(detail.status_note).toContain("Mock eval runner completed");
+  });
+
   test("POST /reports includes no-test blocker when quality contract has no cases", async () => {
     const repository = createMemoryRepository(createDemoRepositorySeed());
     const app = createApp({ repository });
@@ -479,6 +513,7 @@ describe("public API routes", () => {
         })
       )
     );
+    expect(evalRun.status).toBe("failed");
 
     const report = await expectOkJson(
       await app.request(
@@ -578,10 +613,12 @@ describe("public API routes", () => {
         })
       )
     );
-    expect(evalRun.status).toBe("queued");
+    expect(evalRun.status).toBe("complete");
 
     const evalDetail = await expectOkJson(await app.request(`/eval-runs/${evalRun.id}`));
     expect(evalDetail.eval_run.id).toBe(evalRun.id);
+    expect(evalDetail.results.length).toBeGreaterThan(0);
+    expect(evalDetail.status_note).toContain("Mock eval runner completed");
 
     const report = await expectOkJson(
       await app.request(

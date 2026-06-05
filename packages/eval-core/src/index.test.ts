@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { PromptAnalysis, QualityCheckDefinition, TestCase } from "@promptopts/shared";
 import {
+  aggregateEvalRun,
   autoDraftQualityContract,
+  getEvalComboVerdict,
   parseCsvTestCases,
+  runDeterministicChecks,
+  scoreEvalResult,
   validateQualityCheck,
   validateTestCaseChecks
 } from "./index";
@@ -117,6 +121,87 @@ describe("deterministic check validators", () => {
   });
 });
 
+describe("eval scoring", () => {
+  test("scores passing combos at or above threshold", () => {
+    const passedCase = {
+      testCaseId: "case_pass",
+      results: [deterministicCheckResult("check_pass", true, true)],
+      deterministicPassRate: 1,
+      mustPassFailures: [],
+      unresolvedPlaceholders: [],
+      passed: true
+    };
+    const score = scoreEvalResult({
+      testCaseResults: [passedCase, passedCase],
+      passThreshold: 0.95
+    });
+
+    expect(score.qualityScore).toBe(1);
+    expect(score.passRate).toBe(1);
+    expect(score.mustPassFailures).toBe(0);
+    expect(score.verdict).toBe("pass");
+  });
+
+  test("must-pass failures reject combos even when pass rate would otherwise pass", () => {
+    const score = scoreEvalResult({
+      testCaseResults: [
+        {
+          testCaseId: "case_fail",
+          results: [deterministicCheckResult("check_must_pass", true, false)],
+          deterministicPassRate: 0,
+          mustPassFailures: ["check_must_pass"],
+          unresolvedPlaceholders: [],
+          passed: false
+        }
+      ],
+      passThreshold: 0.95
+    });
+
+    expect(score.verdict).toBe("fail");
+    expect(score.mustPassFailures).toBe(1);
+    expect(score.failedCheckIds).toEqual(["check_must_pass"]);
+  });
+
+  test("blocks empty eval input and aggregates run blockers", () => {
+    expect(
+      scoreEvalResult({
+        testCaseResults: [],
+        passThreshold: 0.95
+      }).verdict
+    ).toBe("blocked");
+    expect(
+      getEvalComboVerdict({
+        passRate: 1,
+        passThreshold: 0.95,
+        mustPassFailures: 1
+      })
+    ).toBe("fail");
+
+    const aggregate = aggregateEvalRun({
+      results: [],
+      testCaseCount: 0,
+      passThreshold: 0.95
+    });
+
+    expect(aggregate.productionRecommendationAllowed).toBe(false);
+    expect(aggregate.blockers.join(" ")).toContain("No test cases");
+  });
+
+  test("runDeterministicChecks delegates exact check validation", () => {
+    const testCase = createTestCase([
+      {
+        ...createCheck("exact", "label", "billing"),
+        id: "check_label",
+        must_pass: true
+      }
+    ]);
+    const result = runDeterministicChecks(testCase, { label: "billing" });
+
+    expect(result.passed).toBe(true);
+    expect(result.deterministicPassRate).toBe(1);
+  });
+});
+
 describe("CSV test case parser", () => {
   test("parses 5-50 CSV test cases", () => {
     const csv = [
@@ -161,5 +246,35 @@ function createCheck(
     expected_value: expectedValue,
     pattern,
     placeholder_note: null
+  };
+}
+
+function createTestCase(checks: QualityCheckDefinition[]): TestCase {
+  return {
+    id: "case_scoring",
+    project_id: "project_test",
+    quality_contract_id: "contract_test",
+    name: "Scoring case",
+    input_variables: {},
+    expected_output: {},
+    checks,
+    is_mock: true,
+    created_at: "2026-06-03T12:00:00.000Z",
+    updated_at: "2026-06-03T12:00:00.000Z"
+  };
+}
+
+function deterministicCheckResult(
+  checkId: string,
+  mustPass: boolean,
+  passed: boolean
+) {
+  return {
+    checkId,
+    checkType: "exact" as const,
+    deterministic: true,
+    mustPass,
+    passed,
+    failureReason: passed ? null : "failed"
   };
 }

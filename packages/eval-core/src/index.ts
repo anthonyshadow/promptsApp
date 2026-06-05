@@ -1,4 +1,6 @@
 import type {
+  EvalResult,
+  EvalVerdict,
   PromptAnalysis,
   QualityCheckDefinition,
   QualityContract,
@@ -40,6 +42,48 @@ export type CsvTestCaseDraft = {
   name: string;
   inputVariables: Record<string, unknown>;
   expectedOutput: unknown;
+};
+
+export type LlmJudgeInput = {
+  check: QualityCheckDefinition;
+  prompt: string;
+  actualOutput: unknown;
+  expectedOutput: unknown;
+};
+
+export type LlmJudgeResult = {
+  checkId: string;
+  passed: boolean;
+  score: number;
+  rationale: string;
+};
+
+export interface LlmJudgeAdapter {
+  judge(input: LlmJudgeInput): Promise<LlmJudgeResult>;
+}
+
+export type EvalComboScoreInput = {
+  testCaseResults: TestCaseValidationResult[];
+  passThreshold: number;
+};
+
+export type EvalComboScore = {
+  qualityScore: number;
+  passRate: number;
+  mustPassFailures: number;
+  failedCheckIds: string[];
+  unresolvedPlaceholderCheckIds: string[];
+  verdict: EvalVerdict;
+};
+
+export type EvalRunAggregate = {
+  totalResults: number;
+  passingResults: number;
+  failingResults: number;
+  blockedResults: number;
+  bestResultId: string | null;
+  productionRecommendationAllowed: boolean;
+  blockers: string[];
 };
 
 export function autoDraftQualityContract(promptAnalysis: PromptAnalysis): QualityContractDraft {
@@ -201,6 +245,130 @@ export function validateTestCaseChecks(
   };
 }
 
+export function runDeterministicChecks(
+  testCase: TestCase,
+  actualOutput: unknown
+): TestCaseValidationResult {
+  return validateTestCaseChecks(testCase, actualOutput);
+}
+
+export function scoreEvalResult(input: EvalComboScoreInput): EvalComboScore {
+  const testCaseCount = input.testCaseResults.length;
+
+  if (testCaseCount === 0) {
+    return {
+      qualityScore: 0,
+      passRate: 0,
+      mustPassFailures: 0,
+      failedCheckIds: [],
+      unresolvedPlaceholderCheckIds: [],
+      verdict: "blocked"
+    };
+  }
+
+  const failedCheckIds = dedupeStrings(
+    input.testCaseResults.flatMap((result) =>
+      result.results
+        .filter((check) => check.deterministic && check.passed === false)
+        .map((check) => check.checkId)
+    )
+  );
+  const unresolvedPlaceholderCheckIds = dedupeStrings(
+    input.testCaseResults.flatMap((result) => result.unresolvedPlaceholders)
+  );
+  const mustPassFailureIds = dedupeStrings(
+    input.testCaseResults.flatMap((result) => result.mustPassFailures)
+  );
+  const passedCases = input.testCaseResults.filter((result) => result.passed).length;
+  const passRate = roundRate(passedCases / testCaseCount);
+  const qualityScore = roundRate(
+    input.testCaseResults.reduce((sum, result) => sum + result.deterministicPassRate, 0) /
+      testCaseCount
+  );
+
+  return {
+    qualityScore,
+    passRate,
+    mustPassFailures: mustPassFailureIds.length,
+    failedCheckIds,
+    unresolvedPlaceholderCheckIds,
+    verdict: getEvalComboVerdict({
+      passRate,
+      passThreshold: input.passThreshold,
+      mustPassFailures: mustPassFailureIds.length,
+      blocked: false
+    })
+  };
+}
+
+export function getEvalComboVerdict(input: {
+  passRate: number;
+  passThreshold: number;
+  mustPassFailures: number;
+  blocked?: boolean;
+}): EvalVerdict {
+  if (input.blocked) {
+    return "blocked";
+  }
+
+  if (input.mustPassFailures > 0) {
+    return "fail";
+  }
+
+  return input.passRate >= input.passThreshold ? "pass" : "fail";
+}
+
+export function aggregateEvalRun(input: {
+  results: EvalResult[];
+  testCaseCount: number;
+  passThreshold: number;
+}): EvalRunAggregate {
+  const blockers: string[] = [];
+  const passingResults = input.results.filter((result) => result.verdict === "pass");
+  const failingResults = input.results.filter((result) => result.verdict === "fail");
+  const blockedResults = input.results.filter((result) => result.verdict === "blocked");
+  const bestResult = [...passingResults].sort((left, right) => {
+    if (right.quality_score !== left.quality_score) {
+      return right.quality_score - left.quality_score;
+    }
+
+    if (left.estimated_cost_usd === null) {
+      return 1;
+    }
+    if (right.estimated_cost_usd === null) {
+      return -1;
+    }
+
+    return left.estimated_cost_usd - right.estimated_cost_usd;
+  })[0];
+
+  if (input.testCaseCount === 0) {
+    blockers.push("No test cases exist; production recommendation is disabled until tests are added.");
+  }
+  if (input.results.length === 0) {
+    blockers.push("Eval matrix has no result rows yet.");
+  }
+  if (input.results.some((result) => result.must_pass_failures > 0)) {
+    blockers.push("At least one combo has a must-pass failure.");
+  }
+  if (passingResults.length === 0 && input.results.length > 0) {
+    blockers.push("No combo passed the configured eval threshold.");
+  }
+  if (input.passThreshold <= 0) {
+    blockers.push("Eval pass threshold is not configured.");
+  }
+
+  return {
+    totalResults: input.results.length,
+    passingResults: passingResults.length,
+    failingResults: failingResults.length,
+    blockedResults: blockedResults.length,
+    bestResultId: bestResult?.id ?? null,
+    productionRecommendationAllowed: blockers.length === 0,
+    blockers
+  };
+}
+
 export function parseCsvTestCases(csvText: string): CsvTestCaseDraft[] {
   const rows = parseCsvRows(csvText).filter((row) => row.some((cell) => cell.trim().length > 0));
 
@@ -317,6 +485,10 @@ function stringifyForCheck(value: unknown): string {
   }
 
   return typeof value === "object" ? JSON.stringify(value) : String(value);
+}
+
+function roundRate(value: number): number {
+  return Math.round(value * 1000) / 1000;
 }
 
 function valuesMatch(actual: unknown, expected: unknown): boolean {
