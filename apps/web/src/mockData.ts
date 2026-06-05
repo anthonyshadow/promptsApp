@@ -295,11 +295,25 @@ export const demoCandidates = [
     summary: "Removes repeated phrasing and keeps must-pass constraints explicit."
   },
   {
+    id: "candidate_aggressive",
+    strategy: "aggressive",
+    risk: "high",
+    tokenDelta: -44,
+    summary: "Experimental compression lower bound; never a recommendation until evals pass."
+  },
+  {
     id: "candidate_output_lite",
     strategy: "output_lite",
     risk: "medium",
     tokenDelta: -34,
     summary: "Shorter rationale budget with unchanged routing fields."
+  },
+  {
+    id: "candidate_model_specific",
+    strategy: "model_specific",
+    risk: "medium",
+    tokenDelta: -18,
+    summary: "Provider-tuned placeholder that stays provisional until evals pass."
   }
 ] satisfies Array<{
   id: string;
@@ -413,8 +427,8 @@ function createDemoModel(
     input_price_per_million_tokens: 0,
     output_price_per_million_tokens: 0,
     cached_input_price_per_million_tokens: null,
-    context_window: 1,
-    max_output_tokens: 1,
+    context_window: 128000,
+    max_output_tokens: 4096,
     supports_text: true,
     supports_image: false,
     supports_audio: false,

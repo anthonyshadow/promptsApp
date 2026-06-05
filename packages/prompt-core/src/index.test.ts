@@ -4,6 +4,11 @@ import {
   classifyModelFit,
   detectSensitiveContent,
   estimateMonthlyCost,
+  generateAggressiveCandidate,
+  generateBalancedCandidate,
+  generateConservativeCandidate,
+  generateModelSpecificCandidate,
+  generateOutputLiteCandidate,
   parsePrompt,
   runPromptModelAudit
 } from ".";
@@ -152,6 +157,69 @@ describe("prompt model audit", () => {
     expect(audit.modelFit).toBe("overpowered");
     expect(audit.suggestedModelRoles.map((role) => role.role)).toContain("cheaper_candidate");
     expect(audit.compressionGuardrails.join(" ")).toContain("not make a production switch");
+  });
+});
+
+describe("prompt candidate generation", () => {
+  const candidateInput = {
+    promptText:
+      "Classify {{customer_message}}. Return JSON with category and urgency.\nReturn JSON with category and urgency.",
+    provider: "openai" as const,
+    modelId: "openai-demo-balanced",
+    requiredOutput: "JSON with category and urgency.",
+    outputRequirements: ["json"],
+    preservedConstraints: [
+      "Preserve exact urgency labels.",
+      "Never invent customer facts."
+    ]
+  };
+
+  test("generates multiple deterministic risk profiles", () => {
+    const candidates = [
+      generateConservativeCandidate({ ...candidateInput, id: "candidate_conservative" }),
+      generateBalancedCandidate({ ...candidateInput, id: "candidate_balanced" }),
+      generateAggressiveCandidate({ ...candidateInput, id: "candidate_aggressive" }),
+      generateOutputLiteCandidate({ ...candidateInput, id: "candidate_output_lite" }),
+      generateModelSpecificCandidate({ ...candidateInput, id: "candidate_model_specific" })
+    ];
+
+    expect(candidates.map((candidate) => candidate.strategy)).toEqual([
+      "conservative",
+      "balanced",
+      "aggressive",
+      "output_lite",
+      "model_specific"
+    ]);
+    expect(candidates.map((candidate) => candidate.label)).toEqual([
+      "Conservative",
+      "Balanced",
+      "Aggressive",
+      "Output-lite",
+      "Model-specific"
+    ]);
+    expect(candidates.find((candidate) => candidate.strategy === "aggressive")?.riskLabel).toBe("high");
+    expect(candidates.find((candidate) => candidate.strategy === "aggressive")?.rationale).toContain("experiment");
+    expect(candidates.every((candidate) => candidate.estimatedInputTokens > 0)).toBe(true);
+    expect(candidates.every((candidate) => candidate.estimatedOutputTokens > 0)).toBe(true);
+  });
+
+  test("keeps must-preserve constraints represented in every generated prompt", () => {
+    const candidates = [
+      generateConservativeCandidate(candidateInput),
+      generateBalancedCandidate(candidateInput),
+      generateAggressiveCandidate(candidateInput),
+      generateOutputLiteCandidate(candidateInput),
+      generateModelSpecificCandidate(candidateInput)
+    ];
+
+    for (const candidate of candidates) {
+      expect(candidate.preservedConstraints).toContain("Preserve exact urgency labels.");
+      expect(candidate.preservedConstraints).toContain("Never invent customer facts.");
+      expect(candidate.preservedConstraints).toContain("Keep {{customer_message}} represented.");
+      expect(candidate.promptText).toContain("Preserve exact urgency labels.");
+      expect(candidate.promptText).toContain("Never invent customer facts.");
+      expect(candidate.removedOrCompressedElements.length).toBeGreaterThan(0);
+    }
   });
 });
 

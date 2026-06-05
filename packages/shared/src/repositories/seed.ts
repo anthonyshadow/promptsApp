@@ -21,7 +21,9 @@ export const DEMO_IDS = {
 } as const;
 
 export function createDemoRepositorySeed(): Required<RepositorySeed> {
+  const openAiFrontierModelId = "model_registry_openai_demo_frontier";
   const openAiModelId = "model_registry_openai_demo_balanced";
+  const openAiEconomyModelId = "model_registry_openai_demo_economy";
   const anthropicModelId = "model_registry_anthropic_demo_balanced";
   const geminiModelId = "model_registry_gemini_demo_balanced";
   const candidateBaselineId = "candidate_support_classifier_baseline";
@@ -319,28 +321,49 @@ export function createDemoRepositorySeed(): Required<RepositorySeed> {
     optimization_candidates: [
       {
         id: candidateBaselineId,
+        label: "Baseline",
         prompt_version_id: DEMO_IDS.promptVersion,
         analysis_id: DEMO_IDS.promptAnalysis,
         strategy: "baseline",
         candidate_prompt_text:
           "Classify the inbound support message. Return JSON with category, urgency, summary, and suggested_reply. Message: {{customer_message}} Account tier: {{account_tier}}",
+        estimated_input_tokens: 29,
+        estimated_output_tokens: 140,
         rationale: "Baseline regression control.",
         risk_level: "low",
         expected_token_delta: 0,
+        preserved_constraints: [
+          "Return JSON with category, urgency, summary, and suggested_reply.",
+          "Preserve exact urgency labels.",
+          "Keep customer_message and account_tier variables represented."
+        ],
+        removed_or_compressed_elements: ["None; baseline is the unchanged regression control."],
         is_baseline: true,
         is_mock: true,
         created_at: DEMO_TIMESTAMP
       },
       {
         id: candidateBalancedId,
+        label: "Balanced",
         prompt_version_id: DEMO_IDS.promptVersion,
         analysis_id: DEMO_IDS.promptAnalysis,
         strategy: "balanced",
         candidate_prompt_text:
           "Return JSON {category, urgency, summary, suggested_reply} for {{customer_message}}. Preserve exact urgency labels. Account tier: {{account_tier}}",
+        estimated_input_tokens: 22,
+        estimated_output_tokens: 112,
         rationale: "Compacts instructions while preserving required output shape.",
         risk_level: "medium",
         expected_token_delta: -42,
+        preserved_constraints: [
+          "Return JSON with category, urgency, summary, and suggested_reply.",
+          "Preserve exact urgency labels.",
+          "Keep customer_message and account_tier variables represented."
+        ],
+        removed_or_compressed_elements: [
+          "Compressed repeated wording around support classification.",
+          "Shortened output wording while keeping the schema explicit."
+        ],
         is_baseline: false,
         is_mock: true,
         created_at: DEMO_TIMESTAMP
@@ -384,10 +407,34 @@ export function createDemoRepositorySeed(): Required<RepositorySeed> {
     ],
     model_registry: [
       createDemoModelRegistryRecord({
+        id: openAiFrontierModelId,
+        provider: "openai",
+        model_id: "openai-demo-frontier",
+        display_name: "OpenAI Demo Frontier",
+        input_price_per_million_tokens: 3,
+        output_price_per_million_tokens: 12,
+        quality_tier: "frontier",
+        supports_tools: true
+      }),
+      createDemoModelRegistryRecord({
         id: openAiModelId,
         provider: "openai",
         model_id: "openai-demo-balanced",
-        display_name: "OpenAI Demo Balanced"
+        display_name: "OpenAI Demo Balanced",
+        input_price_per_million_tokens: 1,
+        output_price_per_million_tokens: 4,
+        quality_tier: "balanced",
+        supports_tools: true
+      }),
+      createDemoModelRegistryRecord({
+        id: openAiEconomyModelId,
+        provider: "openai",
+        model_id: "openai-demo-economy",
+        display_name: "OpenAI Demo Economy",
+        input_price_per_million_tokens: 0.5,
+        output_price_per_million_tokens: 2,
+        quality_tier: "economy",
+        supports_tools: true
       }),
       createDemoModelRegistryRecord({
         id: anthropicModelId,
@@ -529,6 +576,10 @@ function createDemoModelRegistryRecord(input: {
   provider: "openai" | "anthropic" | "gemini";
   model_id: string;
   display_name: string;
+  input_price_per_million_tokens?: number;
+  output_price_per_million_tokens?: number;
+  supports_tools?: boolean;
+  quality_tier?: ModelRegistryRecord["quality_tier"];
 }): ModelRegistryRecord {
   // Demo registry rows are placeholders; production recommendations must use verified metadata.
   return {
@@ -536,8 +587,8 @@ function createDemoModelRegistryRecord(input: {
     provider: input.provider,
     model_id: input.model_id,
     display_name: input.display_name,
-    input_price_per_million_tokens: 1,
-    output_price_per_million_tokens: 4,
+    input_price_per_million_tokens: input.input_price_per_million_tokens ?? 1,
+    output_price_per_million_tokens: input.output_price_per_million_tokens ?? 4,
     cached_input_price_per_million_tokens: null,
     context_window: 128000,
     max_output_tokens: 4096,
@@ -545,10 +596,10 @@ function createDemoModelRegistryRecord(input: {
     supports_image: false,
     supports_audio: false,
     supports_video: false,
-    supports_tools: false,
+    supports_tools: input.supports_tools ?? false,
     supports_structured_output: true,
     latency_tier: "unknown",
-    quality_tier: "unknown",
+    quality_tier: input.quality_tier ?? "unknown",
     recommended_task_types: ["support", "classification"],
     stability_status: "unverified",
     freshness_status: "unverified",

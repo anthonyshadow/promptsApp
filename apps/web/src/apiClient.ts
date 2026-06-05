@@ -6,12 +6,15 @@ import type {
   ModelsResponse,
   PromptCreateRequest,
   PromptCreateResponse,
+  PromptOptimizeRequest,
+  PromptOptimizeResponse,
   QualityContractRequest,
   QualityContractResponse,
   TestCaseCreateRequest,
   TestCaseMutationResponse,
   TestCasePatchRequest
 } from "@promptopts/api";
+import type { ModelModality } from "@promptopts/model-registry";
 import type { HealthResponse, Provider, StabilityStatus, TaskType } from "@promptopts/shared";
 
 export type RegistryResponse = ModelsResponse;
@@ -19,13 +22,20 @@ export type RegistryResponse = ModelsResponse;
 export type ModelRegistryFilters = {
   provider?: Provider;
   taskType?: TaskType;
+  modality?: ModelModality;
   stability?: StabilityStatus[];
+  supportsStructuredOutput?: boolean;
+  supportsTools?: boolean;
 };
 
 export type PromptOptsApiClient = {
   health: () => Promise<HealthResponse>;
   models: (filters?: ModelRegistryFilters) => Promise<RegistryResponse>;
   createPrompt: (request: PromptCreateRequest) => Promise<PromptCreateResponse>;
+  optimizePrompt: (
+    promptId: string,
+    request: PromptOptimizeRequest
+  ) => Promise<PromptOptimizeResponse>;
   runAudit: (request: AuditRequest) => Promise<AuditResponse>;
   getQualityContract: (projectId: string) => Promise<QualityContractResponse>;
   saveQualityContract: (
@@ -72,6 +82,19 @@ export function createPromptOptsApiClient(baseUrl: string): PromptOptsApiClient 
       }
 
       return (await response.json()) as unknown as PromptCreateResponse;
+    },
+    async optimizePrompt(promptId, request) {
+      const response = await fetch(`${baseUrl}/prompts/${encodeURIComponent(promptId)}/optimize`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(request)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Prompt optimize returned ${response.status}`);
+      }
+
+      return (await response.json()) as PromptOptimizeResponse;
     },
     async runAudit(request) {
       const response = await client.audits.$post({ json: request });
@@ -149,6 +172,18 @@ function createModelQuery(filters: ModelRegistryFilters): string {
 
   if (filters.stability && filters.stability.length > 0) {
     params.set("stability", filters.stability.join(","));
+  }
+
+  if (filters.modality) {
+    params.set("modality", filters.modality);
+  }
+
+  if (filters.supportsStructuredOutput !== undefined) {
+    params.set("supportsStructuredOutput", String(filters.supportsStructuredOutput));
+  }
+
+  if (filters.supportsTools !== undefined) {
+    params.set("supportsTools", String(filters.supportsTools));
   }
 
   const value = params.toString();

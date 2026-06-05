@@ -106,4 +106,51 @@ describe("public route screens", () => {
     expect(html).toContain("Production recommendation disabled");
     expect(html).toContain("Must-pass ready");
   });
+
+  test("renders the prompt candidate diff viewer with provisional eval copy", () => {
+    const apiState: ApiState = { status: "not-configured" };
+    const html = renderToString(
+      <PublicRouteScreen
+        apiClient={null}
+        apiState={apiState}
+        appState={createInitialPublicAppState()}
+        registryModels={demoModelRegistry}
+        route={parsePublicRoute("/app/projects/project_demo_support/candidates")}
+        updateAppState={() => undefined}
+        onNavigate={() => undefined}
+      />
+    );
+
+    expect(html).toContain("Prompt candidates");
+    expect(html).toContain("Aggressive is an experiment");
+    expect(html).toContain("Removed or compressed text");
+    expect(html).toContain("Rewritten text");
+    expect(html).toContain("Preserved constraints");
+    expect(html).toContain("Send selected to model shortlist");
+  });
+
+  test("renders the model shortlist benchmark roles and registry health", () => {
+    const apiState: ApiState = { status: "not-configured" };
+    const html = renderToString(
+      <PublicRouteScreen
+        apiClient={null}
+        apiState={apiState}
+        appState={createInitialPublicAppState()}
+        registryModels={demoModelRegistry}
+        route={parsePublicRoute("/app/projects/project_demo_support/models")}
+        updateAppState={() => undefined}
+        onNavigate={() => undefined}
+      />
+    );
+
+    expect(html).toContain("Benchmark set");
+    expect(html).toContain("Baseline");
+    expect(html).toContain("Cheaper");
+    expect(html).toContain("Balanced");
+    expect(html).toContain("Fallback");
+    expect(html).toContain("Why included");
+    expect(html).toContain("Registry health");
+    expect(html).toContain("Stale/demo warning");
+    expect(html).toContain("No exact savings claim");
+  });
 });

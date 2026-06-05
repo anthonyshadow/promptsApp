@@ -1,7 +1,24 @@
 import { Hono } from "hono";
+import { z } from "zod";
 import { autoDraftQualityContract } from "@promptopts/eval-core";
-import { runPromptModelAudit } from "@promptopts/prompt-core";
 import {
+  filterByCapability,
+  type ModelCapabilityFilterInput,
+  type ModelModality
+} from "@promptopts/model-registry";
+import {
+  generateAggressiveCandidate,
+  generateBalancedCandidate,
+  generateConservativeCandidate,
+  generateModelSpecificCandidate,
+  generateOutputLiteCandidate,
+  parsePrompt,
+  runPromptModelAudit,
+  type GeneratedPromptCandidate,
+  type PromptCandidateGenerationInput
+} from "@promptopts/prompt-core";
+import {
+  type CandidateStrategy,
   createHealthResponse,
   providerSchema,
   reportArtifactFormatSchema,
@@ -51,17 +68,27 @@ import {
   validationProblem
 } from "./http";
 
+const modelModalitySchema = z.enum(["text", "image", "audio", "video"]) satisfies z.ZodType<ModelModality>;
+const booleanQuerySchema = z.enum(["true", "false"]).transform((value) => value === "true");
+
 export function createPublicApiRoutes() {
   return new Hono<ApiEnv>()
     .get("/health", (c) => c.json(createHealthResponse("api")))
     .get("/models", async (c) => {
       const providerQuery = c.req.query("provider");
       const providerResult = providerQuery ? providerSchema.safeParse(providerQuery) : undefined;
-      const taskTypeQuery = c.req.query("task_type") ?? c.req.query("task");
+      const taskTypeQuery = c.req.query("task_type") ?? c.req.query("taskType") ?? c.req.query("task");
       const taskTypeResult = taskTypeQuery ? taskTypeSchema.safeParse(taskTypeQuery) : undefined;
       const stabilityQuery = c.req.query("stability") ?? c.req.query("stability_status");
       const stabilityValues = stabilityQuery ? stabilityQuery.split(",").filter(Boolean) : [];
       const stabilityResults = stabilityValues.map((value) => stabilityStatusSchema.safeParse(value));
+      const modalityQuery = c.req.query("modality");
+      const modalityResult = modalityQuery ? modelModalitySchema.safeParse(modalityQuery) : undefined;
+      const structuredQuery =
+        c.req.query("supportsStructuredOutput") ?? c.req.query("supports_structured_output");
+      const structuredResult = structuredQuery ? booleanQuerySchema.safeParse(structuredQuery) : undefined;
+      const toolsQuery = c.req.query("supportsTools") ?? c.req.query("supports_tools");
+      const toolsResult = toolsQuery ? booleanQuerySchema.safeParse(toolsQuery) : undefined;
 
       if (providerResult && !providerResult.success) {
         return validationProblem(c, providerResult.error);
@@ -74,18 +101,41 @@ export function createPublicApiRoutes() {
           return validationProblem(c, result.error);
         }
       }
+      if (modalityResult && !modalityResult.success) {
+        return validationProblem(c, modalityResult.error);
+      }
+      if (structuredResult && !structuredResult.success) {
+        return validationProblem(c, structuredResult.error);
+      }
+      if (toolsResult && !toolsResult.success) {
+        return validationProblem(c, toolsResult.error);
+      }
 
       const provider = providerResult?.data;
       const taskType = taskTypeResult?.data;
       const stabilityStatuses = stabilityValues.map((value) => stabilityStatusSchema.parse(value));
-      const models = (await c.var.repository.model_registry.list()).filter((model) => {
-        const providerMatches = provider ? model.provider === provider : true;
-        const taskMatches = taskType ? model.recommended_task_types.includes(taskType) : true;
-        const stabilityMatches =
-          stabilityStatuses.length > 0 ? stabilityStatuses.includes(model.stability_status) : true;
+      const modelFilter: ModelCapabilityFilterInput = {
+        models: await c.var.repository.model_registry.list(),
+        stability: stabilityStatuses
+      };
 
-        return providerMatches && taskMatches && stabilityMatches;
-      });
+      if (provider) {
+        modelFilter.provider = provider;
+      }
+      if (taskType) {
+        modelFilter.taskType = taskType;
+      }
+      if (modalityResult?.data) {
+        modelFilter.modality = modalityResult.data;
+      }
+      if (structuredResult?.data !== undefined) {
+        modelFilter.supportsStructuredOutput = structuredResult.data;
+      }
+      if (toolsResult?.data !== undefined) {
+        modelFilter.supportsTools = toolsResult.data;
+      }
+
+      const models = filterByCapability(modelFilter);
 
       return c.json(
         modelsResponseSchema.parse({
@@ -243,23 +293,55 @@ export function createPublicApiRoutes() {
         return notFound(c, "Prompt version not found");
       }
 
+      const project = await c.var.repository.projects.get(prompt.project_id);
+      const qualityContract = project
+        ? await getPersistedQualityContract(c.var.repository, project.id)
+        : undefined;
+      const preservedConstraints = getCandidatePreservedConstraints(qualityContract);
+      const baselineAnalysis = parsePrompt(version.prompt_text);
       const timestamp = nowIso();
       const candidates: OptimizationCandidate[] = [];
 
       for (const strategy of body.data.strategies) {
-        const candidate: OptimizationCandidate = {
+        const generated =
+          strategy === "baseline"
+            ? null
+            : generateCandidateForStrategy(strategy, {
+                id: createId("candidate"),
+                promptText: version.prompt_text,
+                preservedConstraints,
+                requiredOutput: qualityContract?.required_output ?? null,
+                outputRequirements: qualityContract ? ["quality_contract"] : [],
+                ...(project
+                  ? {
+                      provider: project.current_provider,
+                      modelId: project.current_model_id
+                    }
+                  : {})
+              });
+        const candidate: OptimizationCandidate = generated
+          ? mapGeneratedCandidateToRecord(
+              generated,
+              version.id,
+              body.data.analysis_id,
+              baselineAnalysis.approximateInputTokens,
+              timestamp
+            )
+          : {
           id: createId("candidate"),
+          label: "Baseline",
           prompt_version_id: version.id,
           analysis_id: body.data.analysis_id,
           strategy,
-          candidate_prompt_text:
-            strategy === "baseline"
-              ? version.prompt_text
-              : `TODO mock ${strategy} candidate. Preserve the quality contract before optimizing: ${version.prompt_text}`,
-          rationale: "TODO: generate candidates with prompt-core once optimization logic is built.",
-          risk_level: strategy === "aggressive" ? "high" : "medium",
-          expected_token_delta: strategy === "baseline" ? 0 : -25,
-          is_baseline: strategy === "baseline",
+          candidate_prompt_text: version.prompt_text,
+          estimated_input_tokens: baselineAnalysis.approximateInputTokens,
+          estimated_output_tokens: baselineAnalysis.approximateOutputEstimate,
+          rationale: "Baseline regression control; unchanged prompt and current model remain the comparison anchor.",
+          risk_level: "low",
+          expected_token_delta: 0,
+          preserved_constraints: preservedConstraints.length > 0 ? preservedConstraints : ["Baseline prompt remains unchanged."],
+          removed_or_compressed_elements: ["None; baseline is unchanged."],
+          is_baseline: true,
           is_mock: true,
           created_at: timestamp
         };
@@ -270,7 +352,7 @@ export function createPublicApiRoutes() {
       return c.json(
         promptOptimizeResponseSchema.parse({
           candidates,
-          todo: "Candidate generation is mocked; prompt-core will implement real transformations later."
+          todo: "Candidates are deterministic MVP drafts and remain provisional until evals pass."
         })
       );
     })
@@ -519,6 +601,75 @@ export function createPublicApiRoutes() {
         })
       );
     });
+}
+
+function generateCandidateForStrategy(
+  strategy: CandidateStrategy,
+  input: PromptCandidateGenerationInput & { id: string }
+): GeneratedPromptCandidate {
+  switch (strategy) {
+    case "conservative":
+      return generateConservativeCandidate(input);
+    case "balanced":
+      return generateBalancedCandidate(input);
+    case "aggressive":
+      return generateAggressiveCandidate(input);
+    case "output_lite":
+      return generateOutputLiteCandidate(input);
+    case "model_specific":
+      return generateModelSpecificCandidate(input);
+    case "baseline":
+      throw new Error("Baseline candidates are mapped without prompt-core generation.");
+  }
+}
+
+function mapGeneratedCandidateToRecord(
+  generated: GeneratedPromptCandidate,
+  promptVersionId: string,
+  analysisId: string | null,
+  baselineInputTokens: number,
+  timestamp: string
+): OptimizationCandidate {
+  return {
+    id: generated.id,
+    label: generated.label,
+    prompt_version_id: promptVersionId,
+    analysis_id: analysisId,
+    strategy: generated.strategy,
+    candidate_prompt_text: generated.promptText,
+    estimated_input_tokens: generated.estimatedInputTokens,
+    estimated_output_tokens: generated.estimatedOutputTokens,
+    rationale: generated.rationale,
+    risk_level: generated.riskLabel,
+    expected_token_delta: calculateTokenDelta(generated.estimatedInputTokens, baselineInputTokens),
+    preserved_constraints: generated.preservedConstraints,
+    removed_or_compressed_elements: generated.removedOrCompressedElements,
+    is_baseline: false,
+    is_mock: true,
+    created_at: timestamp
+  };
+}
+
+function calculateTokenDelta(candidateInputTokens: number, baselineInputTokens: number): number {
+  if (baselineInputTokens <= 0) {
+    return 0;
+  }
+
+  return Math.round(((candidateInputTokens - baselineInputTokens) / baselineInputTokens) * 100);
+}
+
+function getCandidatePreservedConstraints(contract: QualityContract | undefined): string[] {
+  if (!contract) {
+    return ["Preserve baseline variables, required output shape, and user-provided constraints."];
+  }
+
+  return [
+    ...contract.must_preserve,
+    ...contract.forbidden_behavior.map((item) => `Forbidden behavior: ${item}`),
+    ...contract.check_definitions
+      .filter((check) => check.must_pass)
+      .map((check) => `Must-pass check: ${check.description}`)
+  ];
 }
 
 async function getQualityContractState(repository: PromptOptsRepository, project: PromptProject) {

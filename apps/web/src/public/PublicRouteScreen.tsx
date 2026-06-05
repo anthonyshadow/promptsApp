@@ -84,7 +84,15 @@ function PublicRouteScreen({
         />
       );
     case "candidates":
-      return <CandidatesScreen appState={appState} updateAppState={updateAppState} />;
+      return (
+        <CandidatesScreen
+          apiClient={apiClient}
+          appState={appState}
+          onNavigate={onNavigate}
+          projectId={route.projectId}
+          updateAppState={updateAppState}
+        />
+      );
     case "models":
       return <ModelsScreen appState={appState} registryModels={registryModels} updateAppState={updateAppState} />;
     case "eval-run":

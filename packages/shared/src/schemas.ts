@@ -393,13 +393,18 @@ export type PromptAnalysis = z.infer<typeof promptAnalysisSchema>;
 export const optimizationCandidateSchema = z
   .object({
     id: idSchema,
+    label: z.string().min(1),
     prompt_version_id: idSchema,
     analysis_id: idSchema.nullable(),
     strategy: candidateStrategySchema,
     candidate_prompt_text: z.string().min(1),
+    estimated_input_tokens: z.number().int().nonnegative(),
+    estimated_output_tokens: z.number().int().nonnegative(),
     rationale: z.string().min(1),
     risk_level: riskLevelSchema,
     expected_token_delta: z.number(),
+    preserved_constraints: z.array(z.string().min(1)),
+    removed_or_compressed_elements: z.array(z.string().min(1)),
     is_baseline: z.boolean(),
     is_mock: z.boolean(),
     created_at: isoDateTimeSchema

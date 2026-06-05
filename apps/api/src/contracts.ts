@@ -97,13 +97,18 @@ export const promptOptimizeResponseSchema = z
   .object({
     candidates: z.array(z.object({
       id: idSchema,
+      label: nonEmptyStringSchema,
       prompt_version_id: idSchema,
       analysis_id: idSchema.nullable(),
       strategy: candidateStrategySchema,
       candidate_prompt_text: nonEmptyStringSchema,
+      estimated_input_tokens: z.number().int().nonnegative(),
+      estimated_output_tokens: z.number().int().nonnegative(),
       rationale: nonEmptyStringSchema,
       risk_level: z.enum(["low", "medium", "high", "critical"]),
       expected_token_delta: z.number(),
+      preserved_constraints: z.array(nonEmptyStringSchema),
+      removed_or_compressed_elements: z.array(nonEmptyStringSchema),
       is_baseline: z.boolean(),
       is_mock: z.boolean(),
       created_at: isoDateTimeSchema

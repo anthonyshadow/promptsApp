@@ -45,7 +45,7 @@ describe("memory repository", () => {
       name: "Support classifier"
     });
     expect(await repo.test_cases.list()).toHaveLength(5);
-    expect(await repo.model_registry.list()).toHaveLength(3);
+    expect(await repo.model_registry.list()).toHaveLength(5);
     expect(await repo.reports.get(DEMO_IDS.report)).toMatchObject({
       status: "blocked",
       production_recommendation_allowed: false

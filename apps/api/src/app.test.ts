@@ -76,14 +76,18 @@ describe("public API routes", () => {
     expect(healthResponseSchema.parse(body).status).toBe("ok");
   });
 
-  test("GET /models filters registry rows by provider, task, and stability", async () => {
+  test("GET /models filters registry rows by provider, task, stability, and capabilities", async () => {
     const app = createTestApp();
 
     const supportModels = await expectOkJson(
-      await app.request("/models?provider=openai&task_type=support&stability=unverified")
+      await app.request(
+        "/models?provider=openai&task_type=support&stability=unverified&supportsStructuredOutput=true&supportsTools=true"
+      )
     );
     expect(supportModels.models.map((model: { model_id: string }) => model.model_id)).toEqual([
-      "openai-demo-balanced"
+      "openai-demo-frontier",
+      "openai-demo-balanced",
+      "openai-demo-economy"
     ]);
 
     const codingModels = await expectOkJson(
@@ -91,8 +95,15 @@ describe("public API routes", () => {
     );
     expect(codingModels.models).toHaveLength(0);
 
+    const imageModels = await expectOkJson(
+      await app.request("/models?provider=openai&taskType=support&modality=image")
+    );
+    expect(imageModels.models).toHaveLength(0);
+
     expect((await app.request("/models?provider=openai&task_type=unknown")).status).toBe(400);
     expect((await app.request("/models?provider=openai&stability=retired")).status).toBe(400);
+    expect((await app.request("/models?provider=openai&modality=telepathy")).status).toBe(400);
+    expect((await app.request("/models?provider=openai&supportsTools=maybe")).status).toBe(400);
   });
 
   test("POST /prompts persists project, prompt, and raw prompt version records", async () => {
@@ -333,6 +344,48 @@ describe("public API routes", () => {
     expect(await repository.quality_contracts.get(saved.contract.id)).toBeDefined();
   });
 
+  test("POST /prompts/:id/optimize generates persisted candidate risk profiles", async () => {
+    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const app = createApp({ repository });
+    const beforeCandidates = await repository.optimization_candidates.list();
+
+    const optimize = await expectOkJson(
+      await app.request(
+        `/prompts/${DEMO_IDS.prompt}/optimize`,
+        jsonRequest({
+          analysis_id: DEMO_IDS.promptAnalysis,
+          strategies: ["conservative", "balanced", "aggressive", "output_lite", "model_specific"]
+        })
+      )
+    );
+    const afterCandidates = await repository.optimization_candidates.list();
+
+    expect(optimize.candidates).toHaveLength(5);
+    expect(afterCandidates).toHaveLength(beforeCandidates.length + 5);
+    expect(optimize.candidates.map((candidate: { label: string }) => candidate.label)).toEqual([
+      "Conservative",
+      "Balanced",
+      "Aggressive",
+      "Output-lite",
+      "Model-specific"
+    ]);
+    expect(
+      optimize.candidates.find((candidate: { strategy: string }) => candidate.strategy === "aggressive")
+        ?.risk_level
+    ).toBe("high");
+    expect(
+      optimize.candidates.every(
+        (candidate: { estimated_input_tokens: number }) => candidate.estimated_input_tokens > 0
+      )
+    ).toBe(true);
+    expect(
+      optimize.candidates.every((candidate: { preserved_constraints: string[] }) =>
+        candidate.preserved_constraints.join(" ").includes("Must-pass check")
+      )
+    ).toBe(true);
+    expect(optimize.todo).toContain("provisional until evals pass");
+  });
+
   test("test case creation and update keep production recommendation blocked until eval proof", async () => {
     const repository = createMemoryRepository(createDemoRepositorySeed());
     const app = createApp({ repository });
@@ -445,7 +498,11 @@ describe("public API routes", () => {
     const app = createTestApp();
 
     const models = await expectOkJson(await app.request("/models?provider=openai"));
-    expect(models.models).toHaveLength(1);
+    expect(models.models.map((model: { model_id: string }) => model.model_id)).toEqual([
+      "openai-demo-frontier",
+      "openai-demo-balanced",
+      "openai-demo-economy"
+    ]);
 
     const audit = await expectOkJson(
       await app.request(
@@ -498,6 +555,15 @@ describe("public API routes", () => {
       )
     );
     expect(optimize.candidates).toHaveLength(2);
+    expect(optimize.candidates.map((candidate: { label: string }) => candidate.label)).toEqual([
+      "Baseline",
+      "Balanced"
+    ]);
+    expect(optimize.candidates[1].candidate_prompt_text).toContain("Urgency labels");
+    expect(optimize.candidates[1].estimated_input_tokens).toBeGreaterThan(0);
+    expect(optimize.candidates[1].estimated_output_tokens).toBeGreaterThan(0);
+    expect(optimize.candidates[1].preserved_constraints.join(" ")).toContain("Must-pass check");
+    expect(optimize.candidates[1].removed_or_compressed_elements.length).toBeGreaterThan(0);
 
     const evalRun = await expectOkJson(
       await app.request(

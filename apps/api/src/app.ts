@@ -21,6 +21,8 @@ export type {
   AuditRequest,
   AuditResponse,
   ModelsResponse,
+  PromptOptimizeRequest,
+  PromptOptimizeResponse,
   PromptCreateRequest,
   PromptCreateResponse,
   QualityContractRequest,
