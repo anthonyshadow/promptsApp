@@ -136,6 +136,7 @@ export type RecommendationDecision = {
   rankedPassingResultIds: string[];
 };
 
+// Auto-draft gives users a starting contract; manual review still owns the final quality bar.
 export function autoDraftQualityContract(promptAnalysis: PromptAnalysis): QualityContractDraft {
   const primaryCheckId = `${promptAnalysis.id}_check_required_output`;
   const exactCheckId = `${promptAnalysis.id}_check_expected_value`;
@@ -206,6 +207,7 @@ export function autoDraftQualityContract(promptAnalysis: PromptAnalysis): Qualit
   };
 }
 
+// Deterministic checks form the hard MVP gate; LLM/human checks stay explicit placeholders until adapters exist.
 export function validateQualityCheck(
   check: QualityCheckDefinition,
   actualOutput: unknown
@@ -351,6 +353,7 @@ export function scoreEvalResult(input: EvalComboScoreInput): EvalComboScore {
   };
 }
 
+// A must-pass failure always fails a combo, even when its aggregate pass rate looks acceptable.
 export function getEvalComboVerdict(input: {
   passRate: number;
   passThreshold: number;
@@ -368,6 +371,7 @@ export function getEvalComboVerdict(input: {
   return input.passRate >= input.passThreshold ? "pass" : "fail";
 }
 
+// Aggregate blockers protect the product from presenting eval-empty or partially failed runs as deployable proof.
 export function aggregateEvalRun(input: {
   results: EvalResult[];
   testCaseCount: number;
@@ -419,6 +423,7 @@ export function aggregateEvalRun(input: {
   };
 }
 
+// The report decision makes one recommendation only after hard gates, then names a cheaper alternative and fallback.
 export function decideRecommendation(input: RecommendationDecisionInput): RecommendationDecision {
   const baseline = findBaselineResult(input.results);
   const passingResults = input.results
@@ -475,6 +480,7 @@ export function decideRecommendation(input: RecommendationDecisionInput): Recomm
   };
 }
 
+// Chart roles mirror the decision rules so failed combos stay visible instead of disappearing from the frontier.
 export function costQualityFrontier(
   evalResults: EvalResult[],
   input: { evalRunId?: string; passThreshold?: number } = {}

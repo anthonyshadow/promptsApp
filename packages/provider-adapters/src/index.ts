@@ -44,6 +44,7 @@ type RawProviderResponse = {
   finishReason?: NormalizedProviderResponse["finishReason"];
 };
 
+// Every adapter must normalize usage, output, latency, and errors before eval-core scores a row.
 export function normalizeProviderResponse(
   input: ProviderCallInput,
   raw: RawProviderResponse
@@ -146,6 +147,7 @@ export class MockProviderAdapter implements ProviderAdapter {
   }
 }
 
+// Live adapters are intentionally inert until key storage, logging, and rate-limit policies are production-safe.
 class PlaceholderLiveAdapter implements ProviderAdapter {
   constructor(
     readonly provider: Provider,

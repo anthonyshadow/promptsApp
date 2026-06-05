@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { renderToString } from "react-dom/server";
+import AdminAuditLogsScreen from "./AdminAuditLogsScreen";
 import AdminBillingScreen from "./AdminBillingScreen";
 import AdminEvalJobsScreen from "./AdminEvalJobsScreen";
 import AdminModelRegistryScreen from "./AdminModelRegistryScreen";
@@ -87,5 +88,18 @@ describe("admin ops screens", () => {
     expect(html).toContain("Usage ledger");
     expect(html).toContain("Feature flags");
     expect(html).toContain("Issue report export credit");
+  });
+
+  test("renders audit logs with redacted append-only metadata", () => {
+    const html = renderToString(<AdminAuditLogsScreen />);
+
+    expect(html).toContain("Audit logs");
+    expect(html).toContain("Append-only trust trail");
+    expect(html).toContain("read_metadata");
+    expect(html).toContain("delete_report");
+    expect(html).toContain("report_deletion_approval");
+    expect(html).not.toContain("Classify the inbound support message");
+    expect(html).not.toContain("{{customer_message}}");
+    expect(html).not.toContain("sk-");
   });
 });

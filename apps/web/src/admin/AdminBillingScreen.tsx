@@ -363,7 +363,8 @@ function formatCents(value: number): string {
 const rootStyle = css({
   display: "grid",
   gap: "18px",
-  marginTop: "28px"
+  marginTop: "28px",
+  minWidth: 0
 });
 
 const headerPanelStyle = css({
@@ -427,6 +428,9 @@ const summaryGridStyle = css({
   gap: "10px",
   "@media (max-width: 820px)": {
     gridTemplateColumns: "repeat(2, minmax(0, 1fr))"
+  },
+  "@media (max-width: 560px)": {
+    gridTemplateColumns: "1fr"
   }
 });
 
@@ -437,6 +441,7 @@ const metricCardStyle = css({
   padding: "14px",
   display: "grid",
   gap: "8px",
+  overflowWrap: "anywhere",
   span: {
     color: "#a9b9b0"
   },
@@ -508,7 +513,9 @@ const splitGridStyle = css({
 });
 
 const tableWrapStyle = css({
-  overflowX: "auto"
+  maxWidth: "100%",
+  overflowX: "auto",
+  WebkitOverflowScrolling: "touch"
 });
 
 const tableStyle = css({
@@ -520,11 +527,13 @@ const tableStyle = css({
     color: "#edf5ef",
     padding: "10px",
     textAlign: "left",
-    verticalAlign: "top"
+    verticalAlign: "top",
+    overflowWrap: "anywhere"
   }
 });
 
 const buttonStyle = css({
+  minHeight: "40px",
   border: "1px solid #b8d1c0",
   borderRadius: "8px",
   background: "#dcebe0",

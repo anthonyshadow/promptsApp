@@ -44,6 +44,7 @@ export type {
   ReportDetailResponse,
   ReportExportResponse,
   AdminReportsResponse,
+  AuditLogsResponse,
   BillingResponse,
   BillingCreditResponse,
   PromptOptimizeRequest,

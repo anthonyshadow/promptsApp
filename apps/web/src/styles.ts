@@ -5,6 +5,7 @@ export const appRootStyle = css({
   display: "grid",
   gridTemplateColumns: "296px minmax(0, 1fr)",
   background: "#f4f5f0",
+  overflowX: "clip",
   "@media (max-width: 980px)": {
     gridTemplateColumns: "1fr"
   }
@@ -23,7 +24,8 @@ export const sidebarStyle = css({
     position: "static",
     minHeight: "auto",
     borderRight: 0,
-    padding: "18px"
+    padding: "18px",
+    overflowX: "auto"
   }
 });
 
@@ -106,6 +108,7 @@ export const stepLinkStyle = css({
   textDecoration: "none",
   fontSize: "0.92rem",
   transition: "background 150ms ease, color 150ms ease",
+  overflowWrap: "anywhere",
   ":hover": {
     background: "#283026",
     color: "#ffffff"
@@ -118,10 +121,14 @@ export const stepLinkStyle = css({
 
 export const mainStyle = css({
   width: "min(100%, 1180px)",
+  minWidth: 0,
   margin: "0 auto",
   padding: "28px",
   "@media (max-width: 760px)": {
     padding: "18px"
+  },
+  "@media (max-width: 420px)": {
+    padding: "14px"
   }
 });
 
@@ -349,6 +356,7 @@ export const fieldControlStyle = css({
   background: "#fffef9",
   color: "#151b17",
   padding: "0 12px",
+  fontSize: "1rem",
   ":focus": {
     borderColor: "#6b8cff",
     outline: "2px solid #dfe6ff"
@@ -390,6 +398,7 @@ export const promptTextareaStyle = css({
   background: "#fffef9",
   color: "#151b17",
   padding: "14px",
+  fontSize: "1rem",
   lineHeight: 1.55,
   resize: "vertical",
   ":focus": {
@@ -490,7 +499,9 @@ export const cardTextStyle = css({
 });
 
 export const tableWrapStyle = css({
+  maxWidth: "100%",
   overflowX: "auto",
+  WebkitOverflowScrolling: "touch",
   border: "1px solid #d7d6ca",
   borderRadius: "8px",
   background: "#fffef9"
@@ -513,7 +524,8 @@ export const tableStyle = css({
   td: {
     borderTop: "1px solid #e2e1d8",
     padding: "12px",
-    verticalAlign: "top"
+    verticalAlign: "top",
+    overflowWrap: "anywhere"
   }
 });
 

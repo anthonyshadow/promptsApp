@@ -345,7 +345,8 @@ function formatAge(seconds: number): string {
 const rootStyle = css({
   display: "grid",
   gap: "18px",
-  marginTop: "28px"
+  marginTop: "28px",
+  minWidth: 0
 });
 
 const headerPanelStyle = css({
@@ -409,6 +410,9 @@ const summaryGridStyle = css({
   gap: "10px",
   "@media (max-width: 820px)": {
     gridTemplateColumns: "repeat(2, minmax(0, 1fr))"
+  },
+  "@media (max-width: 560px)": {
+    gridTemplateColumns: "1fr"
   }
 });
 
@@ -419,6 +423,7 @@ const metricCardStyle = css({
   padding: "14px",
   display: "grid",
   gap: "8px",
+  overflowWrap: "anywhere",
   span: {
     color: "#a9b9b0",
     textTransform: "capitalize"
@@ -468,7 +473,9 @@ const workerStatusStyle = css({
 });
 
 const tableWrapStyle = css({
+  maxWidth: "100%",
   overflowX: "auto",
+  WebkitOverflowScrolling: "touch",
   border: "1px solid #415149",
   borderRadius: "8px",
   background: "#17211d"
@@ -490,7 +497,8 @@ const tableStyle = css({
     verticalAlign: "top"
   },
   td: {
-    color: "#edf5ef"
+    color: "#edf5ef",
+    overflowWrap: "anywhere"
   }
 });
 
@@ -562,6 +570,7 @@ const actionGroupStyle = css({
 });
 
 const buttonStyle = css({
+  minHeight: "40px",
   border: "1px solid #b8d1c0",
   borderRadius: "8px",
   background: "#dcebe0",
@@ -572,7 +581,9 @@ const buttonStyle = css({
 });
 
 const payloadStyle = css({
+  maxWidth: "100%",
   overflowX: "auto",
+  WebkitOverflowScrolling: "touch",
   border: "1px solid #33463d",
   borderRadius: "8px",
   background: "#101713",

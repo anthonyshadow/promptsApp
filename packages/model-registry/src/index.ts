@@ -62,6 +62,7 @@ export type ModelShortlistResult = {
   warnings: string[];
 };
 
+// Same-provider shortlist keeps the MVP implementable and uses registry rows as the only source of capability truth.
 export function shortlistModels(input: ModelShortlistInput): ModelShortlistResult {
   const sameProvider = input.models.filter((model) => model.provider === input.provider);
   const baseline =
@@ -105,6 +106,7 @@ export function filterByCapability(input: ModelCapabilityFilterInput): ModelRegi
   return filterByCapabilityWithRejections(input).models;
 }
 
+// Freshness controls savings language: demo, stale, or unverifiable rows cannot support exact savings claims.
 export function classifyRegistryFreshness(
   record: ModelRegistryRecord
 ): RegistryFreshnessClassification {
@@ -154,6 +156,7 @@ export function classifyRegistryFreshness(
   };
 }
 
+// Role explanations are user-facing decision evidence, not decorative labels.
 export function explainModelRole(
   role: ModelShortlistRole,
   model: ModelRegistryRecord,

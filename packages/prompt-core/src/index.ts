@@ -106,6 +106,7 @@ const CREDENTIAL_PATTERN = /\b(?:password|passwd|pwd|username)\s*[:=]\s*["']?[^"
 const PRIVATE_KEY_PATTERN = /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g;
 const PROPRIETARY_PATTERN = /\b(?:confidential|proprietary|internal policy|do not share|under nda|customer escalation policy)\b/gi;
 
+// These parser heuristics are intentionally deterministic so the first audit value does not depend on an LLM call.
 export function parsePrompt(prompt: string): PromptParseResult {
   const detectedVariables = detectVariables(prompt);
   const constraintsDetected = detectConstraints(prompt);
@@ -125,6 +126,7 @@ export function parsePrompt(prompt: string): PromptParseResult {
   };
 }
 
+// Secret/PII warnings happen before provider calls; do not weaken these checks just to reduce false positives.
 export function detectSensitiveContent(text: string): SensitiveFinding[] {
   const findings: SensitiveFinding[] = [];
 
@@ -151,6 +153,7 @@ export function detectSensitiveContent(text: string): SensitiveFinding[] {
   return dedupeFindings(findings);
 }
 
+// Cost estimates must come from the registry row supplied by the caller, never from provider constants in this package.
 export function estimateMonthlyCost(input: MonthlyCostInput): MonthlyCostEstimate {
   const record = input.modelRegistryRecord;
 
@@ -192,6 +195,7 @@ export function estimateMonthlyCost(input: MonthlyCostInput): MonthlyCostEstimat
   };
 }
 
+// Fit labels are a preflight signal only; they guide eval setup and must not become production recommendations.
 export function classifyModelFit(input: ModelFitInput): ModelFitClassification {
   const record = input.modelRegistryRecord;
 
@@ -254,6 +258,7 @@ export function classifyModelFit(input: ModelFitInput): ModelFitClassification {
   };
 }
 
+// The audit returns risk-first guidance and explicitly stops short of recommending a production switch.
 export function runPromptModelAudit(input: PromptModelAuditInput): PromptModelAuditResult {
   const promptAnalysis = parsePrompt(input.prompt);
   const modelRegistryRecord =
@@ -317,6 +322,7 @@ export function generateConservativeCandidate(
   });
 }
 
+// Candidate generation preserves quality-contract constraints so later evals compare safe variants, not opaque rewrites.
 export function generateBalancedCandidate(input: PromptCandidateGenerationInput): GeneratedPromptCandidate {
   const preservedConstraints = buildPreservedConstraints(input);
   const variables = detectVariables(input.promptText);

@@ -160,6 +160,7 @@ class MemoryAppendOnlyRepository<TRecord extends IdentifiedRecord>
   }
 }
 
+// Memory remains the swappable local/test adapter; durable code should depend on PromptOptsRepository, not this class.
 export function createMemoryRepository(seed: RepositorySeed = {}): PromptOptsRepository {
   return {
     users: new MemoryCrudRepository<User>(userSchema, seed.users),

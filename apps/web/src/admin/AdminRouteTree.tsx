@@ -4,6 +4,7 @@ import { normalizeApiUrl } from "../apiViewState";
 import type { AdminGateState } from "../viewTypes";
 import AdminAccountDetailScreen from "./AdminAccountDetailScreen";
 import AdminAccountsScreen from "./AdminAccountsScreen";
+import AdminAuditLogsScreen from "./AdminAuditLogsScreen";
 import AdminBillingScreen from "./AdminBillingScreen";
 import AdminEvalJobsScreen from "./AdminEvalJobsScreen";
 import AdminModelRegistryScreen from "./AdminModelRegistryScreen";
@@ -52,6 +53,8 @@ function renderAuthorizedAdminRoute(
       return <AdminReportsVaultScreen apiBaseUrl={apiBaseUrl} />;
     case "billing":
       return <AdminBillingScreen apiBaseUrl={apiBaseUrl} />;
+    case "audit-logs":
+      return <AdminAuditLogsScreen apiBaseUrl={apiBaseUrl} />;
     case "overview":
       return <AdminOverviewScreen apiBaseUrl={apiBaseUrl} />;
   }
@@ -80,6 +83,9 @@ function AdminInternalNav({ activeRoute }: { activeRoute: AdminRoute["kind"] }) 
       </a>
       <a className={activeRoute === "billing" ? activeNavLinkStyle : navLinkStyle} href="/__admin/billing?state=authorized">
         Billing
+      </a>
+      <a className={activeRoute === "audit-logs" ? activeNavLinkStyle : navLinkStyle} href="/__admin/audit-logs?state=authorized">
+        Audit logs
       </a>
     </nav>
   );
@@ -138,6 +144,9 @@ type AdminRoute =
     }
   | {
       kind: "billing";
+    }
+  | {
+      kind: "audit-logs";
     };
 
 function getAdminRoute(pathname: string): AdminRoute {
@@ -180,6 +189,12 @@ function getAdminRoute(pathname: string): AdminRoute {
     };
   }
 
+  if (parts[0] === "__admin" && parts[1] === "audit-logs") {
+    return {
+      kind: "audit-logs"
+    };
+  }
+
   return {
     kind: "overview"
   };
@@ -190,8 +205,12 @@ const rootStyle = css({
   padding: "28px",
   background: "#111714",
   color: "#eef4ed",
+  overflowX: "clip",
   "@media (max-width: 720px)": {
     padding: "18px"
+  },
+  "@media (max-width: 420px)": {
+    padding: "14px"
   }
 });
 
@@ -232,10 +251,15 @@ const navStyle = css({
   display: "flex",
   flexWrap: "wrap",
   gap: "8px",
-  marginTop: "18px"
+  marginTop: "18px",
+  maxWidth: "100%",
+  overflowX: "auto",
+  paddingBottom: "4px",
+  WebkitOverflowScrolling: "touch"
 });
 
 const navLinkStyle = css({
+  minHeight: "40px",
   border: "1px solid #526a5d",
   borderRadius: "8px",
   color: "#dcebe0",
@@ -243,12 +267,14 @@ const navLinkStyle = css({
   textDecoration: "none",
   fontSize: "0.9rem",
   fontWeight: 800,
+  whiteSpace: "nowrap",
   ":hover": {
     background: "#17211d"
   }
 });
 
 const activeNavLinkStyle = css({
+  minHeight: "40px",
   border: "1px solid #b8d1c0",
   borderRadius: "8px",
   background: "#dcebe0",
@@ -256,7 +282,8 @@ const activeNavLinkStyle = css({
   padding: "8px 11px",
   textDecoration: "none",
   fontSize: "0.9rem",
-  fontWeight: 800
+  fontWeight: 800,
+  whiteSpace: "nowrap"
 });
 
 const gateHeaderStyle = css({

@@ -58,6 +58,7 @@ export type GenerateReportArtifactsInput = {
   generatedAt?: string;
 };
 
+// Report generation snapshots eval results; regenerating exports must not mutate or rerun the underlying eval matrix.
 export function generateReportArtifacts(input: GenerateReportArtifactsInput): GeneratedReportPackage {
   const generatedAt = input.generatedAt ?? new Date().toISOString();
   const evalSnapshot = createEvalSnapshot(input.evalRun, input.results, generatedAt);
@@ -166,6 +167,7 @@ function createPdfStub(input: GenerateReportArtifactsInput, evalSnapshot: Report
   ].join("\n");
 }
 
+// Eval snapshots are copied into exports so report regeneration is reproducible without mutating eval rows.
 function createEvalSnapshot(evalRun: EvalRun, results: EvalResult[], capturedAt: string): ReportEvalSnapshot {
   return {
     eval_run_id: evalRun.id,
