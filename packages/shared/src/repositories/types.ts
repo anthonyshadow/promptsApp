@@ -1,17 +1,22 @@
 import type {
   Account,
   AdminAuditLog,
+  BillingEvent,
   Contact,
+  Credit,
   CrmNote,
   CrmTask,
   Entitlement,
   EvalResult,
   EvalRun,
+  FeatureFlag,
   FreeAudit,
+  Invoice,
   ModelRegistryRecord,
   ModelRegistryVersion,
   OptimizationCandidate,
   Opportunity,
+  Plan,
   Prompt,
   PromptAnalysis,
   PromptProject,
@@ -67,6 +72,11 @@ export type RepositoryCollections = {
   tasks: CrmTask;
   entitlements: Entitlement;
   usage_ledger: UsageLedgerEntry;
+  plans: Plan;
+  billing_events: BillingEvent;
+  invoices: Invoice;
+  credits: Credit;
+  feature_flags: FeatureFlag;
 };
 
 export type RepositorySeed = {
@@ -100,4 +110,9 @@ export interface PromptOptsRepository {
   admin_audit_logs: AppendOnlyRepository<AdminAuditLog>;
   entitlements: CrudRepository<Entitlement>;
   usage_ledger: CrudRepository<UsageLedgerEntry>;
+  plans: CrudRepository<Plan>;
+  billing_events: CrudRepository<BillingEvent>;
+  invoices: CrudRepository<Invoice>;
+  credits: CrudRepository<Credit>;
+  feature_flags: CrudRepository<FeatureFlag>;
 }

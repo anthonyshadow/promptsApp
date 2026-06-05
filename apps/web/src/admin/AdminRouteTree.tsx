@@ -4,9 +4,11 @@ import { normalizeApiUrl } from "../apiViewState";
 import type { AdminGateState } from "../viewTypes";
 import AdminAccountDetailScreen from "./AdminAccountDetailScreen";
 import AdminAccountsScreen from "./AdminAccountsScreen";
+import AdminBillingScreen from "./AdminBillingScreen";
 import AdminEvalJobsScreen from "./AdminEvalJobsScreen";
 import AdminModelRegistryScreen from "./AdminModelRegistryScreen";
 import AdminOverviewScreen from "./AdminOverviewScreen";
+import AdminReportsVaultScreen from "./AdminReportsVaultScreen";
 
 function AdminRouteTree() {
   const gateState = getAdminGateStateFromSearch(window.location.search);
@@ -46,6 +48,10 @@ function renderAuthorizedAdminRoute(
       return <AdminEvalJobsScreen apiBaseUrl={apiBaseUrl} />;
     case "model-registry":
       return <AdminModelRegistryScreen apiBaseUrl={apiBaseUrl} />;
+    case "reports":
+      return <AdminReportsVaultScreen apiBaseUrl={apiBaseUrl} />;
+    case "billing":
+      return <AdminBillingScreen apiBaseUrl={apiBaseUrl} />;
     case "overview":
       return <AdminOverviewScreen apiBaseUrl={apiBaseUrl} />;
   }
@@ -68,6 +74,12 @@ function AdminInternalNav({ activeRoute }: { activeRoute: AdminRoute["kind"] }) 
       </a>
       <a className={activeRoute === "model-registry" ? activeNavLinkStyle : navLinkStyle} href="/__admin/model-registry?state=authorized">
         Model registry
+      </a>
+      <a className={activeRoute === "reports" ? activeNavLinkStyle : navLinkStyle} href="/__admin/reports?state=authorized">
+        Reports
+      </a>
+      <a className={activeRoute === "billing" ? activeNavLinkStyle : navLinkStyle} href="/__admin/billing?state=authorized">
+        Billing
       </a>
     </nav>
   );
@@ -120,6 +132,12 @@ type AdminRoute =
     }
   | {
       kind: "model-registry";
+    }
+  | {
+      kind: "reports";
+    }
+  | {
+      kind: "billing";
     };
 
 function getAdminRoute(pathname: string): AdminRoute {
@@ -147,6 +165,18 @@ function getAdminRoute(pathname: string): AdminRoute {
   if (parts[0] === "__admin" && parts[1] === "model-registry") {
     return {
       kind: "model-registry"
+    };
+  }
+
+  if (parts[0] === "__admin" && parts[1] === "reports") {
+    return {
+      kind: "reports"
+    };
+  }
+
+  if (parts[0] === "__admin" && parts[1] === "billing") {
+    return {
+      kind: "billing"
     };
   }
 

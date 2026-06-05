@@ -15,6 +15,15 @@ export function resolveAdminRoutePolicy(method: string, path: string): AdminRout
     };
   }
 
+  if (normalizedPath.match(/^\/admin-api\/reports\/[^/]+\/reveal$/)) {
+    return {
+      route_scope: "reports",
+      action_scope: "reveal_report",
+      sensitive_read: true,
+      requires_sudo: true
+    };
+  }
+
   if (normalizedPath.match(/^\/admin-api\/users\/[^/]+\/impersonate$/)) {
     return {
       route_scope: "impersonation",
@@ -39,6 +48,18 @@ export function resolveAdminRoutePolicy(method: string, path: string): AdminRout
       action_scope: "delete_report",
       sensitive_read: false,
       requires_sudo: true
+    };
+  }
+
+  if (
+    normalizedPath.includes("/reports/") &&
+    (normalizedPath.endsWith("/retry-export") || normalizedPath.endsWith("/regenerate"))
+  ) {
+    return {
+      route_scope: "reports",
+      action_scope: "retry_eval",
+      sensitive_read: false,
+      requires_sudo: false
     };
   }
 

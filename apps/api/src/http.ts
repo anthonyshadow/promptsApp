@@ -170,11 +170,23 @@ export function unitForFeature(feature: UsageLedgerEntry["feature"]): UsageLedge
     case "projects":
       return "project";
     case "eval_runs":
+    case "hosted_eval_runs":
       return "eval_run";
     case "report_exports":
       return "report_export";
     case "admin_seats":
+    case "seats":
       return "seat";
+    case "prompt_history":
+      return "prompt_version";
+    case "csv_upload":
+      return "csv_upload";
+    case "pdf_export":
+      return "pdf_export";
+    case "byok":
+      return "provider_key";
+    case "cli_beta":
+      return "feature_flag";
   }
 }
 

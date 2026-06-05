@@ -12,8 +12,13 @@ import {
   adminEvalRunsResponseSchema,
   adminModelRegistryResponseSchema,
   adminOverviewResponseSchema,
+  adminReportsResponseSchema,
+  billingCreditResponseSchema,
+  billingResponseSchema,
   modelApproveResponseSchema,
-  modelPatchResponseSchema
+  modelPatchResponseSchema,
+  reportDeleteResponseSchema,
+  reportExportActionResponseSchema
 } from "./contracts";
 
 function createTestApp() {
@@ -545,6 +550,48 @@ describe("public API routes", () => {
     expect(exportResponse.export_package.eval_snapshot.result_count).toBe(2);
   });
 
+  test("public eval and export routes enforce billing entitlements", async () => {
+    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const app = createApp({ repository });
+    const entitlements = await repository.entitlements.list();
+    const hostedEvalEntitlement = entitlements.find(
+      (entitlement) => entitlement.feature === "hosted_eval_runs"
+    );
+    const reportExportEntitlement = entitlements.find(
+      (entitlement) => entitlement.feature === "report_exports"
+    );
+
+    if (!hostedEvalEntitlement || !reportExportEntitlement) {
+      throw new Error("Expected demo entitlements");
+    }
+
+    await repository.entitlements.update(hostedEvalEntitlement.id, {
+      used: hostedEvalEntitlement.limit
+    });
+    const blockedEval = await app.request(
+      "/eval-runs",
+      jsonRequest({
+        project_id: DEMO_IDS.project,
+        quality_contract_id: DEMO_IDS.qualityContract,
+        baseline_prompt_version_id: DEMO_IDS.promptVersion,
+        candidate_ids: ["candidate_support_classifier_baseline"],
+        model_registry_record_ids: ["model_registry_openai_demo_balanced"],
+        test_case_ids: ["test_case_support_classifier_billing"],
+        pass_threshold: 0.95
+      })
+    );
+    expect(blockedEval.status).toBe(403);
+
+    await repository.entitlements.update(hostedEvalEntitlement.id, {
+      used: 1
+    });
+    await repository.entitlements.update(reportExportEntitlement.id, {
+      used: reportExportEntitlement.limit
+    });
+    const blockedExport = await app.request(`/reports/${DEMO_IDS.report}/export?format=json`);
+    expect(blockedExport.status).toBe(403);
+  });
+
   test("POST /reports includes no-test blocker when quality contract has no cases", async () => {
     const repository = createMemoryRepository(createDemoRepositorySeed());
     const app = createApp({ repository });
@@ -967,36 +1014,87 @@ describe("admin API routes", () => {
     expect(approvedModel.model.freshness_status).toBe("fresh");
     expect(approvedModel.approved_version.approval_state).toBe("approved");
 
-    await expectOkJson(await app.request("/admin-api/reports", adminGetRequest()));
-    const deleteResponse = await expectOkJson(
+    const reportsVault = adminReportsResponseSchema.parse(
+      await expectOkJson(await app.request("/admin-api/reports", adminGetRequest()))
+    );
+    expect(reportsVault.summary.failed_export).toBeGreaterThan(0);
+    expect(reportsVault.summary.raw_locked).toBeGreaterThan(0);
+    expect(reportsVault.reports.map((report: { action: string }) => report.action)).toContain("request_sudo_for_raw");
+
+    const reportReveal = await expectOkJson(
       await app.request(
-        `/admin-api/reports/${DEMO_IDS.report}/delete`,
-        adminJsonRequest(
-          {
-            reason_code: "customer_request",
-            sudo_request_id: "sudo_request_mock"
-          },
-          { sudo_grant: { reason_code: "customer_request" } }
+        `/admin-api/reports/${DEMO_IDS.report}/reveal`,
+        adminGetRequest({ sudo_grant: { reason_code: "raw_report_reveal_test" } })
+      )
+    );
+    expect(reportReveal.raw_report).toBeNull();
+
+    const retriedExport = reportExportActionResponseSchema.parse(
+      await expectOkJson(
+        await app.request(
+          `/admin-api/reports/${DEMO_IDS.report}/retry-export`,
+          adminJsonRequest({ reason_code: "retry_failed_export" })
+        )
+      )
+    );
+    expect(retriedExport.redaction_state).toBe("redacted");
+
+    const regeneratedExport = reportExportActionResponseSchema.parse(
+      await expectOkJson(
+        await app.request(
+          `/admin-api/reports/${DEMO_IDS.report}/regenerate`,
+          adminJsonRequest({ reason_code: "regenerate_redacted_exports" })
+        )
+      )
+    );
+    expect(regeneratedExport.todo).toContain("evals were not rerun");
+
+    const deleteResponse = reportDeleteResponseSchema.parse(
+      await expectOkJson(
+        await app.request(
+          `/admin-api/reports/${DEMO_IDS.report}/delete`,
+          adminJsonRequest(
+            {
+              reason_code: "customer_request",
+              sudo_request_id: "sudo_request_mock"
+            },
+            { sudo_grant: { reason_code: "customer_request" } }
+          )
         )
       )
     );
     expect(deleteResponse.deletion_queued).toBe(true);
+    expect(deleteResponse.deletion_status).toBe("deleted");
+    expect(deleteResponse.scoped_records_marked).toContain("report_artifacts.storage_uri");
 
-    await expectOkJson(await app.request("/admin-api/billing", adminGetRequest()));
-    const credit = await expectOkJson(
-      await app.request(
-        `/admin-api/billing/${DEMO_IDS.workspace}/credit`,
-        adminJsonRequest(
-          {
-            feature: "free_audits",
-            quantity: 1,
-            reason_code: "manual_adjustment"
-          },
-          { sudo_grant: { reason_code: "manual_adjustment" } }
+    const billing = billingResponseSchema.parse(
+      await expectOkJson(await app.request("/admin-api/billing", adminGetRequest()))
+    );
+    expect(billing.plan?.name).toBe("Demo Growth");
+    expect(billing.entitlement_checks.map((check) => check.feature)).toContain("hosted_eval_runs");
+    expect(billing.entitlement_checks.map((check) => check.feature)).toContain("pdf_export");
+    expect(billing.invoices).toHaveLength(1);
+    expect(billing.credits).toHaveLength(1);
+    expect(billing.feature_flags.map((flag) => flag.key)).toContain("cli_beta");
+
+    const credit = billingCreditResponseSchema.parse(
+      await expectOkJson(
+        await app.request(
+          `/admin-api/billing/${DEMO_IDS.workspace}/credit`,
+          adminJsonRequest(
+            {
+              feature: "free_audits",
+              quantity: 1,
+              reason_code: "manual_adjustment"
+            },
+            { sudo_grant: { reason_code: "manual_adjustment" } }
+          )
         )
       )
     );
     expect(credit.ledger_entry.direction).toBe("credit");
+    expect(credit.credit.reason_code).toBe("manual_adjustment");
+    expect(credit.billing_event.event_type).toBe("credit_issued");
 
     const breakGlass = await expectOkJson(
       await app.request(
@@ -1083,11 +1181,33 @@ describe("admin API routes", () => {
     );
     expect(noSudo.status).toBe(403);
 
+    const noSudoRawReport = await app.request(
+      `/admin-api/reports/${DEMO_IDS.report}/reveal`,
+      adminGetRequest({ sudo_grant: null })
+    );
+    expect(noSudoRawReport.status).toBe(403);
+
     const sudoReveal = await app.request(
       `/admin-api/prompts/${DEMO_IDS.prompt}/reveal`,
       adminGetRequest({ sudo_grant: { reason_code: "prompt_reveal_test" } })
     );
     expect(sudoReveal.status).toBe(200);
+
+    const supportCredit = await app.request(
+      `/admin-api/billing/${DEMO_IDS.workspace}/credit`,
+      adminJsonRequest(
+        {
+          feature: "report_exports",
+          quantity: 1,
+          reason_code: "support_credit_denied"
+        },
+        {
+          role: "support",
+          sudo_grant: { reason_code: "support_credit_denied" }
+        }
+      )
+    );
+    expect(supportCredit.status).toBe(403);
   });
 
   test("writes audit logs for mutations and sensitive reads", async () => {
@@ -1188,6 +1308,56 @@ describe("admin API routes", () => {
     expect(after.slice(-2).map((log) => log.action_scope)).toEqual(["retry_eval", "retry_eval"]);
   });
 
+  test("audits reports vault and billing mutations plus raw report sensitive reads", async () => {
+    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const app = createApp({ repository });
+    const before = await repository.admin_audit_logs.list();
+
+    await app.request(
+      `/admin-api/reports/${DEMO_IDS.report}/reveal`,
+      adminGetRequest({ sudo_grant: { reason_code: "raw_report_reveal_test" } })
+    );
+    await app.request(
+      `/admin-api/reports/${DEMO_IDS.report}/retry-export`,
+      adminJsonRequest({ reason_code: "retry_failed_export" })
+    );
+    await app.request(
+      `/admin-api/reports/${DEMO_IDS.report}/regenerate`,
+      adminJsonRequest({ reason_code: "regenerate_export" })
+    );
+    await app.request(
+      `/admin-api/reports/${DEMO_IDS.report}/delete`,
+      adminJsonRequest(
+        { reason_code: "customer_delete", sudo_request_id: "sudo_request_mock" },
+        { sudo_grant: { reason_code: "customer_delete" } }
+      )
+    );
+    await app.request(
+      `/admin-api/billing/${DEMO_IDS.workspace}/credit`,
+      adminJsonRequest(
+        { feature: "report_exports", quantity: 1, reason_code: "billing_credit_test" },
+        { sudo_grant: { reason_code: "billing_credit_test" } }
+      )
+    );
+
+    const after = await repository.admin_audit_logs.list();
+    expect(after.length).toBe(before.length + 5);
+    expect(after.slice(-5).map((log) => log.target_type)).toEqual([
+      "reports",
+      "reports",
+      "reports",
+      "reports",
+      "billing"
+    ]);
+    expect(after.slice(-5).map((log) => log.action_scope)).toEqual([
+      "reveal_report",
+      "retry_eval",
+      "retry_eval",
+      "delete_report",
+      "issue_billing_credit"
+    ]);
+  });
+
   test("keeps public and admin namespaces separated", async () => {
     const app = createTestApp();
 
@@ -1218,6 +1388,8 @@ describe("route request validation", () => {
       { method: "POST", path: `/admin-api/eval-runs/${DEMO_IDS.evalRun}/regenerate-report` },
       { method: "PATCH", path: "/admin-api/models/model_registry_openai_demo_balanced" },
       { method: "POST", path: "/admin-api/models/model_registry_openai_demo_balanced/approve" },
+      { method: "POST", path: `/admin-api/reports/${DEMO_IDS.report}/retry-export` },
+      { method: "POST", path: `/admin-api/reports/${DEMO_IDS.report}/regenerate` },
       { method: "POST", path: `/admin-api/reports/${DEMO_IDS.report}/delete` },
       { method: "POST", path: `/admin-api/billing/${DEMO_IDS.workspace}/credit` }
     ];
@@ -1231,6 +1403,20 @@ describe("route request validation", () => {
       );
       expect(response.status).toBe(400);
     }
+  });
+
+  test("requires a reason code for billing and entitlement workspace changes", async () => {
+    const response = await createTestApp().request(
+      `/admin-api/workspaces/${DEMO_IDS.workspace}`,
+      adminPatchJsonRequest(
+        {
+          plan_id: DEMO_IDS.plan
+        },
+        { sudo_grant: { reason_code: "plan_change" } }
+      )
+    );
+
+    expect(response.status).toBe(400);
   });
 
   test("requires verification metadata for model metadata edits", async () => {

@@ -4,14 +4,19 @@ import {
   accountStageSchema,
   adminAuditLogSchema,
   adminActionScopeSchema,
+  billingEventSchema,
   contactSchema,
+  creditSchema,
   crmNoteSchema,
   entitlementFeatureSchema,
   entitlementSchema,
   evalRunSchema,
+  featureFlagSchema,
+  invoiceSchema,
   modelRegistryRecordSchema,
   modelRegistryVersionSchema,
   opportunitySchema,
+  planSchema,
   promptProjectSchema,
   promptSchema,
   promptVersionSchema,
@@ -641,10 +646,38 @@ export const workspacePatchRequestSchema = requireAtLeastOneField(
   z
     .object({
       name: nonEmptyStringSchema.optional(),
-      slug: nonEmptyStringSchema.optional()
+      slug: nonEmptyStringSchema.optional(),
+      plan_id: idSchema.optional(),
+      trial_state: z.enum(["none", "trialing", "expired"]).optional(),
+      entitlements: z
+        .array(
+          z
+            .object({
+              feature: entitlementFeatureSchema,
+              limit: z.number().int().nonnegative(),
+              used: z.number().int().nonnegative().optional()
+            })
+            .strict()
+        )
+        .optional(),
+      feature_flags: z.record(z.boolean()).optional(),
+      reason_code: nonEmptyStringSchema.optional()
     })
     .strict()
-);
+).superRefine((value, context) => {
+  const changesBillingState =
+    value.plan_id !== undefined ||
+    value.trial_state !== undefined ||
+    value.entitlements !== undefined ||
+    value.feature_flags !== undefined;
+
+  if (changesBillingState && !value.reason_code) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Plan, limit, entitlement, or feature flag changes require reason_code"
+    });
+  }
+});
 export type WorkspacePatchRequest = z.infer<typeof workspacePatchRequestSchema>;
 
 export const adminEvalRunsResponseSchema = z
@@ -905,12 +938,73 @@ export const modelApproveRequestSchema = z
   .strict();
 export type ModelApproveRequest = z.infer<typeof modelApproveRequestSchema>;
 
+export const reportPrivacyStateSchema = z.enum([
+  "ready_redacted",
+  "raw_locked",
+  "failed_export",
+  "deletion_pending",
+  "deleted"
+]);
+export type ReportPrivacyState = z.infer<typeof reportPrivacyStateSchema>;
+
 export const adminReportsResponseSchema = z
   .object({
-    reports: z.array(recommendationReportSchema)
+    reports: z.array(
+      z
+        .object({
+          report_id: idSchema,
+          workspace: nonEmptyStringSchema,
+          format: reportArtifactFormatSchema,
+          privacy_state: reportPrivacyStateSchema,
+          status: z.enum(["draft", "blocked", "ready", "exported"]),
+          action: z.enum([
+            "open_redacted",
+            "retry_export",
+            "regenerate_export",
+            "approve_deletion",
+            "request_sudo_for_raw"
+          ]),
+          redacted_summary: nonEmptyStringSchema,
+          artifact_id: idSchema.nullable(),
+          storage_uri: nonEmptyStringSchema.nullable(),
+          generated_at: isoDateTimeSchema.nullable(),
+          deletion_note: nonEmptyStringSchema.nullable()
+        })
+        .strict()
+    ),
+    summary: z
+      .object({
+        ready_redacted: z.number().int().nonnegative(),
+        raw_locked: z.number().int().nonnegative(),
+        failed_export: z.number().int().nonnegative(),
+        deletion_pending: z.number().int().nonnegative(),
+        deleted: z.number().int().nonnegative()
+      })
+      .strict(),
+    notes: z.array(nonEmptyStringSchema)
   })
   .strict();
 export type AdminReportsResponse = z.infer<typeof adminReportsResponseSchema>;
+
+export const reportExportActionResponseSchema = z
+  .object({
+    report: recommendationReportSchema,
+    artifacts: z.array(reportArtifactSchema),
+    redaction_state: z.enum(["redacted", "revealed", "not_sensitive"]),
+    todo: nonEmptyStringSchema
+  })
+  .strict();
+export type ReportExportActionResponse = z.infer<typeof reportExportActionResponseSchema>;
+
+export const reportRevealResponseSchema = z
+  .object({
+    report_id: idSchema,
+    redacted_summary: nonEmptyStringSchema,
+    raw_report: z.null(),
+    todo: nonEmptyStringSchema
+  })
+  .strict();
+export type ReportRevealResponse = z.infer<typeof reportRevealResponseSchema>;
 
 export const reportDeleteRequestSchema = z
   .object({
@@ -924,6 +1018,9 @@ export const reportDeleteResponseSchema = z
   .object({
     report_id: idSchema,
     deletion_queued: z.boolean(),
+    deletion_status: z.enum(["deletion_pending", "deleted"]),
+    artifacts_deleted: z.number().int().nonnegative(),
+    scoped_records_marked: z.array(nonEmptyStringSchema),
     todo: nonEmptyStringSchema
   })
   .strict();
@@ -931,8 +1028,35 @@ export type ReportDeleteResponse = z.infer<typeof reportDeleteResponseSchema>;
 
 export const billingResponseSchema = z
   .object({
+    plans: z.array(planSchema),
+    plan: planSchema.nullable(),
+    trial_state: z.enum(["none", "trialing", "expired"]),
+    seats: z
+      .object({
+        limit: z.number().int().nonnegative(),
+        used: z.number().int().nonnegative()
+      })
+      .strict(),
+    entitlement_checks: z.array(
+      z
+        .object({
+          feature: entitlementFeatureSchema,
+          label: nonEmptyStringSchema,
+          enabled: z.boolean(),
+          limit: z.number().int().nonnegative(),
+          used: z.number().int().nonnegative(),
+          remaining: z.number().int().nonnegative(),
+          enforced_on_public_routes: z.boolean()
+        })
+        .strict()
+    ),
     entitlements: z.array(entitlementSchema),
-    usage_ledger: z.array(usageLedgerEntrySchema)
+    usage_ledger: z.array(usageLedgerEntrySchema),
+    invoices: z.array(invoiceSchema),
+    credits: z.array(creditSchema),
+    billing_events: z.array(billingEventSchema),
+    feature_flags: z.array(featureFlagSchema),
+    notes: z.array(nonEmptyStringSchema)
   })
   .strict();
 export type BillingResponse = z.infer<typeof billingResponseSchema>;
@@ -949,6 +1073,8 @@ export type BillingCreditRequest = z.infer<typeof billingCreditRequestSchema>;
 export const billingCreditResponseSchema = z
   .object({
     ledger_entry: usageLedgerEntrySchema,
+    credit: creditSchema,
+    billing_event: billingEventSchema,
     todo: nonEmptyStringSchema
   })
   .strict();

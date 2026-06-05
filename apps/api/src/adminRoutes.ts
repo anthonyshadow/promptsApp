@@ -1,4 +1,6 @@
 import { Hono } from "hono";
+import { decideRecommendation } from "@promptopts/eval-core";
+import { generateReportArtifacts } from "@promptopts/report-generator";
 import {
   redactProviderError,
   redactPromptPreview,
@@ -12,15 +14,21 @@ import {
 import type {
   Account,
   AdminAuditLog,
+  BillingEvent,
   Contact,
+  Credit,
   CrmNote,
   CrmTask,
+  Entitlement,
   EvalResult,
   EvalRun,
+  FeatureFlag,
   FreeAudit,
+  Invoice,
   ModelRegistryRecord,
   ModelRegistryVersion,
   Opportunity,
+  Plan,
   Prompt,
   PromptAnalysis,
   PromptProject,
@@ -62,6 +70,8 @@ import {
   regenerateReportResponseSchema,
   reportDeleteRequestSchema,
   reportDeleteResponseSchema,
+  reportExportActionResponseSchema,
+  reportRevealResponseSchema,
   revokeSessionsResponseSchema,
   workspacePatchRequestSchema,
   workspaceSchema
@@ -425,10 +435,34 @@ export function createAdminApiRoutes() {
           return body.response;
         }
 
+        const workspaceId = c.req.param("id");
+        const existingWorkspace = await c.var.repository.workspaces.get(workspaceId);
+        if (!existingWorkspace) {
+          return notFound(c, "Workspace not found");
+        }
+
+        if (body.data.entitlements || body.data.plan_id) {
+          await upsertWorkspaceEntitlements(c.var.repository, {
+            workspaceId,
+            planId: body.data.plan_id ?? "manual",
+            entitlements: body.data.entitlements ?? [],
+            timestamp: nowIso()
+          });
+        }
+
+        if (body.data.feature_flags) {
+          await upsertFeatureFlags(c.var.repository, {
+            flags: body.data.feature_flags,
+            adminUserId: c.var.adminSession.admin_user_id,
+            timestamp: nowIso()
+          });
+        }
+
         const workspace = await c.var.repository.workspaces.update(
-          c.req.param("id"),
+          workspaceId,
           stripUndefined({
-            ...body.data,
+            name: body.data.name,
+            slug: body.data.slug,
             updated_at: nowIso()
           }) as Partial<Omit<Workspace, "id">>
         );
@@ -671,9 +705,75 @@ export function createAdminApiRoutes() {
         );
       })
       .get("/reports", async (c) => {
+        const [reports, artifacts, projects, workspaces] = await Promise.all([
+          c.var.repository.reports.list(),
+          c.var.repository.report_artifacts.list(),
+          c.var.repository.projects.list(),
+          c.var.repository.workspaces.list()
+        ]);
+
         return c.json(
-          adminReportsResponseSchema.parse({
-            reports: await c.var.repository.reports.list()
+          adminReportsResponseSchema.parse(createAdminReportsVault({ reports, artifacts, projects, workspaces }))
+        );
+      })
+      .get("/reports/:id/reveal", async (c) => {
+        const report = await c.var.repository.reports.get(c.req.param("id"));
+        if (!report) {
+          return notFound(c, "Report not found");
+        }
+
+        return c.json(
+          reportRevealResponseSchema.parse({
+            report_id: report.id,
+            redacted_summary: report.production_recommendation_allowed
+              ? "Report has eval-backed recommendation metadata; raw report body remains locked."
+              : "Report is blocked or pending; raw report body remains locked.",
+            raw_report: null,
+            todo: "Raw report reveal requires sudo and remains placeholder-only until encrypted report bodies are modeled."
+          })
+        );
+      })
+      .post("/reports/:id/retry-export", async (c) => {
+        const body = await validateJson(c, adminReasonRequestSchema);
+        if (!body.success) {
+          return body.response;
+        }
+
+        const report = await c.var.repository.reports.get(c.req.param("id"));
+        if (!report) {
+          return notFound(c, "Report not found");
+        }
+
+        const artifacts = await retryReportExport(c.var.repository, report, body.data.reason_code);
+
+        return c.json(
+          reportExportActionResponseSchema.parse({
+            report,
+            artifacts,
+            redaction_state: "redacted",
+            todo: "Retry export refreshed redacted artifact metadata only; eval results were not rerun."
+          })
+        );
+      })
+      .post("/reports/:id/regenerate", async (c) => {
+        const body = await validateJson(c, adminReasonRequestSchema);
+        if (!body.success) {
+          return body.response;
+        }
+
+        const report = await c.var.repository.reports.get(c.req.param("id"));
+        if (!report) {
+          return notFound(c, "Report not found");
+        }
+
+        const artifacts = await regenerateReportExports(c.var.repository, report, body.data.reason_code);
+
+        return c.json(
+          reportExportActionResponseSchema.parse({
+            report,
+            artifacts,
+            redaction_state: "redacted",
+            todo: "Regenerated exports from existing eval snapshot only; evals were not rerun."
           })
         );
       })
@@ -688,25 +788,42 @@ export function createAdminApiRoutes() {
           return notFound(c, "Report not found");
         }
 
+        const deletion = await markReportDeleted(c.var.repository, report, body.data.reason_code);
+
         return c.json(
           reportDeleteResponseSchema.parse({
             report_id: report.id,
             deletion_queued: true,
-            todo: `Deletion lifecycle is mocked; object artifacts remain until storage is implemented. Reason: ${body.data.reason_code}`
+            deletion_status: "deleted",
+            artifacts_deleted: deletion.artifactsDeleted,
+            scoped_records_marked: deletion.scopedRecordsMarked,
+            todo: `Deletion workflow marked scoped report artifacts deleted in memory. Object storage deletion is mocked until durable storage is wired. Reason: ${body.data.reason_code}`
           })
         );
       })
       .get("/billing", async (c) => {
-        const [entitlements, usageLedger] = await Promise.all([
+        const [workspaces, entitlements, usageLedger, plans, invoices, credits, billingEvents, featureFlags] = await Promise.all([
+          c.var.repository.workspaces.list(),
           c.var.repository.entitlements.list(),
-          c.var.repository.usage_ledger.list()
+          c.var.repository.usage_ledger.list(),
+          c.var.repository.plans.list(),
+          c.var.repository.invoices.list(),
+          c.var.repository.credits.list(),
+          c.var.repository.billing_events.list(),
+          c.var.repository.feature_flags.list()
         ]);
 
         return c.json(
-          billingResponseSchema.parse({
+          billingResponseSchema.parse(createBillingAdminResponse({
+            workspace: workspaces[0] ?? null,
             entitlements,
-            usage_ledger: usageLedger
-          })
+            usageLedger,
+            plans,
+            invoices,
+            credits,
+            billingEvents,
+            featureFlags
+          }))
         );
       })
       .post("/billing/:id/credit", async (c) => {
@@ -720,6 +837,33 @@ export function createAdminApiRoutes() {
           return notFound(c, "Workspace not found");
         }
 
+        const timestamp = nowIso();
+        const billingEvent: BillingEvent = {
+          id: createId("billing_event"),
+          workspace_id: workspace.id,
+          event_type: "credit_issued",
+          amount_cents: body.data.quantity * 100,
+          currency: "usd",
+          external_reference: null,
+          metadata: {
+            feature: body.data.feature,
+            reason_code: body.data.reason_code
+          },
+          is_mock: true,
+          created_at: timestamp
+        };
+        const credit: Credit = {
+          id: createId("credit"),
+          workspace_id: workspace.id,
+          amount_cents: body.data.quantity * 100,
+          currency: "usd",
+          reason_code: body.data.reason_code,
+          issued_by_admin_user_id: c.var.adminSession.admin_user_id,
+          sudo_request_id: c.var.adminSession.sudo_grant?.request_id ?? null,
+          billing_event_id: billingEvent.id,
+          is_mock: true,
+          created_at: timestamp
+        };
         const ledgerEntry: UsageLedgerEntry = {
           id: createId("usage_ledger"),
           workspace_id: workspace.id,
@@ -728,16 +872,20 @@ export function createAdminApiRoutes() {
           unit: unitForFeature(body.data.feature),
           direction: "credit",
           source_type: "admin_credit",
-          source_id: createId("admin_credit"),
+          source_id: credit.id,
           is_mock: true,
-          created_at: nowIso()
+          created_at: timestamp
         };
 
+        await c.var.repository.billing_events.create(billingEvent);
+        await c.var.repository.credits.create(credit);
         await c.var.repository.usage_ledger.create(ledgerEntry);
 
         return c.json(
           billingCreditResponseSchema.parse({
             ledger_entry: ledgerEntry,
+            credit,
+            billing_event: billingEvent,
             todo: `Billing credits are mocked until billing events are implemented. Reason: ${body.data.reason_code}`
           })
         );
@@ -898,6 +1046,419 @@ function getAgeSeconds(isoTimestamp: string): number {
   const ageMs = Date.now() - Date.parse(isoTimestamp);
 
   return Number.isFinite(ageMs) ? Math.max(0, Math.floor(ageMs / 1000)) : 0;
+}
+
+function createAdminReportsVault(input: {
+  reports: RecommendationReport[];
+  artifacts: ReportArtifact[];
+  projects: PromptProject[];
+  workspaces: Workspace[];
+}) {
+  const rows = input.reports.flatMap((report) => {
+    const reportArtifacts = input.artifacts.filter((artifact) => artifact.report_id === report.id);
+    const artifacts = reportArtifacts.length > 0
+      ? reportArtifacts
+      : [createVirtualReportArtifact(report, "json")];
+    const project = input.projects.find((item) => item.id === report.project_id) ?? null;
+    const workspace = project
+      ? input.workspaces.find((item) => item.id === project.workspace_id) ?? null
+      : null;
+    const artifactRows = artifacts.map((artifact) => {
+      const privacyState = getReportPrivacyState(report, artifact);
+
+      return {
+        report_id: report.id,
+        workspace: workspace?.name ?? "Workspace metadata unavailable",
+        format: artifact.format,
+        privacy_state: privacyState,
+        status: report.status,
+        action: getReportVaultAction(privacyState),
+        redacted_summary: createReportVaultSummary(report, privacyState),
+        artifact_id: artifact.id.startsWith("virtual_") ? null : artifact.id,
+        storage_uri: artifact.storage_uri,
+        generated_at: report.generated_at,
+        deletion_note: privacyState === "deleted" || privacyState === "deletion_pending"
+          ? "Scoped report artifacts are marked for deletion in memory; object storage cleanup is mocked."
+          : null
+      };
+    });
+    const rawLockedRow = {
+      report_id: report.id,
+      workspace: workspace?.name ?? "Workspace metadata unavailable",
+      format: "json" as const,
+      privacy_state: "raw_locked" as const,
+      status: report.status,
+      action: "request_sudo_for_raw" as const,
+      redacted_summary: "Raw report content is locked; request sudo with reason before any reveal workflow.",
+      artifact_id: null,
+      storage_uri: null,
+      generated_at: report.generated_at,
+      deletion_note: null
+    };
+
+    return [...artifactRows, rawLockedRow];
+  });
+
+  return {
+    reports: rows,
+    summary: {
+      ready_redacted: rows.filter((row) => row.privacy_state === "ready_redacted").length,
+      raw_locked: rows.filter((row) => row.privacy_state === "raw_locked").length,
+      failed_export: rows.filter((row) => row.privacy_state === "failed_export").length,
+      deletion_pending: rows.filter((row) => row.privacy_state === "deletion_pending").length,
+      deleted: rows.filter((row) => row.privacy_state === "deleted").length
+    },
+    notes: [
+      "Reports vault returns redacted metadata by default; raw report reveal remains sudo-gated.",
+      "Retry and regenerate export actions use the existing eval snapshot and do not rerun evals.",
+      "Deletion workflow is represented in memory; durable object deletion is production-incomplete."
+    ]
+  };
+}
+
+function createVirtualReportArtifact(
+  report: RecommendationReport,
+  format: ReportArtifact["format"]
+): ReportArtifact {
+  return {
+    id: `virtual_${report.id}_${format}`,
+    report_id: report.id,
+    format,
+    storage_uri: `memory://reports/${report.id}/${format}`,
+    checksum: null,
+    size_bytes: null,
+    redaction_state: "redacted",
+    is_mock: true,
+    created_at: report.created_at
+  };
+}
+
+function getReportPrivacyState(
+  report: RecommendationReport,
+  artifact: ReportArtifact
+) {
+  if (artifact.storage_uri.startsWith("deleted://")) {
+    return "deleted" as const;
+  }
+
+  if (report.production_blockers.some((blocker) => blocker.toLowerCase().includes("deletion pending"))) {
+    return "deletion_pending" as const;
+  }
+
+  if (artifact.checksum === null && artifact.size_bytes === null) {
+    return "failed_export" as const;
+  }
+
+  return "ready_redacted" as const;
+}
+
+function getReportVaultAction(privacyState: ReturnType<typeof getReportPrivacyState> | "raw_locked") {
+  switch (privacyState) {
+    case "failed_export":
+      return "retry_export" as const;
+    case "deletion_pending":
+      return "approve_deletion" as const;
+    case "deleted":
+      return "open_redacted" as const;
+    case "raw_locked":
+      return "request_sudo_for_raw" as const;
+    case "ready_redacted":
+      return "open_redacted" as const;
+  }
+}
+
+function createReportVaultSummary(report: RecommendationReport, privacyState: ReturnType<typeof getReportPrivacyState>): string {
+  if (privacyState === "failed_export") {
+    return "Export artifact failed checksum/size confirmation; retry export is available.";
+  }
+
+  if (privacyState === "deleted") {
+    return "Report artifact is marked deleted in memory; raw content is unavailable.";
+  }
+
+  if (privacyState === "deletion_pending") {
+    return "Deletion has been requested and needs final approval.";
+  }
+
+  return report.production_recommendation_allowed
+    ? "Redacted report metadata shows an eval-backed recommendation exists."
+    : "Redacted report metadata shows production recommendation is blocked or pending.";
+}
+
+async function retryReportExport(
+  repository: ApiEnv["Variables"]["repository"],
+  report: RecommendationReport,
+  reasonCode: string
+): Promise<ReportArtifact[]> {
+  const artifacts = (await repository.report_artifacts.list()).filter(
+    (artifact) => artifact.report_id === report.id
+  );
+  const timestamp = nowIso();
+  const refreshed = artifacts.length > 0 ? artifacts : [createVirtualReportArtifact(report, "json")];
+
+  return Promise.all(
+    refreshed.map(async (artifact) => {
+      const next: ReportArtifact = {
+        ...artifact,
+        id: artifact.id.startsWith("virtual_") ? createId("report_artifact") : artifact.id,
+        storage_uri: artifact.storage_uri.startsWith("deleted://")
+          ? `memory://reports/${report.id}/${artifact.format}`
+          : artifact.storage_uri,
+        checksum: `mock_checksum_${reasonCode.replace(/[^a-z0-9]/gi, "_")}`,
+        size_bytes: artifact.size_bytes ?? 1024,
+        redaction_state: "redacted",
+        created_at: artifact.created_at ?? timestamp
+      };
+
+      if (artifact.id.startsWith("virtual_")) {
+        return repository.report_artifacts.create(next);
+      }
+
+      return repository.report_artifacts.update(artifact.id, next) as Promise<ReportArtifact>;
+    })
+  );
+}
+
+async function regenerateReportExports(
+  repository: ApiEnv["Variables"]["repository"],
+  report: RecommendationReport,
+  reasonCode: string
+): Promise<ReportArtifact[]> {
+  const evalRun = await repository.eval_runs.get(report.eval_run_id);
+  if (!evalRun) {
+    return retryReportExport(repository, report, reasonCode);
+  }
+
+  const [results, testCases] = await Promise.all([
+    repository.eval_results.list(),
+    repository.test_cases.list()
+  ]);
+  const evalResults = results.filter((result) => result.eval_run_id === evalRun.id);
+  const contractTestCases = testCases.filter(
+    (testCase) => testCase.quality_contract_id === evalRun.quality_contract_id
+  );
+  const decision = decideRecommendation({
+    evalRunId: evalRun.id,
+    results: evalResults,
+    passThreshold: evalRun.pass_threshold,
+    testCaseCount: contractTestCases.length
+  });
+  const generated = generateReportArtifacts({ report, evalRun, results: evalResults, decision });
+  const existing = await repository.report_artifacts.list();
+
+  for (const artifact of generated.artifacts) {
+    const current = existing.find(
+      (item) => item.report_id === report.id && item.format === artifact.format
+    );
+
+    if (current) {
+      await repository.report_artifacts.update(current.id, {
+        storage_uri: artifact.storage_uri,
+        checksum: artifact.checksum ?? `mock_regenerated_${reasonCode}`,
+        size_bytes: artifact.size_bytes ?? 1024,
+        redaction_state: "redacted"
+      });
+    } else {
+      await repository.report_artifacts.create({
+        ...artifact,
+        id: createId("report_artifact"),
+        checksum: artifact.checksum ?? `mock_regenerated_${reasonCode}`,
+        size_bytes: artifact.size_bytes ?? 1024,
+        redaction_state: "redacted"
+      });
+    }
+  }
+
+  return (await repository.report_artifacts.list()).filter((artifact) => artifact.report_id === report.id);
+}
+
+async function markReportDeleted(
+  repository: ApiEnv["Variables"]["repository"],
+  report: RecommendationReport,
+  reasonCode: string
+): Promise<{ artifactsDeleted: number; scopedRecordsMarked: string[] }> {
+  const artifacts = (await repository.report_artifacts.list()).filter(
+    (artifact) => artifact.report_id === report.id
+  );
+
+  await repository.reports.update(report.id, {
+    production_blockers: Array.from(new Set([
+      ...report.production_blockers,
+      `deletion pending approved: ${reasonCode}`
+    ])),
+    updated_at: nowIso()
+  });
+
+  for (const artifact of artifacts) {
+    await repository.report_artifacts.update(artifact.id, {
+      storage_uri: `deleted://${artifact.id}`,
+      checksum: null,
+      size_bytes: 0,
+      redaction_state: "redacted"
+    });
+  }
+
+  return {
+    artifactsDeleted: artifacts.length,
+    scopedRecordsMarked: [
+      "reports.production_blockers",
+      "report_artifacts.storage_uri",
+      "report_artifacts.redaction_state"
+    ]
+  };
+}
+
+function createBillingAdminResponse(input: {
+  workspace: Workspace | null;
+  entitlements: Entitlement[];
+  usageLedger: UsageLedgerEntry[];
+  plans: Plan[];
+  invoices: Invoice[];
+  credits: Credit[];
+  billingEvents: BillingEvent[];
+  featureFlags: FeatureFlag[];
+}) {
+  const workspaceId = input.workspace?.id ?? null;
+  const workspaceEntitlements = workspaceId
+    ? input.entitlements.filter((entitlement) => entitlement.workspace_id === workspaceId)
+    : input.entitlements;
+  const plan = input.plans.find((item) => item.id === workspaceEntitlements[0]?.plan_id) ?? input.plans[0] ?? null;
+  const seatEntitlement = workspaceEntitlements.find((entitlement) =>
+    entitlement.feature === "seats" || entitlement.feature === "admin_seats"
+  );
+
+  return {
+    plans: input.plans,
+    plan,
+    trial_state: "trialing" as const,
+    seats: {
+      limit: seatEntitlement?.limit ?? 0,
+      used: seatEntitlement?.used ?? 0
+    },
+    entitlement_checks: createEntitlementChecks(workspaceEntitlements),
+    entitlements: workspaceEntitlements,
+    usage_ledger: workspaceId
+      ? input.usageLedger.filter((entry) => entry.workspace_id === workspaceId)
+      : input.usageLedger,
+    invoices: workspaceId
+      ? input.invoices.filter((invoice) => invoice.workspace_id === workspaceId)
+      : input.invoices,
+    credits: workspaceId
+      ? input.credits.filter((credit) => credit.workspace_id === workspaceId)
+      : input.credits,
+    billing_events: workspaceId
+      ? input.billingEvents.filter((event) => event.workspace_id === workspaceId)
+      : input.billingEvents,
+    feature_flags: input.featureFlags,
+    notes: [
+      "Credits require finance or owner action scope, sudo, reason code, and an audit event.",
+      "Public eval and export routes enforce hosted eval, report export, and PDF export entitlements.",
+      "Invoices, credits, billing events, and flags are memory-backed placeholders until billing infrastructure is wired."
+    ]
+  };
+}
+
+function createEntitlementChecks(entitlements: Entitlement[]) {
+  const features: Array<{ feature: Entitlement["feature"]; label: string; enforced: boolean }> = [
+    { feature: "hosted_eval_runs", label: "Hosted eval run limit", enforced: true },
+    { feature: "prompt_history", label: "Prompt history entitlement", enforced: false },
+    { feature: "report_exports", label: "Report export entitlement", enforced: true },
+    { feature: "csv_upload", label: "CSV upload", enforced: false },
+    { feature: "byok", label: "BYOK", enforced: false },
+    { feature: "pdf_export", label: "PDF export", enforced: true },
+    { feature: "cli_beta", label: "CLI beta", enforced: false },
+    { feature: "seats", label: "Seats", enforced: false }
+  ];
+
+  return features.map(({ feature, label, enforced }) => {
+    const entitlement = entitlements.find((item) => item.feature === feature);
+    const limit = entitlement?.limit ?? 0;
+    const used = entitlement?.used ?? 0;
+
+    return {
+      feature,
+      label,
+      enabled: limit > 0,
+      limit,
+      used,
+      remaining: Math.max(0, limit - used),
+      enforced_on_public_routes: enforced
+    };
+  });
+}
+
+async function upsertWorkspaceEntitlements(
+  repository: ApiEnv["Variables"]["repository"],
+  input: {
+    workspaceId: string;
+    planId: string;
+    entitlements: Array<{ feature: Entitlement["feature"]; limit: number; used?: number | undefined }>;
+    timestamp: string;
+  }
+): Promise<void> {
+  const current = await repository.entitlements.list();
+
+  for (const entitlement of input.entitlements) {
+    const existing = current.find(
+      (item) => item.workspace_id === input.workspaceId && item.feature === entitlement.feature
+    );
+
+    if (existing) {
+      await repository.entitlements.update(existing.id, {
+        plan_id: input.planId,
+        limit: entitlement.limit,
+        used: entitlement.used ?? existing.used
+      });
+    } else {
+      await repository.entitlements.create({
+        id: createId("entitlement"),
+        workspace_id: input.workspaceId,
+        plan_id: input.planId,
+        feature: entitlement.feature,
+        limit: entitlement.limit,
+        used: entitlement.used ?? 0,
+        is_mock: true,
+        starts_at: input.timestamp,
+        ends_at: null,
+        created_at: input.timestamp
+      });
+    }
+  }
+}
+
+async function upsertFeatureFlags(
+  repository: ApiEnv["Variables"]["repository"],
+  input: {
+    flags: Record<string, boolean>;
+    adminUserId: string;
+    timestamp: string;
+  }
+): Promise<void> {
+  const current = await repository.feature_flags.list();
+
+  for (const [key, enabled] of Object.entries(input.flags)) {
+    const existing = current.find((flag) => flag.key === key);
+
+    if (existing) {
+      await repository.feature_flags.update(existing.id, {
+        enabled,
+        updated_by_admin_user_id: input.adminUserId,
+        updated_at: input.timestamp
+      });
+    } else {
+      await repository.feature_flags.create({
+        id: createId("feature_flag"),
+        key,
+        enabled,
+        rollout: {},
+        created_by_admin_user_id: input.adminUserId,
+        updated_by_admin_user_id: input.adminUserId,
+        is_mock: true,
+        created_at: input.timestamp,
+        updated_at: input.timestamp
+      });
+    }
+  }
 }
 
 function createAdminModelRegistryResponse(

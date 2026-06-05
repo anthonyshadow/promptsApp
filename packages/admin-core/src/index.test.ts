@@ -132,6 +132,15 @@ describe("admin route policies", () => {
       action_scope: "retry_eval",
       requires_sudo: false
     });
+    expect(resolveAdminRoutePolicy("GET", "/admin-api/reports/report_1/reveal")).toMatchObject({
+      action_scope: "reveal_report",
+      requires_sudo: true,
+      sensitive_read: true
+    });
+    expect(resolveAdminRoutePolicy("POST", "/admin-api/reports/report_1/retry-export")).toMatchObject({
+      action_scope: "retry_eval",
+      requires_sudo: false
+    });
     expect(resolveAdminRoutePolicy("PATCH", "/admin-api/models/model_1")).toMatchObject({
       action_scope: "manage_model_registry",
       requires_sudo: true

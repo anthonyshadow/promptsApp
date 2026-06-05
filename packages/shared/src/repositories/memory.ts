@@ -2,16 +2,21 @@ import type { ZodType } from "zod";
 import {
   accountSchema,
   adminAuditLogSchema,
+  billingEventSchema,
   contactSchema,
+  creditSchema,
   crmNoteSchema,
   entitlementSchema,
   evalResultSchema,
   evalRunSchema,
+  featureFlagSchema,
   freeAuditSchema,
+  invoiceSchema,
   modelRegistryRecordSchema,
   modelRegistryVersionSchema,
   optimizationCandidateSchema,
   opportunitySchema,
+  planSchema,
   promptAnalysisSchema,
   promptProjectSchema,
   promptSchema,
@@ -26,17 +31,22 @@ import {
   workspaceSchema,
   type Account,
   type AdminAuditLog,
+  type BillingEvent,
   type Contact,
+  type Credit,
   type CrmNote,
   type CrmTask,
   type Entitlement,
   type EvalResult,
   type EvalRun,
+  type FeatureFlag,
   type FreeAudit,
+  type Invoice,
   type ModelRegistryRecord,
   type ModelRegistryVersion,
   type OptimizationCandidate,
   type Opportunity,
+  type Plan,
   type Prompt,
   type PromptAnalysis,
   type PromptProject,
@@ -205,6 +215,17 @@ export function createMemoryRepository(seed: RepositorySeed = {}): PromptOptsRep
     usage_ledger: new MemoryCrudRepository<UsageLedgerEntry>(
       usageLedgerEntrySchema,
       seed.usage_ledger
+    ),
+    plans: new MemoryCrudRepository<Plan>(planSchema, seed.plans),
+    billing_events: new MemoryCrudRepository<BillingEvent>(
+      billingEventSchema,
+      seed.billing_events
+    ),
+    invoices: new MemoryCrudRepository<Invoice>(invoiceSchema, seed.invoices),
+    credits: new MemoryCrudRepository<Credit>(creditSchema, seed.credits),
+    feature_flags: new MemoryCrudRepository<FeatureFlag>(
+      featureFlagSchema,
+      seed.feature_flags
     )
   };
 }

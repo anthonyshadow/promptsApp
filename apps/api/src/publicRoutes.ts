@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { autoDraftQualityContract, costQualityFrontier, decideRecommendation } from "@promptopts/eval-core";
 import { runEvalRun } from "@promptopts/eval-runner";
@@ -30,6 +30,7 @@ import {
   type Contact,
   type CrmNote,
   type CrmTask,
+  type Entitlement,
   type EvalResult,
   type EvalRun,
   type FreeAudit,
@@ -43,11 +44,13 @@ import {
   type QualityContract,
   type RecommendationReport,
   type ReportArtifact,
-  type TestCase
+  type TestCase,
+  type UsageLedgerEntry
 } from "@promptopts/shared";
 import {
   auditRequestSchema,
   auditResponseSchema,
+  errorResponseSchema,
   evalRunCreateRequestSchema,
   evalRunDetailResponseSchema,
   modelsResponseSchema,
@@ -74,6 +77,7 @@ import {
   notFound,
   nowIso,
   redactedPreview,
+  unitForFeature,
   validateJson,
   validationProblem
 } from "./http";
@@ -516,6 +520,15 @@ export function createPublicApiRoutes() {
         return notFound(c, "Project not found");
       }
 
+      const entitlement = await checkWorkspaceEntitlement(
+        c.var.repository,
+        project.workspace_id,
+        "hosted_eval_runs"
+      );
+      if (!entitlement.allowed) {
+        return entitlementForbidden(c, entitlement.message);
+      }
+
       const timestamp = nowIso();
       const evalRun: EvalRun = {
         id: createId("eval_run"),
@@ -533,6 +546,14 @@ export function createPublicApiRoutes() {
       };
 
       await c.var.repository.eval_runs.create(evalRun);
+      await writeUsageLedger(c.var.repository, {
+        workspaceId: project.workspace_id,
+        feature: "hosted_eval_runs",
+        quantity: 1,
+        sourceType: "eval_run",
+        sourceId: evalRun.id,
+        timestamp
+      });
       const runResult = await runEvalRun(
         c.var.repository,
         evalRun,
@@ -613,6 +634,31 @@ export function createPublicApiRoutes() {
         return validationProblem(c, formatResult.error);
       }
 
+      const project = await c.var.repository.projects.get(report.project_id);
+      if (!project) {
+        return notFound(c, "Project not found");
+      }
+
+      const exportEntitlement = await checkWorkspaceEntitlement(
+        c.var.repository,
+        project.workspace_id,
+        "report_exports"
+      );
+      if (!exportEntitlement.allowed) {
+        return entitlementForbidden(c, exportEntitlement.message);
+      }
+
+      if (formatResult.data === "pdf") {
+        const pdfEntitlement = await checkWorkspaceEntitlement(
+          c.var.repository,
+          project.workspace_id,
+          "pdf_export"
+        );
+        if (!pdfEntitlement.allowed) {
+          return entitlementForbidden(c, pdfEntitlement.message);
+        }
+      }
+
       const evalRun = await c.var.repository.eval_runs.get(report.eval_run_id);
       if (!evalRun) {
         return notFound(c, "Eval run not found");
@@ -635,6 +681,15 @@ export function createPublicApiRoutes() {
       if (!content || !artifact) {
         return notFound(c, "Report artifact not found");
       }
+
+      await writeUsageLedger(c.var.repository, {
+        workspaceId: project.workspace_id,
+        feature: formatResult.data === "pdf" ? "pdf_export" : "report_exports",
+        quantity: 1,
+        sourceType: "report_export",
+        sourceId: artifact.id,
+        timestamp: nowIso()
+      });
 
       return c.json(
         reportExportResponseSchema.parse({
@@ -1468,4 +1523,106 @@ async function resolvePromptVersionId(
   );
 
   return matchingVersion?.id ?? null;
+}
+
+async function checkWorkspaceEntitlement(
+  repository: PromptOptsRepository,
+  workspaceId: string,
+  feature: Entitlement["feature"]
+): Promise<{ allowed: true; entitlement: Entitlement | null } | { allowed: false; message: string }> {
+  const entitlements = await repository.entitlements.list();
+  const entitlement =
+    entitlements.find((item) => item.workspace_id === workspaceId && item.feature === feature) ??
+    getLegacyEntitlement(entitlements, workspaceId, feature);
+
+  if (!entitlement) {
+    return {
+      allowed: false,
+      message: `${feature} entitlement is not enabled for this workspace.`
+    };
+  }
+
+  if (entitlement.used >= entitlement.limit) {
+    return {
+      allowed: false,
+      message: `${feature} entitlement limit has been reached.`
+    };
+  }
+
+  return {
+    allowed: true,
+    entitlement
+  };
+}
+
+function getLegacyEntitlement(
+  entitlements: Entitlement[],
+  workspaceId: string,
+  feature: Entitlement["feature"]
+): Entitlement | null {
+  if (feature === "hosted_eval_runs") {
+    return entitlements.find((item) => item.workspace_id === workspaceId && item.feature === "eval_runs") ?? null;
+  }
+
+  return null;
+}
+
+async function writeUsageLedger(
+  repository: PromptOptsRepository,
+  input: {
+    workspaceId: string;
+    feature: UsageLedgerEntry["feature"];
+    quantity: number;
+    sourceType: string;
+    sourceId: string;
+    timestamp: string;
+  }
+): Promise<void> {
+  const entry: UsageLedgerEntry = {
+    id: createId("usage_ledger"),
+    workspace_id: input.workspaceId,
+    feature: input.feature,
+    quantity: input.quantity,
+    unit: unitForFeature(input.feature),
+    direction: "debit",
+    source_type: input.sourceType,
+    source_id: input.sourceId,
+    is_mock: true,
+    created_at: input.timestamp
+  };
+
+  await repository.usage_ledger.create(entry);
+  await incrementEntitlementUsage(repository, input.workspaceId, input.feature, input.quantity);
+}
+
+async function incrementEntitlementUsage(
+  repository: PromptOptsRepository,
+  workspaceId: string,
+  feature: Entitlement["feature"],
+  quantity: number
+): Promise<void> {
+  const entitlements = await repository.entitlements.list();
+  const entitlement =
+    entitlements.find((item) => item.workspace_id === workspaceId && item.feature === feature) ??
+    getLegacyEntitlement(entitlements, workspaceId, feature);
+
+  if (!entitlement) {
+    return;
+  }
+
+  await repository.entitlements.update(entitlement.id, {
+    used: entitlement.used + quantity
+  });
+}
+
+function entitlementForbidden(c: Context<ApiEnv>, message: string): Response {
+  return c.json(
+    errorResponseSchema.parse({
+      error: {
+        code: "entitlement_required",
+        message
+      }
+    }),
+    403
+  );
 }

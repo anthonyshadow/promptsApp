@@ -7,6 +7,7 @@ export type AdminRole = (typeof adminRoles)[number];
 export const adminActionScopes = [
   "read_metadata",
   "reveal_prompt",
+  "reveal_report",
   "manage_workspace",
   "manage_model_registry",
   "retry_eval",

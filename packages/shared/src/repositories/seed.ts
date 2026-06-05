@@ -18,6 +18,11 @@ export const DEMO_IDS = {
   report: "report_support_classifier_shell",
   reportArtifact: "report_artifact_support_classifier_json",
   modelRegistryVersion: "model_registry_version_openai_balanced_pending",
+  plan: "plan_demo_growth",
+  invoice: "invoice_acme_demo_open",
+  credit: "credit_acme_demo",
+  billingEvent: "billing_event_acme_demo_credit",
+  featureFlagCliBeta: "feature_flag_cli_beta",
   freeAudit: "free_audit_acme_support_classifier",
   crmNote: "crm_note_acme_free_audit",
   task: "task_acme_eval_followup"
@@ -599,10 +604,106 @@ export function createDemoRepositorySeed(): Required<RepositorySeed> {
       {
         id: "entitlement_acme_free_audits",
         workspace_id: DEMO_IDS.workspace,
-        plan_id: "demo",
+        plan_id: DEMO_IDS.plan,
         feature: "free_audits",
         limit: 5,
         used: 1,
+        is_mock: true,
+        starts_at: DEMO_TIMESTAMP,
+        ends_at: null,
+        created_at: DEMO_TIMESTAMP
+      },
+      {
+        id: "entitlement_acme_hosted_eval_runs",
+        workspace_id: DEMO_IDS.workspace,
+        plan_id: DEMO_IDS.plan,
+        feature: "hosted_eval_runs",
+        limit: 25,
+        used: 1,
+        is_mock: true,
+        starts_at: DEMO_TIMESTAMP,
+        ends_at: null,
+        created_at: DEMO_TIMESTAMP
+      },
+      {
+        id: "entitlement_acme_report_exports",
+        workspace_id: DEMO_IDS.workspace,
+        plan_id: DEMO_IDS.plan,
+        feature: "report_exports",
+        limit: 25,
+        used: 1,
+        is_mock: true,
+        starts_at: DEMO_TIMESTAMP,
+        ends_at: null,
+        created_at: DEMO_TIMESTAMP
+      },
+      {
+        id: "entitlement_acme_prompt_history",
+        workspace_id: DEMO_IDS.workspace,
+        plan_id: DEMO_IDS.plan,
+        feature: "prompt_history",
+        limit: 50,
+        used: 1,
+        is_mock: true,
+        starts_at: DEMO_TIMESTAMP,
+        ends_at: null,
+        created_at: DEMO_TIMESTAMP
+      },
+      {
+        id: "entitlement_acme_csv_upload",
+        workspace_id: DEMO_IDS.workspace,
+        plan_id: DEMO_IDS.plan,
+        feature: "csv_upload",
+        limit: 1,
+        used: 0,
+        is_mock: true,
+        starts_at: DEMO_TIMESTAMP,
+        ends_at: null,
+        created_at: DEMO_TIMESTAMP
+      },
+      {
+        id: "entitlement_acme_pdf_export",
+        workspace_id: DEMO_IDS.workspace,
+        plan_id: DEMO_IDS.plan,
+        feature: "pdf_export",
+        limit: 1,
+        used: 0,
+        is_mock: true,
+        starts_at: DEMO_TIMESTAMP,
+        ends_at: null,
+        created_at: DEMO_TIMESTAMP
+      },
+      {
+        id: "entitlement_acme_byok",
+        workspace_id: DEMO_IDS.workspace,
+        plan_id: DEMO_IDS.plan,
+        feature: "byok",
+        limit: 1,
+        used: 0,
+        is_mock: true,
+        starts_at: DEMO_TIMESTAMP,
+        ends_at: null,
+        created_at: DEMO_TIMESTAMP
+      },
+      {
+        id: "entitlement_acme_seats",
+        workspace_id: DEMO_IDS.workspace,
+        plan_id: DEMO_IDS.plan,
+        feature: "seats",
+        limit: 3,
+        used: 1,
+        is_mock: true,
+        starts_at: DEMO_TIMESTAMP,
+        ends_at: null,
+        created_at: DEMO_TIMESTAMP
+      },
+      {
+        id: "entitlement_acme_cli_beta",
+        workspace_id: DEMO_IDS.workspace,
+        plan_id: DEMO_IDS.plan,
+        feature: "cli_beta",
+        limit: 1,
+        used: 0,
         is_mock: true,
         starts_at: DEMO_TIMESTAMP,
         ends_at: null,
@@ -621,6 +722,82 @@ export function createDemoRepositorySeed(): Required<RepositorySeed> {
         source_id: DEMO_IDS.freeAudit,
         is_mock: true,
         created_at: DEMO_TIMESTAMP
+      }
+    ],
+    plans: [
+      {
+        id: DEMO_IDS.plan,
+        name: "Demo Growth",
+        billing_period: "month",
+        price_cents: 4900,
+        feature_limits: {
+          hosted_eval_runs: 25,
+          prompt_history: 50,
+          report_exports: 25,
+          seats: 3,
+          csv_upload: true,
+          byok: true,
+          pdf_export: true
+        },
+        is_active: true,
+        is_mock: true,
+        created_at: DEMO_TIMESTAMP
+      }
+    ],
+    billing_events: [
+      {
+        id: DEMO_IDS.billingEvent,
+        workspace_id: DEMO_IDS.workspace,
+        event_type: "credit_issued",
+        amount_cents: 1000,
+        currency: "usd",
+        external_reference: null,
+        metadata: { reason_code: "demo_seed" },
+        is_mock: true,
+        created_at: DEMO_TIMESTAMP
+      }
+    ],
+    invoices: [
+      {
+        id: DEMO_IDS.invoice,
+        workspace_id: DEMO_IDS.workspace,
+        status: "open",
+        amount_due_cents: 4900,
+        currency: "usd",
+        issued_at: DEMO_TIMESTAMP,
+        due_at: "2026-02-15T12:00:00.000Z",
+        paid_at: null,
+        external_reference: "demo-invoice-001",
+        metadata: { plan_id: DEMO_IDS.plan },
+        is_mock: true,
+        created_at: DEMO_TIMESTAMP
+      }
+    ],
+    credits: [
+      {
+        id: DEMO_IDS.credit,
+        workspace_id: DEMO_IDS.workspace,
+        amount_cents: 1000,
+        currency: "usd",
+        reason_code: "demo_seed",
+        issued_by_admin_user_id: "admin_user_demo",
+        sudo_request_id: null,
+        billing_event_id: DEMO_IDS.billingEvent,
+        is_mock: true,
+        created_at: DEMO_TIMESTAMP
+      }
+    ],
+    feature_flags: [
+      {
+        id: DEMO_IDS.featureFlagCliBeta,
+        key: "cli_beta",
+        enabled: true,
+        rollout: { workspaces: [DEMO_IDS.workspace] },
+        created_by_admin_user_id: "admin_user_demo",
+        updated_by_admin_user_id: "admin_user_demo",
+        is_mock: true,
+        created_at: DEMO_TIMESTAMP,
+        updated_at: DEMO_TIMESTAMP
       }
     ]
   };

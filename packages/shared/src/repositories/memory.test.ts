@@ -55,6 +55,18 @@ describe("memory repository", () => {
     expect(await repo.tasks.get(DEMO_IDS.task)).toMatchObject({
       status: "open"
     });
+    expect(await repo.plans.get(DEMO_IDS.plan)).toMatchObject({
+      name: "Demo Growth"
+    });
+    expect(await repo.invoices.get(DEMO_IDS.invoice)).toMatchObject({
+      status: "open"
+    });
+    expect(await repo.credits.get(DEMO_IDS.credit)).toMatchObject({
+      reason_code: "demo_seed"
+    });
+    expect(await repo.feature_flags.get(DEMO_IDS.featureFlagCliBeta)).toMatchObject({
+      key: "cli_beta"
+    });
     expect(await repo.reports.get(DEMO_IDS.report)).toMatchObject({
       status: "blocked",
       production_recommendation_allowed: false

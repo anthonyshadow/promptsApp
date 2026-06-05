@@ -105,6 +105,25 @@ describe("shared domain schemas", () => {
     expect(seed.workspaces[0]?.name).toBe("Acme AI");
     expect(seed.projects[0]?.name).toBe("Support classifier");
     expect(seed.accounts[0]?.stage).toBe("new_audit");
+    expect(seed.plans[0]?.name).toBe("Demo Growth");
+    const entitlementFeatures = seed.entitlements.map((entitlement) => entitlement.feature);
+    const expectedEntitlementFeatures = [
+      "hosted_eval_runs",
+      "prompt_history",
+      "report_exports",
+      "csv_upload",
+      "byok",
+      "pdf_export",
+      "seats",
+      "cli_beta"
+    ] as const;
+
+    for (const feature of expectedEntitlementFeatures) {
+      expect(entitlementFeatures).toContain(feature);
+    }
+    expect(seed.invoices[0]?.status).toBe("open");
+    expect(seed.credits[0]?.reason_code).toBe("demo_seed");
+    expect(seed.feature_flags[0]?.key).toBe("cli_beta");
     expect(seed.model_registry_versions[0]?.approval_state).toBe("pending_review");
     expect(seed.model_registry_versions[0]?.source_url).toContain("https://");
     expect(seed.model_registry_versions[0]?.verified_by).toBe("admin_user_demo");
