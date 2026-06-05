@@ -9,7 +9,8 @@ describe("public route screens", () => {
   test("renders every public product-loop route without exposing admin navigation", () => {
     const apiState: ApiState = { status: "not-configured" };
     const routes = [
-      ["/app", "Same-provider optimization path"],
+      ["/app", "Workspace dashboard"],
+      ["/app/workspace/acme-ai", "Recent projects"],
       ["/app/setup", "Provider and model setup"],
       ["/app/prompts/prompt_demo_support", "Prompt baseline"],
       ["/app/projects/project_demo_support/audit", "Prompt and model audit"],
@@ -61,6 +62,31 @@ describe("public route screens", () => {
     expect(html).toContain("Run evals before switching");
     expect(html).not.toContain("CRM");
     expect(html).not.toContain("admin");
+  });
+
+  test("renders the workspace dashboard metrics, recent projects, and new audit CTA", () => {
+    const apiState: ApiState = { status: "not-configured" };
+    const html = renderToString(
+      <PublicRouteScreen
+        apiClient={null}
+        apiState={apiState}
+        appState={createInitialPublicAppState()}
+        registryModels={demoModelRegistry}
+        route={parsePublicRoute("/app/workspace/acme-ai")}
+        updateAppState={() => undefined}
+        onNavigate={() => undefined}
+      />
+    );
+
+    expect(html).toContain("Workspace dashboard");
+    expect(html).toContain("Verified monthly savings");
+    expect(html).toContain("Prompts optimized");
+    expect(html).toContain("Eval pass average");
+    expect(html).toContain("Models flagged");
+    expect(html).toContain("Recent projects");
+    expect(html).toContain("Support classifier");
+    expect(html).toContain("New audit");
+    expect(html).not.toContain("/__admin");
   });
 
   test("renders the prompt and model audit screen with risk-first fallback copy", () => {

@@ -11,6 +11,7 @@ import type { ProductStepKey, PublicRoute } from "./routes";
 export function getRouteTitle(route: PublicRoute): string {
   switch (route.kind) {
     case "app-home":
+    case "workspace-dashboard":
       return `${demoWorkspace.name} workspace`;
     case "free-audit":
       return "Free audit";

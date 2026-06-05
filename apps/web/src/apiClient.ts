@@ -17,7 +17,8 @@ import type {
   ReportExportResponse,
   TestCaseCreateRequest,
   TestCaseMutationResponse,
-  TestCasePatchRequest
+  TestCasePatchRequest,
+  WorkspaceDashboardResponse
 } from "@promptopts/api";
 import type { ModelModality } from "@promptopts/model-registry";
 import type { EvalRun, HealthResponse, Provider, StabilityStatus, TaskType } from "@promptopts/shared";
@@ -36,6 +37,7 @@ export type ModelRegistryFilters = {
 export type PromptOptsApiClient = {
   health: () => Promise<HealthResponse>;
   models: (filters?: ModelRegistryFilters) => Promise<RegistryResponse>;
+  getWorkspaceDashboard: (workspaceSlug: string) => Promise<WorkspaceDashboardResponse>;
   createPrompt: (request: PromptCreateRequest) => Promise<PromptCreateResponse>;
   optimizePrompt: (
     promptId: string,
@@ -83,6 +85,17 @@ export function createPromptOptsApiClient(baseUrl: string): PromptOptsApiClient 
       }
 
       return (await response.json()) as RegistryResponse;
+    },
+    async getWorkspaceDashboard(workspaceSlug) {
+      const response = await fetch(
+        `${baseUrl}/workspaces/${encodeURIComponent(workspaceSlug)}/dashboard`
+      );
+
+      if (!response.ok) {
+        throw new Error(`Workspace dashboard returned ${response.status}`);
+      }
+
+      return (await response.json()) as WorkspaceDashboardResponse;
     },
     async createPrompt(request) {
       const response = await client.prompts.$post({ json: request });

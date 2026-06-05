@@ -20,6 +20,7 @@ describe("web view helpers", () => {
   test("maps every public route to its stable shell title", () => {
     const expectedTitles = new Map([
       ["/app", "Acme AI workspace"],
+      ["/app/workspace/acme-ai", "Acme AI workspace"],
       ["/audit", "Free audit"],
       ["/app/setup", "Setup"],
       ["/app/prompts/prompt_demo_support", "Prompt"],

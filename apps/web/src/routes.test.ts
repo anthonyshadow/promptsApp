@@ -5,6 +5,7 @@ describe("public route map", () => {
   test("recognizes every requested public shell route", () => {
     const paths = [
       "/app",
+      "/app/workspace/acme-ai",
       "/app/setup",
       "/app/prompts/prompt_demo_support",
       "/app/projects/project_demo_support/audit",
@@ -21,6 +22,11 @@ describe("public route map", () => {
     for (const path of paths) {
       expect(parsePublicRoute(path).kind).not.toBe("not-found");
     }
+
+    expect(parsePublicRoute("/app/workspace/acme-ai")).toMatchObject({
+      kind: "workspace-dashboard",
+      workspaceSlug: "acme-ai"
+    });
   });
 
   test("keeps the product stepper canonical", () => {

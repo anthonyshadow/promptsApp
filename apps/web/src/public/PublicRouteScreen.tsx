@@ -35,7 +35,16 @@ function PublicRouteScreen({
 }) {
   switch (route.kind) {
     case "app-home":
-      return <WorkspaceScreen appState={appState} onNavigate={onNavigate} />;
+      return <WorkspaceScreen apiClient={apiClient} appState={appState} onNavigate={onNavigate} />;
+    case "workspace-dashboard":
+      return (
+        <WorkspaceScreen
+          apiClient={apiClient}
+          appState={appState}
+          onNavigate={onNavigate}
+          workspaceSlug={route.workspaceSlug}
+        />
+      );
     case "free-audit":
       return (
         <FreeAuditScreen

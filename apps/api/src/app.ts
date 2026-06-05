@@ -35,7 +35,8 @@ export type {
   QualityContractResponse,
   TestCaseCreateRequest,
   TestCaseMutationResponse,
-  TestCasePatchRequest
+  TestCasePatchRequest,
+  WorkspaceDashboardResponse
 } from "./contracts";
 
 export default app;

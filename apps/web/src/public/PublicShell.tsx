@@ -80,7 +80,11 @@ function PublicShell({ path, onNavigate }: { path: string; onNavigate: NavigateH
           <strong className={brandTitleStyle}>{APP_NAME}</strong>
         </div>
         <nav className={navStyle} aria-label="Primary">
-          <RouteLink current={route.kind === "app-home"} onNavigate={onNavigate} to="/app">
+          <RouteLink
+            current={route.kind === "app-home" || route.kind === "workspace-dashboard"}
+            onNavigate={onNavigate}
+            to={`/app/workspace/${demoWorkspace.slug}`}
+          >
             Workspace
           </RouteLink>
           <RouteLink current={route.kind === "free-audit"} onNavigate={onNavigate} to="/audit">

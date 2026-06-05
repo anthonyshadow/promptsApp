@@ -29,6 +29,7 @@ import {
   costEstimateStatusSchema,
   idSchema,
   isoDateTimeSchema,
+  modelFitSchema,
   metadataSchema,
   providerSchema
 } from "@promptopts/shared";
@@ -63,6 +64,49 @@ export const modelsResponseSchema = z
 export type ModelsResponse = z.infer<typeof modelsResponseSchema>;
 export type AuditRequest = z.infer<typeof auditRequestSchema>;
 export type AuditResponse = z.infer<typeof auditResponseSchema>;
+
+export const workspaceDashboardStatusSchema = z.enum([
+  "deployed",
+  "ready",
+  "review",
+  "fallback",
+  "failed"
+]);
+export type WorkspaceDashboardStatus = z.infer<typeof workspaceDashboardStatusSchema>;
+
+export const workspaceDashboardResponseSchema = z
+  .object({
+    workspace: workspaceSchema,
+    metrics: z
+      .object({
+        verified_monthly_savings_usd: z.number().nonnegative().nullable(),
+        verified_savings_note: nonEmptyStringSchema,
+        prompts_optimized: z.number().int().nonnegative(),
+        eval_pass_average: z.number().min(0).max(1).nullable(),
+        models_flagged: z.number().int().nonnegative()
+      })
+      .strict(),
+    recent_projects: z.array(
+      z
+        .object({
+          project_id: idSchema,
+          project_name: nonEmptyStringSchema,
+          prompt_id: idSchema.nullable(),
+          prompt_name: nonEmptyStringSchema.nullable(),
+          provider: providerSchema,
+          current_model_id: nonEmptyStringSchema,
+          fit: modelFitSchema.nullable(),
+          savings_usd: z.number().nonnegative().nullable(),
+          savings_status: z.enum(["verified", "unverified", "blocked", "not_available"]),
+          last_eval_at: isoDateTimeSchema.nullable(),
+          status: workspaceDashboardStatusSchema
+        })
+        .strict()
+    ),
+    notes: z.array(nonEmptyStringSchema)
+  })
+  .strict();
+export type WorkspaceDashboardResponse = z.infer<typeof workspaceDashboardResponseSchema>;
 
 export const promptCreateRequestSchema = z
   .object({

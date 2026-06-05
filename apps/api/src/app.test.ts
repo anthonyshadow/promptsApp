@@ -106,6 +106,33 @@ describe("public API routes", () => {
     expect((await app.request("/models?provider=openai&supportsTools=maybe")).status).toBe(400);
   });
 
+  test("GET /workspaces/:slug/dashboard aggregates seeded project value state", async () => {
+    const app = createTestApp();
+    const dashboard = await expectOkJson(await app.request("/workspaces/acme-ai/dashboard"));
+
+    expect(dashboard.workspace.slug).toBe("acme-ai");
+    expect(dashboard.metrics.verified_monthly_savings_usd).toBeNull();
+    expect(dashboard.metrics.prompts_optimized).toBe(1);
+    expect(dashboard.metrics.eval_pass_average).toBeNull();
+    expect(dashboard.metrics.models_flagged).toBe(1);
+    expect(dashboard.metrics.verified_savings_note).toContain("No verified monthly savings");
+    expect(dashboard.recent_projects).toHaveLength(1);
+    expect(dashboard.recent_projects[0]).toMatchObject({
+      project_name: "Support classifier",
+      provider: "openai",
+      fit: "overpowered",
+      savings_status: "blocked",
+      status: "review"
+    });
+    expect(dashboard.notes.join(" ")).toContain("Unverified registry metadata");
+  });
+
+  test("GET /workspaces/:slug/dashboard returns 404 for unknown workspaces", async () => {
+    const response = await createTestApp().request("/workspaces/missing/dashboard");
+
+    expect(response.status).toBe(404);
+  });
+
   test("POST /prompts persists project, prompt, and raw prompt version records", async () => {
     const repository = createMemoryRepository(createDemoRepositorySeed());
     const app = createApp({ repository });
