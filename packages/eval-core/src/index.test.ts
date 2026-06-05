@@ -3,6 +3,8 @@ import type { PromptAnalysis, QualityCheckDefinition, TestCase } from "@promptop
 import {
   aggregateEvalRun,
   autoDraftQualityContract,
+  costQualityFrontier,
+  decideRecommendation,
   getEvalComboVerdict,
   parseCsvTestCases,
   runDeterministicChecks,
@@ -202,6 +204,74 @@ describe("eval scoring", () => {
   });
 });
 
+describe("recommendation decision rules", () => {
+  test("rejects must-pass failures and selects winner, cheaper alternative, and fallback from passing combos", () => {
+    const baseline = createEvalResult("result_baseline", "candidate_baseline", 0.97, 0.04, 520, "low", "pass");
+    const balanced = createEvalResult("result_balanced", "candidate_balanced", 0.96, 0.02, 430, "low", "pass");
+    const conservative = createEvalResult("result_conservative", "candidate_conservative", 0.98, 0.03, 410, "low", "pass");
+    const aggressive = createEvalResult("result_aggressive", "candidate_aggressive", 0.88, 0.01, 360, "high", "fail", 1);
+
+    const decision = decideRecommendation({
+      evalRunId: "eval_run_test",
+      results: [baseline, balanced, conservative, aggressive],
+      passThreshold: 0.95
+    });
+
+    expect(decision.winnerResultId).toBe("result_balanced");
+    expect(decision.cheaperAlternativeResultId).toBe("result_conservative");
+    expect(decision.strongerFallbackResultId).toBe("result_conservative");
+    expect(decision.rejectedCombos).toHaveLength(1);
+    expect(decision.rejectedCombos[0]?.reason).toContain("Must-pass failure");
+    expect(decision.productionRecommendationAllowed).toBe(true);
+  });
+
+  test("returns no-switch fallback and blockers when no combo passes", () => {
+    const baseline = createEvalResult("result_baseline", "candidate_baseline", 0.84, 0.05, 600, "medium", "fail", 0);
+    const aggressive = createEvalResult("result_aggressive", "candidate_aggressive", 0.72, 0.01, 350, "high", "fail", 2);
+
+    const decision = decideRecommendation({
+      evalRunId: "eval_run_test",
+      results: [baseline, aggressive],
+      passThreshold: 0.95
+    });
+
+    expect(decision.productionRecommendationAllowed).toBe(false);
+    expect(decision.productionBlockers.join(" ")).toContain("No combo passed");
+    expect(decision.winnerResultId).toBe("result_baseline");
+    expect(decision.strongerFallbackResultId).toBe("result_baseline");
+    expect(decision.riskNotes.join(" ")).toContain("keep the current setup");
+  });
+
+  test("labels savings unverified when registry metadata is stale or demo", () => {
+    const baseline = createEvalResult("result_baseline", "candidate_baseline", 0.97, 0.05, 600, "low", "pass", 0, "unverified");
+    const balanced = createEvalResult("result_balanced", "candidate_balanced", 0.97, 0.02, 420, "low", "pass", 0, "unverified");
+
+    const decision = decideRecommendation({
+      evalRunId: "eval_run_test",
+      results: [baseline, balanced],
+      passThreshold: 0.95
+    });
+
+    expect(decision.registryFreshness).toBe("unverified");
+    expect(decision.savingsSummary).toContain("unverified");
+    expect(decision.riskNotes.join(" ")).toContain("not a verified claim");
+  });
+
+  test("builds chart-ready cost-quality frontier roles", () => {
+    const points = costQualityFrontier(
+      [
+        createEvalResult("result_baseline", "candidate_baseline", 0.97, 0.05, 600, "low", "pass"),
+        createEvalResult("result_balanced", "candidate_balanced", 0.97, 0.02, 420, "low", "pass"),
+        createEvalResult("result_failed", "candidate_aggressive", 0.6, 0.01, 360, "high", "fail", 1)
+      ],
+      { evalRunId: "eval_run_test", passThreshold: 0.95 }
+    );
+
+    expect(points.map((point) => point.role)).toEqual(["baseline", "winner_candidate", "failed"]);
+    expect(points[2]?.notes.join(" ")).toContain("Must-pass failure");
+  });
+});
+
 describe("CSV test case parser", () => {
   test("parses 5-50 CSV test cases", () => {
     const csv = [
@@ -276,5 +346,40 @@ function deterministicCheckResult(
     mustPass,
     passed,
     failureReason: passed ? null : "failed"
+  };
+}
+
+function createEvalResult(
+  id: string,
+  candidateId: string,
+  passRate: number,
+  estimatedCostUsd: number,
+  latencyMs: number,
+  riskLevel: "low" | "medium" | "high" | "critical",
+  verdict: "pass" | "fail" | "blocked",
+  mustPassFailures = 0,
+  costEstimateStatus: "verified" | "unverified" | "blocked" = "verified"
+) {
+  return {
+    id,
+    eval_run_id: "eval_run_test",
+    candidate_id: candidateId,
+    prompt_version_id: "prompt_version_test",
+    model_registry_record_id: `model_${id}`,
+    provider: "openai" as const,
+    model_id: `openai-${id}`,
+    quality_score: passRate,
+    pass_rate: passRate,
+    must_pass_failures: mustPassFailures,
+    input_tokens: 120,
+    output_tokens: 80,
+    estimated_cost_usd: estimatedCostUsd,
+    cost_estimate_status: costEstimateStatus,
+    latency_ms: latencyMs,
+    risk_level: riskLevel,
+    verdict,
+    failed_check_ids: mustPassFailures > 0 ? ["check_must_pass"] : [],
+    is_mock: true,
+    created_at: "2026-06-03T12:00:00.000Z"
   };
 }

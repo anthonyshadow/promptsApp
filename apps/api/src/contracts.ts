@@ -231,6 +231,45 @@ export const evalRunDetailResponseSchema = z
   .strict();
 export type EvalRunDetailResponse = z.infer<typeof evalRunDetailResponseSchema>;
 
+export const recommendationDecisionResponseSchema = z
+  .object({
+    evalRunId: idSchema,
+    winnerResultId: idSchema.nullable(),
+    cheaperAlternativeResultId: idSchema.nullable(),
+    strongerFallbackResultId: idSchema.nullable(),
+    rejectedCombos: z.array(
+      z
+        .object({
+          resultId: idSchema,
+          candidateId: idSchema,
+          modelId: nonEmptyStringSchema,
+          reason: nonEmptyStringSchema,
+          failedCheckIds: z.array(idSchema),
+          mustPassFailures: z.number().int().nonnegative()
+        })
+        .strict()
+    ),
+    riskNotes: z.array(nonEmptyStringSchema),
+    productionRecommendationAllowed: z.boolean(),
+    productionBlockers: z.array(nonEmptyStringSchema),
+    registryFreshness: z.enum(["fresh", "stale", "unverified", "deprecated"]),
+    savingsSummary: nonEmptyStringSchema.nullable(),
+    rankedPassingResultIds: z.array(idSchema)
+  })
+  .strict();
+export type RecommendationDecisionResponse = z.infer<typeof recommendationDecisionResponseSchema>;
+
+export const reportDetailResponseSchema = z
+  .object({
+    report: recommendationReportSchema,
+    eval_run: evalRunSchema,
+    results: z.array(evalResultSchema),
+    frontier_points: evalRunDetailResponseSchema.shape.frontier_points,
+    decision: recommendationDecisionResponseSchema
+  })
+  .strict();
+export type ReportDetailResponse = z.infer<typeof reportDetailResponseSchema>;
+
 export const reportCreateRequestSchema = z
   .object({
     project_id: idSchema,
@@ -248,6 +287,11 @@ export const reportExportResponseSchema = z
         format: reportArtifactFormatSchema,
         download_url: nonEmptyStringSchema,
         redaction_state: z.enum(["redacted", "revealed", "not_sensitive"]),
+        filename: nonEmptyStringSchema,
+        content_type: nonEmptyStringSchema,
+        content: nonEmptyStringSchema,
+        redacted_share_package: metadataSchema,
+        eval_snapshot: metadataSchema,
         todo: nonEmptyStringSchema
       })
       .strict()

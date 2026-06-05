@@ -12,6 +12,9 @@ import type {
   PromptOptimizeResponse,
   QualityContractRequest,
   QualityContractResponse,
+  ReportCreateRequest,
+  ReportDetailResponse,
+  ReportExportResponse,
   TestCaseCreateRequest,
   TestCaseMutationResponse,
   TestCasePatchRequest
@@ -54,6 +57,9 @@ export type PromptOptsApiClient = {
   ) => Promise<TestCaseMutationResponse>;
   createEvalRun: (request: EvalRunCreateRequest) => Promise<EvalRun>;
   getEvalRun: (evalRunId: string) => Promise<EvalRunDetailResponse>;
+  createReport: (request: ReportCreateRequest) => Promise<ReportDetailResponse["report"]>;
+  getReport: (reportId: string) => Promise<ReportDetailResponse>;
+  exportReport: (reportId: string, format: "markdown" | "json" | "pdf") => Promise<ReportExportResponse>;
 };
 
 export function createPromptOptsApiClient(baseUrl: string): PromptOptsApiClient {
@@ -177,6 +183,39 @@ export function createPromptOptsApiClient(baseUrl: string): PromptOptsApiClient 
       }
 
       return (await response.json()) as EvalRunDetailResponse;
+    },
+    async createReport(request) {
+      const response = await fetch(`${baseUrl}/reports`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(request)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Report create returned ${response.status}`);
+      }
+
+      return (await response.json()) as ReportDetailResponse["report"];
+    },
+    async getReport(reportId) {
+      const response = await fetch(`${baseUrl}/reports/${encodeURIComponent(reportId)}`);
+
+      if (!response.ok) {
+        throw new Error(`Report detail returned ${response.status}`);
+      }
+
+      return (await response.json()) as ReportDetailResponse;
+    },
+    async exportReport(reportId, format) {
+      const response = await fetch(
+        `${baseUrl}/reports/${encodeURIComponent(reportId)}/export?format=${encodeURIComponent(format)}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`Report export returned ${response.status}`);
+      }
+
+      return (await response.json()) as ReportExportResponse;
     }
   };
 }

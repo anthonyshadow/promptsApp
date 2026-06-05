@@ -177,4 +177,40 @@ describe("public route screens", () => {
     expect(html).toContain("Winner candidate");
     expect(html).toContain("Failed checks");
   });
+
+  test("renders the recommendation report and redacted export package", () => {
+    const apiState: ApiState = { status: "not-configured" };
+    const reportHtml = renderToString(
+      <PublicRouteScreen
+        apiClient={null}
+        apiState={apiState}
+        appState={createInitialPublicAppState()}
+        registryModels={demoModelRegistry}
+        route={parsePublicRoute("/app/reports/report_demo_support")}
+        updateAppState={() => undefined}
+        onNavigate={() => undefined}
+      />
+    );
+    const exportHtml = renderToString(
+      <PublicRouteScreen
+        apiClient={null}
+        apiState={apiState}
+        appState={createInitialPublicAppState()}
+        registryModels={demoModelRegistry}
+        route={parsePublicRoute("/app/reports/report_demo_support/export")}
+        updateAppState={() => undefined}
+        onNavigate={() => undefined}
+      />
+    );
+
+    expect(reportHtml).toContain("Recommended setup");
+    expect(reportHtml).toContain("Cheaper alternative");
+    expect(reportHtml).toContain("Stronger fallback");
+    expect(reportHtml).toContain("Deployment routing");
+    expect(reportHtml).toContain("Risk notes");
+    expect(exportHtml).toContain("Redacted by default");
+    expect(exportHtml).toContain("Selected export");
+    expect(exportHtml).toContain("Share package");
+    expect(exportHtml).not.toContain("{{ticket_text}}");
+  });
 });

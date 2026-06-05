@@ -40,6 +40,7 @@ export type PublicAppState = {
   selectedModelIds: string[];
   selectedTestCaseIds: string[];
   activeEvalRunId: string;
+  activeReportId: string;
 };
 
 const demoCreatedAt = "2026-06-03T12:00:00.000Z";
@@ -412,7 +413,8 @@ export function createInitialPublicAppState(): PublicAppState {
     selectedCandidateIds: demoEvalRun.candidate_ids,
     selectedModelIds: demoEvalRun.model_registry_record_ids,
     selectedTestCaseIds: demoTestCases.map((testCase) => testCase.id),
-    activeEvalRunId: demoEvalRun.id
+    activeEvalRunId: demoEvalRun.id,
+    activeReportId: demoReport.id
   };
 }
 

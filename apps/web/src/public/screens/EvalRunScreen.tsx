@@ -62,6 +62,7 @@ function EvalRunScreen({
   }));
   const [testCases, setTestCases] = useState<TestCase[]>(demoTestCases);
   const [qualityContractId, setQualityContractId] = useState(demoQualityContract.id);
+  const [reportState, setReportState] = useState<"idle" | "creating" | "error">("idle");
   const selectedTestCaseIds = appState.selectedTestCaseIds.length > 0
     ? appState.selectedTestCaseIds
     : testCases.map((testCase) => testCase.id);
@@ -220,6 +221,28 @@ function EvalRunScreen({
     }
   }
 
+  async function createReportAndNavigate() {
+    if (!apiClient) {
+      onNavigate("/app/reports/report_demo_support");
+      return;
+    }
+
+    setReportState("creating");
+
+    try {
+      const report = await apiClient.createReport({
+        project_id: appState.projectId,
+        eval_run_id: detail.eval_run.id
+      });
+
+      updateAppState({ activeReportId: report.id });
+      setReportState("idle");
+      onNavigate(`/app/reports/${report.id}`);
+    } catch {
+      setReportState("error");
+    }
+  }
+
   return (
     <div className={contentStackStyle}>
       <section className={heroBandStyle} aria-labelledby="eval-title">
@@ -232,10 +255,14 @@ function EvalRunScreen({
             Queue state and failed combos stay visible. Threshold {Math.round(appState.passThreshold * 100)}%, zero must-pass failures required.
           </p>
         </div>
-        <button className={primaryButtonStyle} type="button" onClick={() => onNavigate("/app/reports/report_demo_support")}>
-          Review report
+        <button className={primaryButtonStyle} type="button" onClick={() => void createReportAndNavigate()}>
+          {reportState === "creating" ? "Creating report" : "Review report"}
         </button>
       </section>
+
+      {reportState === "error" ? (
+        <StatusNotice tone="warn" title="Report generation failed" body="Run or refresh the eval matrix before generating the recommendation report." />
+      ) : null}
 
       <section className={splitGridStyle} aria-label="Eval setup">
         <section className={listPanelStyle}>

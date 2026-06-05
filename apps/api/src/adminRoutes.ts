@@ -297,7 +297,7 @@ export function createAdminApiRoutes() {
         return c.json(
           regenerateReportResponseSchema.parse({
             report,
-            todo: "Report regeneration is mocked until report-generator is implemented."
+            todo: "Admin report regeneration is mocked until this route calls the report-generator worker."
           })
         );
       })

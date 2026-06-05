@@ -107,9 +107,16 @@ function PublicRouteScreen({
         />
       );
     case "report":
-      return <ReportScreen onNavigate={onNavigate} />;
+      return (
+        <ReportScreen
+          apiClient={apiClient}
+          appState={appState}
+          onNavigate={onNavigate}
+          reportId={route.reportId}
+        />
+      );
     case "report-export":
-      return <ExportScreen />;
+      return <ExportScreen apiClient={apiClient} reportId={route.reportId} />;
     case "not-found":
       return <NotFoundScreen onNavigate={onNavigate} path={route.path} />;
   }

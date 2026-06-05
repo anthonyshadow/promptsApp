@@ -472,6 +472,30 @@ describe("public API routes", () => {
     expect(detail.failures).toHaveLength(0);
     expect(detail.retry_hints.join(" ")).toContain("Registry metadata");
     expect(detail.status_note).toContain("Mock eval runner completed");
+
+    const report = await expectOkJson(
+      await app.request(
+        "/reports",
+        jsonRequest({
+          project_id: DEMO_IDS.project,
+          eval_run_id: evalRun.id
+        })
+      )
+    );
+    const reportDetail = await expectOkJson(await app.request(`/reports/${report.id}`));
+    const exportResponse = await expectOkJson(await app.request(`/reports/${report.id}/export?format=markdown`));
+
+    expect(report.status).toBe("ready");
+    expect(report.winner_result_id).not.toBeNull();
+    expect(report.cheaper_alternative_result_id).not.toBeNull();
+    expect(report.stronger_fallback_result_id).not.toBeNull();
+    expect(report.production_recommendation_allowed).toBe(true);
+    expect(report.savings_summary).toContain("unverified");
+    expect(reportDetail.decision.winnerResultId).toBe(report.winner_result_id);
+    expect(reportDetail.frontier_points.map((point: { role: string }) => point.role)).toContain("winner_candidate");
+    expect(exportResponse.export_package.content).toContain("PromptOpts Recommendation Report");
+    expect(exportResponse.export_package.redacted_share_package.redaction_state).toBe("redacted");
+    expect(exportResponse.export_package.eval_snapshot.result_count).toBe(2);
   });
 
   test("POST /reports includes no-test blocker when quality contract has no cases", async () => {

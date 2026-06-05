@@ -11,6 +11,7 @@
   "references": [
     { "path": "../../packages/admin-core" },
     { "path": "../../workers/eval-runner" },
+    { "path": "../../workers/report-generator" },
     { "path": "../../packages/model-registry" },
     { "path": "../../packages/prompt-core" },
     { "path": "../../packages/shared" }

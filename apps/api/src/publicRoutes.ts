@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { autoDraftQualityContract } from "@promptopts/eval-core";
+import { autoDraftQualityContract, costQualityFrontier, decideRecommendation } from "@promptopts/eval-core";
 import { runEvalRun } from "@promptopts/eval-runner";
+import { generateReportArtifacts } from "@promptopts/report-generator";
 import {
   filterByCapability,
   type ModelCapabilityFilterInput,
@@ -27,6 +28,7 @@ import {
   taskTypeSchema,
   type Account,
   type Contact,
+  type EvalResult,
   type EvalRun,
   type FreeAudit,
   type FreeAuditCapture,
@@ -38,6 +40,7 @@ import {
   type PromptOptsRepository,
   type QualityContract,
   type RecommendationReport,
+  type ReportArtifact,
   type TestCase
 } from "@promptopts/shared";
 import {
@@ -53,6 +56,7 @@ import {
   qualityContractRequestSchema,
   qualityContractResponseSchema,
   reportCreateRequestSchema,
+  reportDetailResponseSchema,
   reportExportResponseSchema,
   testCaseCreateRequestSchema,
   testCaseMutationResponseSchema,
@@ -543,36 +547,46 @@ export function createPublicApiRoutes() {
       }
 
       const timestamp = nowIso();
+      const results = await getEvalResults(c.var.repository, evalRun.id);
       const testCases = await getContractTestCases(c.var.repository, evalRun.quality_contract_id);
-      const productionBlockers = [
-        ...(testCases.length === 0
-          ? ["No test cases exist; production recommendation is disabled until tests are added."]
-          : []),
-        "TODO: eval-core must score the matrix before report generation.",
-        "TODO: model registry rows must be verified before exact savings claims."
-      ];
+      const decision = decideRecommendation({
+        evalRunId: evalRun.id,
+        results,
+        passThreshold: evalRun.pass_threshold,
+        testCaseCount: testCases.length
+      });
       const report: RecommendationReport = {
         id: createId("report"),
         project_id: body.data.project_id,
         eval_run_id: body.data.eval_run_id,
-        status: "blocked",
-        winner_result_id: null,
-        cheaper_alternative_result_id: null,
-        stronger_fallback_result_id: null,
-        risk_summary: ["No production recommendation until eval threshold passes with zero must-pass failures."],
-        savings_summary: null,
-        production_recommendation_allowed: false,
-        production_blockers: productionBlockers,
-        registry_freshness: "unverified",
+        status: decision.productionRecommendationAllowed ? "ready" : "blocked",
+        winner_result_id: decision.winnerResultId,
+        cheaper_alternative_result_id: decision.cheaperAlternativeResultId,
+        stronger_fallback_result_id: decision.strongerFallbackResultId,
+        risk_summary: decision.riskNotes,
+        savings_summary: decision.savingsSummary,
+        production_recommendation_allowed: decision.productionRecommendationAllowed,
+        production_blockers: decision.productionBlockers,
+        registry_freshness: decision.registryFreshness,
         is_mock: true,
-        generated_at: null,
+        generated_at: timestamp,
         created_at: timestamp,
         updated_at: timestamp
       };
+      const generated = generateReportArtifacts({ report, evalRun, results, decision, generatedAt: timestamp });
 
       await c.var.repository.reports.create(report);
+      await persistReportArtifacts(c.var.repository, generated.artifacts);
 
       return c.json(report, 201);
+    })
+    .get("/reports/:id", async (c) => {
+      const reportDetail = await getReportDetail(c.var.repository, c.req.param("id"));
+      if (!reportDetail) {
+        return notFound(c, "Report not found");
+      }
+
+      return c.json(reportDetailResponseSchema.parse(reportDetail));
     })
     .get("/reports/:id/export", async (c) => {
       const report = await c.var.repository.reports.get(c.req.param("id"));
@@ -585,24 +599,43 @@ export function createPublicApiRoutes() {
         return validationProblem(c, formatResult.error);
       }
 
-      const artifacts = (await c.var.repository.report_artifacts.list()).filter(
-        (artifact) => artifact.report_id === report.id
-      );
-      const artifact = artifacts.find((item) => item.format === formatResult.data) ?? artifacts[0];
+      const evalRun = await c.var.repository.eval_runs.get(report.eval_run_id);
+      if (!evalRun) {
+        return notFound(c, "Eval run not found");
+      }
 
-      if (!artifact) {
+      const results = await getEvalResults(c.var.repository, evalRun.id);
+      const testCases = await getContractTestCases(c.var.repository, evalRun.quality_contract_id);
+      const decision = decideRecommendation({
+        evalRunId: evalRun.id,
+        results,
+        passThreshold: evalRun.pass_threshold,
+        testCaseCount: testCases.length
+      });
+      const generated = generateReportArtifacts({ report, evalRun, results, decision });
+      await persistReportArtifacts(c.var.repository, generated.artifacts);
+
+      const content = generated.contents.find((item) => item.format === formatResult.data);
+      const artifact = generated.artifacts.find((item) => item.format === formatResult.data);
+
+      if (!content || !artifact) {
         return notFound(c, "Report artifact not found");
       }
 
       return c.json(
         reportExportResponseSchema.parse({
           report,
-          artifacts,
+          artifacts: generated.artifacts,
           export_package: {
             format: formatResult.data,
             download_url: artifact.storage_uri,
             redaction_state: artifact.redaction_state,
-            todo: "Object storage download signing is not implemented yet."
+            filename: content.filename,
+            content_type: content.content_type,
+            content: content.content,
+            redacted_share_package: generated.redacted_share_package,
+            eval_snapshot: generated.eval_snapshot,
+            todo: "Object storage download signing is not implemented yet; MVP returns generated content inline."
           }
         })
       );
@@ -704,6 +737,57 @@ async function getContractTestCases(repository: PromptOptsRepository, contractId
   const testCases = await repository.test_cases.list();
 
   return testCases.filter((testCase) => testCase.quality_contract_id === contractId);
+}
+
+async function getEvalResults(repository: PromptOptsRepository, evalRunId: string): Promise<EvalResult[]> {
+  const results = await repository.eval_results.list();
+
+  return results.filter((result) => result.eval_run_id === evalRunId);
+}
+
+async function persistReportArtifacts(
+  repository: PromptOptsRepository,
+  artifacts: ReportArtifact[]
+): Promise<void> {
+  for (const artifact of artifacts) {
+    const existing = await repository.report_artifacts.get(artifact.id);
+
+    if (!existing) {
+      await repository.report_artifacts.create(artifact);
+    }
+  }
+}
+
+async function getReportDetail(repository: PromptOptsRepository, reportId: string) {
+  const report = await repository.reports.get(reportId);
+  if (!report) {
+    return null;
+  }
+
+  const evalRun = await repository.eval_runs.get(report.eval_run_id);
+  if (!evalRun) {
+    return null;
+  }
+
+  const results = await getEvalResults(repository, evalRun.id);
+  const testCases = await getContractTestCases(repository, evalRun.quality_contract_id);
+  const decision = decideRecommendation({
+    evalRunId: evalRun.id,
+    results,
+    passThreshold: evalRun.pass_threshold,
+    testCaseCount: testCases.length
+  });
+
+  return {
+    report,
+    eval_run: evalRun,
+    results,
+    frontier_points: costQualityFrontier(results, {
+      evalRunId: evalRun.id,
+      passThreshold: evalRun.pass_threshold
+    }),
+    decision
+  };
 }
 
 async function getLatestPromptAnalysis(
