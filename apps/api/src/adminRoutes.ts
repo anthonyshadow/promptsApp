@@ -8,7 +8,16 @@ import {
   requireSudo,
   writeAdminAuditEvent
 } from "@promptopts/admin-core";
-import type { Account, ModelRegistryRecord, RecommendationReport, UsageLedgerEntry, Workspace } from "@promptopts/shared";
+import type {
+  Account,
+  AdminAuditLog,
+  EvalRun,
+  ModelRegistryRecord,
+  RecommendationReport,
+  ReportArtifact,
+  UsageLedgerEntry,
+  Workspace
+} from "@promptopts/shared";
 import {
   accountCreateRequestSchema,
   accountPatchRequestSchema,
@@ -16,6 +25,7 @@ import {
   adminAccountsResponseSchema,
   adminEvalRunsResponseSchema,
   adminOverviewResponseSchema,
+  type AdminOverviewResponse,
   adminReasonRequestSchema,
   adminReportsResponseSchema,
   adminUsersResponseSchema,
@@ -60,30 +70,121 @@ export function createAdminApiRoutes() {
       .use("*", requireSudo())
       .use("*", writeAdminAuditEvent())
       .get("/overview", async (c) => {
-        const [accounts, evalRuns, reports, models] = await Promise.all([
+        const [
+          accounts,
+          freeAudits,
+          opportunities,
+          evalRuns,
+          reports,
+          reportArtifacts,
+          models,
+          usageLedger,
+          promptAnalyses,
+          auditLogs
+        ] = await Promise.all([
           c.var.repository.accounts.list(),
+          c.var.repository.free_audits.list(),
+          c.var.repository.opportunities.list(),
           c.var.repository.eval_runs.list(),
           c.var.repository.reports.list(),
-          c.var.repository.model_registry.list()
+          c.var.repository.report_artifacts.list(),
+          c.var.repository.model_registry.list(),
+          c.var.repository.usage_ledger.list(),
+          c.var.repository.prompt_analyses.list(),
+          c.var.repository.admin_audit_logs.list()
         ]);
+        const unverifiedModelCount = models.filter((model) => model.freshness_status !== "fresh").length;
+        const convertedAccounts = new Set(
+          opportunities
+            .filter((opportunity) =>
+              ["eval_ready", "recommended", "won"].includes(opportunity.stage)
+            )
+            .map((opportunity) => opportunity.account_id)
+        ).size;
+        const freeAuditConversionRate =
+          freeAudits.length > 0 ? convertedAccounts / freeAudits.length : null;
+        const failedExports = countFailedReportExports(reports, reportArtifacts);
+        const secretScanWarnings = promptAnalyses.filter((analysis) =>
+          analysis.risk_level === "high" || analysis.risk_level === "critical"
+        ).length;
 
         return c.json(
           adminOverviewResponseSchema.parse({
             kpis: {
-              accounts: accounts.length,
-              eval_runs: evalRuns.length,
+              mrr_usd: null,
+              trials: accounts.filter((account) => account.stage === "trial").length,
+              failed_payments: 0,
+              free_audits: freeAudits.length,
+              free_audit_conversion_rate: freeAuditConversionRate,
+              converted_accounts: convertedAccounts,
+              eval_jobs: countEvalJobs(evalRuns),
+              provider_spend_usd: null,
+              usage_ledger_events: usageLedger.length,
               reports: reports.length,
-              unverified_models: models.filter((model) => model.freshness_status !== "fresh").length
+              unverified_models: unverifiedModelCount
             },
-            live_risks: [
-              "Admin auth is mocked for local skeleton only.",
-              "Model registry records may be demo/unverified."
-            ],
-            system_health: {
+            health: {
               api: "ok",
+              eval_worker: "mocked",
+              report_worker: "mocked",
+              queue: "mocked",
+              storage: "mocked",
               repository: "memory",
               admin_auth: "mocked"
-            }
+            },
+            risk_queue: [
+              {
+                id: "risk_stale_model_prices",
+                label: "Stale model prices",
+                severity: unverifiedModelCount > 0 ? "high" : "low",
+                count: unverifiedModelCount,
+                link: "/__admin/model-registry",
+                redacted_summary:
+                  unverifiedModelCount > 0
+                    ? "Model registry rows need source URL and verification before exact savings claims."
+                    : "Model registry pricing metadata is currently fresh."
+              },
+              {
+                id: "risk_failed_report_exports",
+                label: "Failed report exports",
+                severity: failedExports > 0 ? "medium" : "low",
+                count: failedExports,
+                link: "/__admin/reports",
+                redacted_summary:
+                  failedExports > 0
+                    ? "Some report artifacts need storage/checksum confirmation."
+                    : "No failed report export artifacts are visible in memory storage."
+              },
+              {
+                id: "risk_secret_scan_warnings",
+                label: "Secret-scan warnings",
+                severity: secretScanWarnings > 0 ? "critical" : "low",
+                count: secretScanWarnings,
+                link: "/__admin/eval-jobs",
+                redacted_summary:
+                  secretScanWarnings > 0
+                    ? "High-risk prompt analyses exist; overview shows counts only."
+                    : "No high-risk prompt analysis warnings are visible in metadata."
+              },
+              {
+                id: "risk_deletion_requests",
+                label: "Deletion requests",
+                severity: "low",
+                count: 0,
+                link: "/__admin/reports",
+                redacted_summary: "Deletion request tracking is placeholder-only until durable lifecycle jobs are wired."
+              }
+            ],
+            live_activity: createLiveActivityFeed({
+              auditLogs,
+              evalRuns,
+              reports,
+              freeAuditCount: freeAudits.length
+            }),
+            notes: [
+              "Overview is redacted metadata only; raw prompts, provider keys, and raw reports are not returned.",
+              "Revenue, provider spend, queue, worker, and storage health are placeholders until durable services are wired."
+            ]
           })
         );
       })
@@ -446,4 +547,121 @@ export function createAdminApiRoutes() {
         );
       })
   );
+}
+
+function countEvalJobs(evalRuns: EvalRun[]): AdminOverviewResponse["kpis"]["eval_jobs"] {
+  return {
+    queued: evalRuns.filter((evalRun) => evalRun.status === "queued").length,
+    running: evalRuns.filter((evalRun) => evalRun.status === "running").length,
+    failed: evalRuns.filter((evalRun) => evalRun.status === "failed").length,
+    retrying: evalRuns.filter((evalRun) => evalRun.status === "retrying").length
+  };
+}
+
+function countFailedReportExports(
+  reports: RecommendationReport[],
+  artifacts: ReportArtifact[]
+): number {
+  return reports.filter((report) => {
+    const reportArtifacts = artifacts.filter((artifact) => artifact.report_id === report.id);
+
+    if (report.status === "exported" && reportArtifacts.length === 0) {
+      return true;
+    }
+
+    return reportArtifacts.some((artifact) => artifact.checksum === null && artifact.size_bytes === null);
+  }).length;
+}
+
+function createLiveActivityFeed(input: {
+  auditLogs: AdminAuditLog[];
+  evalRuns: EvalRun[];
+  reports: RecommendationReport[];
+  freeAuditCount: number;
+}): AdminOverviewResponse["live_activity"] {
+  const auditActivity = input.auditLogs
+    .slice()
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .slice(0, 5)
+    .map((log) => ({
+      id: `activity_${log.id}`,
+      label: formatAuditLogActivity(log),
+      actor: redactIdentifier(log.admin_user_id, "admin"),
+      target: `${log.target_type}:${redactIdentifier(log.target_id, "target")}`,
+      timestamp: log.created_at,
+      link: getAdminActivityLink(log.target_type),
+      redaction_state: "redacted" as const
+    }));
+  const evalActivity = input.evalRuns.slice(0, 2).map((evalRun) => ({
+    id: `activity_${evalRun.id}`,
+    label: `Eval job ${evalRun.status}`,
+    actor: "system",
+    target: `eval:${redactIdentifier(evalRun.id, "target")}`,
+    timestamp: evalRun.completed_at ?? evalRun.started_at ?? evalRun.queued_at,
+    link: "/__admin/eval-jobs",
+    redaction_state: "redacted" as const
+  }));
+  const reportActivity = input.reports.slice(0, 2).map((report) => ({
+    id: `activity_${report.id}`,
+    label: `Report ${report.status}`,
+    actor: "system",
+    target: `report:${redactIdentifier(report.id, "target")}`,
+    timestamp: report.updated_at,
+    link: "/__admin/reports",
+    redaction_state: "redacted" as const
+  }));
+  const freeAuditActivity =
+    input.freeAuditCount > 0
+      ? [
+          {
+            id: "activity_free_audit_rollup",
+            label: `${input.freeAuditCount} free audit signal(s) captured`,
+            actor: "system",
+            target: "account:rollup",
+            timestamp: new Date(0).toISOString(),
+            link: "/__admin/accounts",
+            redaction_state: "redacted" as const
+          }
+        ]
+      : [];
+
+  return [...auditActivity, ...evalActivity, ...reportActivity, ...freeAuditActivity]
+    .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+    .slice(0, 8);
+}
+
+function formatAuditLogActivity(log: AdminAuditLog): string {
+  if (log.action.includes("/overview")) {
+    return "Overview metadata read";
+  }
+
+  return `${log.target_type} ${log.action_scope}`;
+}
+
+function getAdminActivityLink(targetType: string): string {
+  switch (targetType) {
+    case "accounts":
+      return "/__admin/accounts";
+    case "users":
+      return "/__admin/users";
+    case "eval_runs":
+      return "/__admin/eval-jobs";
+    case "models":
+    case "model_registry":
+      return "/__admin/model-registry";
+    case "reports":
+      return "/__admin/reports";
+    case "billing":
+      return "/__admin/billing";
+    case "audit_logs":
+      return "/__admin/audit-logs";
+    default:
+      return "/__admin/overview";
+  }
+}
+
+function redactIdentifier(id: string, prefix: string): string {
+  const suffix = id.replace(/[^a-zA-Z0-9]/g, "").slice(-6);
+
+  return `${prefix}_${suffix || "redacted"}`;
 }

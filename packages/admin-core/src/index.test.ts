@@ -98,7 +98,8 @@ describe("admin security middleware", () => {
     await app.request("/admin-api/audit-logs", { headers });
 
     const after = await repository.admin_audit_logs.list();
-    expect(after.length).toBe(before.length + 2);
+    expect(after.length).toBe(before.length + 3);
+    expect(after.at(-3)?.target_type).toBe("overview");
     expect(after.at(-2)?.target_type).toBe("accounts");
     expect(after.at(-1)?.target_type).toBe("audit_logs");
   });
@@ -118,6 +119,10 @@ describe("admin route policies", () => {
     expect(resolveAdminRoutePolicy("POST", "/admin-api/break-glass")).toMatchObject({
       action_scope: "break_glass",
       requires_sudo: true
+    });
+    expect(resolveAdminRoutePolicy("GET", "/admin-api/overview")).toMatchObject({
+      action_scope: "read_metadata",
+      sensitive_read: true
     });
   });
 });

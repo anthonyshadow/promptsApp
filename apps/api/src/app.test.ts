@@ -7,6 +7,7 @@ import {
 } from "@promptopts/shared";
 import { createMockAdminHeaders } from "@promptopts/admin-core";
 import { createApp } from "./app";
+import { adminOverviewResponseSchema } from "./contracts";
 
 function createTestApp() {
   return createApp({
@@ -700,6 +701,35 @@ describe("public API routes", () => {
 });
 
 describe("admin API routes", () => {
+  test("GET /admin-api/overview returns redacted command-center metadata and writes audit", async () => {
+    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const app = createApp({ repository });
+    const before = await repository.admin_audit_logs.list();
+    const overview = adminOverviewResponseSchema.parse(
+      await expectOkJson(await app.request("/admin-api/overview", adminGetRequest()))
+    );
+    const after = await repository.admin_audit_logs.list();
+    const serialized = JSON.stringify(overview);
+
+    expect(overview.kpis.free_audits).toBe(1);
+    expect(overview.kpis.eval_jobs.queued).toBe(1);
+    expect(overview.kpis.unverified_models).toBeGreaterThan(0);
+    expect(overview.health.api).toBe("ok");
+    expect(overview.health.queue).toBe("mocked");
+    expect(overview.risk_queue.map((risk) => risk.label)).toEqual([
+      "Stale model prices",
+      "Failed report exports",
+      "Secret-scan warnings",
+      "Deletion requests"
+    ]);
+    expect(overview.live_activity.length).toBeGreaterThan(0);
+    expect(serialized).not.toContain("Classify the inbound support message");
+    expect(serialized).not.toContain("{{customer_message}}");
+    expect(serialized).not.toContain("prompt_text");
+    expect(after.length).toBe(before.length + 1);
+    expect(after.at(-1)?.target_type).toBe("overview");
+  });
+
   test("implements the admin route map behind placeholder admin middleware", async () => {
     const app = createTestApp();
 

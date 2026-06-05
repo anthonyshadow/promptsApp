@@ -132,6 +132,13 @@ export function resolveAdminRoutePolicy(method: string, path: string): AdminRout
     return readPolicy("accounts");
   }
 
+  if (normalizedPath === "/admin-api/overview") {
+    return {
+      ...readPolicy("overview"),
+      sensitive_read: true
+    };
+  }
+
   return readPolicy("overview");
 }
 

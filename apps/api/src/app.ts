@@ -20,6 +20,7 @@ export type ApiApp = typeof app;
 export type {
   AuditRequest,
   AuditResponse,
+  AdminOverviewResponse,
   ModelsResponse,
   EvalRunCreateRequest,
   EvalRunDetailResponse,

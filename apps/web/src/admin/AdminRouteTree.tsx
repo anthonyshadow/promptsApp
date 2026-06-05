@@ -1,32 +1,25 @@
+import { css } from "@emotion/css";
 import { getAdminGateCopy, getAdminGateStateFromSearch } from "../adminGate";
+import { normalizeApiUrl } from "../apiViewState";
 import type { AdminGateState } from "../viewTypes";
-import {
-  adminEyebrowStyle,
-  adminRootStyle,
-  adminShellStyle,
-  adminTitleStyle,
-  gateBodyStyle,
-  gateHeaderStyle,
-  gatePanelStyle,
-  gateStatusStyle,
-  gateTitleStyle,
-  sudoButtonStyle,
-  sudoFormStyle,
-  sudoInputStyle,
-  sudoLabelStyle
-} from "../styles";
+import AdminOverviewScreen from "./AdminOverviewScreen";
 
 function AdminRouteTree() {
   const gateState = getAdminGateStateFromSearch(window.location.search);
+  const apiBaseUrl = normalizeApiUrl(import.meta.env.VITE_API_URL);
 
   return (
-    <main className={adminRootStyle}>
-      <section className={adminShellStyle} aria-labelledby="admin-title">
-        <p className={adminEyebrowStyle}>Internal only</p>
-        <h1 className={adminTitleStyle} id="admin-title">
+    <main className={rootStyle}>
+      <section className={shellStyle} aria-labelledby="admin-title">
+        <p className={eyebrowStyle}>Internal only</p>
+        <h1 className={titleStyle} id="admin-title">
           PromptOpts Admin
         </h1>
-        <AdminGateStateView state={gateState} />
+        {gateState === "authorized" ? (
+          <AdminOverviewScreen apiBaseUrl={apiBaseUrl} />
+        ) : (
+          <AdminGateStateView state={gateState} />
+        )}
       </section>
     </main>
   );
@@ -64,3 +57,108 @@ function AdminGateStateView({ state }: { state: AdminGateState }) {
     </div>
   );
 }
+
+const rootStyle = css({
+  minHeight: "100vh",
+  padding: "28px",
+  background: "#111714",
+  color: "#eef4ed",
+  "@media (max-width: 720px)": {
+    padding: "18px"
+  }
+});
+
+const shellStyle = css({
+  width: "min(100%, 1180px)",
+  margin: "0 auto",
+  paddingTop: "5vh"
+});
+
+const eyebrowStyle = css({
+  margin: "0 0 12px",
+  color: "#9fbaaa",
+  fontSize: "0.78rem",
+  fontWeight: 700,
+  letterSpacing: 0,
+  textTransform: "uppercase"
+});
+
+const titleStyle = css({
+  margin: 0,
+  fontSize: "2.4rem",
+  lineHeight: 1,
+  letterSpacing: 0,
+  "@media (max-width: 560px)": {
+    fontSize: "2rem"
+  }
+});
+
+const gatePanelStyle = css({
+  marginTop: "28px",
+  border: "1px solid #415149",
+  borderRadius: "8px",
+  background: "#17211d",
+  padding: "24px"
+});
+
+const gateHeaderStyle = css({
+  display: "grid",
+  gap: "8px"
+});
+
+const gateStatusStyle = css({
+  width: "fit-content",
+  border: "1px solid #6f8878",
+  borderRadius: "8px",
+  padding: "4px 8px",
+  color: "#c7ddcf",
+  fontSize: "0.8rem"
+});
+
+const gateTitleStyle = css({
+  color: "#ffffff",
+  fontSize: "1.35rem",
+  lineHeight: 1.25
+});
+
+const gateBodyStyle = css({
+  maxWidth: "680px",
+  margin: "16px 0 0",
+  color: "#c7d6ce",
+  lineHeight: 1.6
+});
+
+const sudoFormStyle = css({
+  display: "grid",
+  gridTemplateColumns: "minmax(180px, 1fr) auto",
+  gap: "10px",
+  marginTop: "20px",
+  "@media (max-width: 640px)": {
+    gridTemplateColumns: "1fr"
+  }
+});
+
+const sudoLabelStyle = css({
+  gridColumn: "1 / -1",
+  color: "#dfeae3",
+  fontSize: "0.9rem"
+});
+
+const sudoInputStyle = css({
+  minHeight: "42px",
+  border: "1px solid #657b6e",
+  borderRadius: "8px",
+  background: "#101713",
+  color: "#ffffff",
+  padding: "0 12px"
+});
+
+const sudoButtonStyle = css({
+  minHeight: "42px",
+  border: "1px solid #b8d1c0",
+  borderRadius: "8px",
+  background: "#dcebe0",
+  color: "#101713",
+  padding: "0 14px",
+  fontWeight: 700
+});
