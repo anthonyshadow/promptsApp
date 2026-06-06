@@ -3,7 +3,7 @@
 ## A. Launch Blockers
 
 - [ ] P0 security M: Replace mock auth/MFA/sudo headers with real session storage. Why it matters: hidden routes are not security. Acceptance: `/admin-api/*` rejects unauthenticated, non-MFA, missing-scope, and missing-sudo requests without mock headers.
-- [ ] P0 backend L: Implement Postgres repository adapter and migration runner. Why it matters: audit logs and customer prompts must be durable. Acceptance: repository contract tests pass against local Postgres.
+- [x] P0 backend L: Implement Postgres repository adapter and migration runner. Status: complete - adapter, migration runner, seed/reset commands, durable schema coverage, and repository contract tests now pass against local Postgres. Why it matters: audit logs and customer prompts must be durable. Acceptance: repository contract tests pass against local Postgres.
 - [ ] P0 security M: Encrypt provider keys and keep them non-viewable. Why it matters: BYOK requires trust. Acceptance: stored keys are opaque, reveal routes do not exist, audit events cover key actions.
 - [ ] P0 infra M: Wire object storage artifact lifecycle and deletion jobs. Why it matters: report deletion cannot be memory-only. Acceptance: deletion marks DB records, removes object artifacts, and audits every step.
 - [ ] P0 backend M: Verify initial model registry rows from official source URLs. Why it matters: exact savings claims require fresh metadata. Acceptance: active rows include source URL, last verified date, verifier, approval state, and stale warnings.

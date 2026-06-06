@@ -78,7 +78,7 @@ packages/
   admin-core/          Admin roles, scopes, middleware, policies, redaction
 ```
 
-The API uses a swappable repository boundary. The local demo and tests use a memory repository seeded with synthetic data. Postgres schema/migration metadata and local infra docs exist, but a live Postgres adapter is not wired as the default runtime yet.
+The API uses a swappable repository boundary. The local demo and most tests use a memory repository seeded with synthetic data. A Postgres adapter, migration runner, seed command, and optional repository contract test path exist for durable development when `DATABASE_URL` is configured.
 
 ## Local Setup
 
@@ -93,6 +93,22 @@ bun run dev:web
 
 With `VITE_API_URL=http://localhost:3000`, the web app reads the local Hono API. Without it, the UI falls back to synthetic local demo data.
 
+Memory remains the easiest demo mode. To force memory even when `DATABASE_URL` is present, set:
+
+```bash
+PROMPTOPTS_REPOSITORY=memory
+```
+
+To use Postgres locally, start the optional infra services, set `DATABASE_URL`, then run:
+
+```bash
+bun run db:migrate
+bun run db:seed
+bun run dev:api
+```
+
+`bun run db:rollback` is intentionally unsupported for MVP migrations. `bun run db:reset` is local-dev only and requires `PROMPTOPTS_CONFIRM_DB_RESET=local-dev`.
+
 ## Environment Variables
 
 `.env.example` contains placeholders for:
@@ -100,6 +116,7 @@ With `VITE_API_URL=http://localhost:3000`, the web app reads the local Hono API.
 - `PORT`
 - `VITE_API_URL`
 - `DATABASE_URL`
+- `PROMPTOPTS_REPOSITORY`
 - `REDIS_URL`
 - object storage settings
 - `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`
@@ -128,6 +145,7 @@ bun run build
 - React route tree for the public optimizer and hidden admin surfaces.
 - Hono public/admin route skeletons with Zod validation and typed response shapes.
 - Shared schemas and repository interfaces.
+- Postgres migration runner, seed command, and repository adapter behind the shared interface.
 - Deterministic prompt parsing, sensitive-content warnings, cost estimation, model-fit labels, candidate generation, model shortlist, quality checks, eval scoring, recommendation decisions, and export package generation.
 - Memory-backed local demo and test persistence.
 - Admin route policies, redaction helpers, mock middleware, sudo requirements, and append-only audit-log behavior.
@@ -137,7 +155,7 @@ bun run build
 
 - User auth, admin sessions, MFA, sudo, and action scopes.
 - Live provider calls.
-- Durable Postgres adapter execution.
+- Production-grade Postgres pooling; the current adapter uses the local `psql` CLI execution layer.
 - Redis/queue execution.
 - Object storage artifact deletion.
 - Billing provider events.
@@ -170,7 +188,7 @@ Audit is a preflight, not a switch recommendation. The original prompt and curre
 
 Current local MVP status is green for the mocked demo loop: provider selection, prompt paste, audit, model-fit label, candidate generation, model shortlist, test cases, eval matrix, recommendation report, export, hidden admin UI, guarded admin API, Account 360 redaction, eval job control, model registry admin, reports vault, billing admin, audit-log viewer, entitlements, and append-only audit-log tests.
 
-Remaining launch blockers are real auth/MFA/sudo, durable Postgres repository, verified model registry, live provider adapters, durable queue/object storage deletion, and production billing integration.
+Remaining launch blockers are real auth/MFA/sudo, verified model registry, live provider adapters, durable queue/object storage deletion, and production billing integration.
 
 ## Audit And Roadmap
 

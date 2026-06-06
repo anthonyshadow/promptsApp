@@ -10,6 +10,8 @@ Run optional local services for durable PromptOpts development without replacing
 - Redis: future eval/report queues and retry state.
 - MinIO: object-storage-compatible report artifact storage.
 
+The migration runner and Postgres repository adapter currently execute SQL through the local `psql` CLI. Install Postgres client tools before running DB commands.
+
 ## Start
 
 ```bash
@@ -18,10 +20,24 @@ docker compose up -d
 
 The Postgres container runs `packages/shared/src/repositories/postgres/migrations/0001_initial.sql` on first volume creation.
 
+The repo also has explicit migration commands:
+
+```bash
+bun run db:migrate
+bun run db:seed
+```
+
+`bun run db:rollback` documents unsupported rollback. `bun run db:reset` is local-dev only and requires:
+
+```bash
+PROMPTOPTS_CONFIRM_DB_RESET=local-dev bun run db:reset
+```
+
 ## Suggested Local Environment
 
 ```bash
 DATABASE_URL=postgres://promptopts:promptopts@localhost:5432/promptopts
+PROMPTOPTS_REPOSITORY=postgres
 REDIS_URL=redis://localhost:6379
 OBJECT_STORAGE_URL=http://localhost:9000
 OBJECT_STORAGE_BUCKET=promptopts-reports
@@ -31,9 +47,9 @@ OBJECT_STORAGE_SECRET_KEY=promptopts-local-only
 
 ## Notes
 
-- The app and tests still use `createMemoryRepository()` unless a future task explicitly wires a Postgres adapter.
+- The app uses the Postgres repository when `DATABASE_URL` is set and `PROMPTOPTS_REPOSITORY` is not `memory`.
+- The memory repository remains available for tests and no-service local demos.
 - Provider keys are modeled as encrypted ciphertext plus fingerprint metadata only. They must never be displayed after storage.
 - `admin_audit_logs` are append-only in both the repository contract and the Postgres migration.
 - Report deletion is represented with report and artifact deletion state so object cleanup can be audited.
 - Model registry edits should create `model_registry_versions` rows with source URL, `last_verified_at`, `verified_by`, and approval state.
-

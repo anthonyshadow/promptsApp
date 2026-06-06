@@ -85,7 +85,10 @@ export type RepositorySeed = {
   admin_audit_logs?: AdminAuditLog[];
 };
 
+export type RepositoryBackend = "memory" | "postgres";
+
 export interface PromptOptsRepository {
+  backend: RepositoryBackend;
   users: CrudRepository<User>;
   workspaces: CrudRepository<Workspace>;
   projects: CrudRepository<PromptProject>;

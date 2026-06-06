@@ -383,7 +383,7 @@ export const adminOverviewResponseSchema = z
         report_worker: z.enum(["ok", "mocked", "degraded"]),
         queue: z.enum(["ok", "mocked", "degraded"]),
         storage: z.enum(["ok", "mocked", "degraded"]),
-        repository: z.literal("memory"),
+        repository: z.enum(["memory", "postgres"]),
         admin_auth: z.literal("mocked")
       })
       .strict(),

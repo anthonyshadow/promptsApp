@@ -7,13 +7,18 @@ import {
 
 const migrationUrl = new URL("./migrations/0001_initial.sql", import.meta.url);
 
-async function readMigration(): Promise<string> {
-  return Bun.file(migrationUrl).text();
+async function readMigrations(): Promise<string> {
+  const initial = await Bun.file(migrationUrl).text();
+  const operational = await Bun.file(
+    new URL("./migrations/0002_operational_tables.sql", import.meta.url)
+  ).text();
+
+  return `${initial}\n${operational}`;
 }
 
 describe("postgres schema metadata", () => {
   test("declares all durable MVP and admin tables", async () => {
-    const sql = await readMigration();
+    const sql = await readMigrations();
 
     for (const table of POSTGRES_SCHEMA_TABLES) {
       expect(sql).toContain(`CREATE TABLE IF NOT EXISTS ${table}`);
@@ -25,7 +30,7 @@ describe("postgres schema metadata", () => {
   });
 
   test("keeps admin audit logs append-only in durable storage", async () => {
-    const sql = await readMigration();
+    const sql = await readMigrations();
 
     expect(POSTGRES_DURABILITY_INVARIANTS.adminAuditLogsAppendOnly).toContain(
       "update/delete"
@@ -37,7 +42,7 @@ describe("postgres schema metadata", () => {
   });
 
   test("models provider keys as opaque encrypted records only", async () => {
-    const sql = await readMigration();
+    const sql = await readMigrations();
     const providerKeySection = sql.slice(
       sql.indexOf("CREATE TABLE IF NOT EXISTS provider_keys"),
       sql.indexOf("CREATE TABLE IF NOT EXISTS eval_runs")
@@ -51,9 +56,11 @@ describe("postgres schema metadata", () => {
   });
 
   test("represents report deletion and model registry version approval state", async () => {
-    const sql = await readMigration();
+    const sql = await readMigrations();
 
     expect(sql).toContain("deleted_at TIMESTAMPTZ");
+    expect(sql).toContain("retention_state TEXT NOT NULL DEFAULT 'active'");
+    expect(sql).toContain("delete_reason_code TEXT");
     expect(sql).toContain("delete_requested_by_user_id TEXT REFERENCES users(id)");
     expect(sql).toContain("storage_delete_status TEXT NOT NULL DEFAULT 'active'");
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS model_registry_versions");

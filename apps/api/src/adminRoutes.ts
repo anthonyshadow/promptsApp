@@ -167,7 +167,7 @@ export function createAdminApiRoutes() {
               report_worker: "mocked",
               queue: "mocked",
               storage: "mocked",
-              repository: "memory",
+              repository: c.var.repository.backend,
               admin_auth: "mocked"
             },
             risk_queue: [
