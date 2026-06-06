@@ -1,6 +1,11 @@
 import type { Context, MiddlewareHandler } from "hono";
 import type { AdminAuditLog } from "@promptopts/shared";
-import { findActiveSudoGrant, resolveAdminSession, ADMIN_SESSION_COOKIE_NAME } from "./auth";
+import {
+  resolveAdminSession,
+  resolveSudoGrant,
+  writeAdminSecurityAuditEvent,
+  ADMIN_SESSION_COOKIE_NAME
+} from "./auth";
 import { canUseActionScope, isAdminRole, type AdminActionScope } from "./scopes";
 import { resolveAdminRoutePolicy } from "./policies";
 import type {
@@ -67,25 +72,64 @@ export function requireSudo(action?: AdminActionScope): MiddlewareHandler<AdminS
       return adminSecurityError(c, 403, "action_scope_required", "Admin action scope required");
     }
 
-    const sudoGrant = await findActiveSudoGrant(
+    const sudoResolution = await resolveSudoGrant(
       c.var.repository,
       c.var.adminSession.admin_user_id,
       requiredAction
     );
-    if (!sudoGrant || Date.parse(sudoGrant.expires_at) <= Date.now()) {
+
+    if (sudoResolution.state !== "active") {
+      await writeAdminSecurityAuditEvent(c.var.repository, {
+        session: c.var.adminSession,
+        action: sudoResolution.state === "expired"
+          ? "sudo_expired_rejection"
+          : "sudo_required_action_denied",
+        actionScope: requiredAction,
+        targetType: policy.route_scope,
+        targetId: extractTargetId(c.req.path),
+        reasonCode: sudoResolution.state === "wrong_action"
+          ? "sudo_wrong_action"
+          : sudoResolution.state === "expired"
+            ? "sudo_expired"
+            : "sudo_missing",
+        sudoRequestId: "request" in sudoResolution ? sudoResolution.request.id : null,
+        metadata: {
+          path: c.req.path,
+          method: c.req.method,
+          required_action: requiredAction,
+          state: sudoResolution.state
+        }
+      });
+
       return adminSecurityError(c, 403, "sudo_required", "Sudo authorization required");
     }
 
-    if (!sudoGrant.reason_code) {
+    if (!sudoResolution.grant.reason_code) {
       return adminSecurityError(c, 400, "reason_code_required", "Reason code required");
     }
 
     c.set("adminActionContext", {
       ...c.var.adminActionContext,
       action_scope: requiredAction,
-      reason_code: sudoGrant.reason_code,
-      sudo_request_id: sudoGrant.request_id,
+      reason_code: sudoResolution.grant.reason_code,
+      sudo_request_id: sudoResolution.grant.request_id,
       redaction_state: "redacted"
+    });
+
+    await writeAdminSecurityAuditEvent(c.var.repository, {
+      session: c.var.adminSession,
+      action: "sudo_required_action_allowed",
+      actionScope: requiredAction,
+      targetType: policy.route_scope,
+      targetId: extractTargetId(c.req.path),
+      reasonCode: sudoResolution.grant.reason_code,
+      sudoRequestId: sudoResolution.grant.request_id,
+      metadata: {
+        path: c.req.path,
+        method: c.req.method,
+        required_action: requiredAction,
+        expires_at: sudoResolution.grant.expires_at
+      }
     });
 
     await next();

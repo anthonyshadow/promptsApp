@@ -15,7 +15,7 @@ Production readiness depends on closing private-beta blockers first, then provin
 | Gate | Status | Dependency | Acceptance criteria |
 | --- | --- | --- | --- |
 | Durable data and audit logs | complete | Implementation prompt 1 | Postgres adapter is default for deployed runtime; audit logs are append-only and queryable. |
-| Production admin trust | in_progress | Prompts 2-3 | Session, MFA, RBAC, action scopes, sudo, break-glass, and audit events are enforced without mock headers. |
+| Production admin trust | in_progress | Prompts 2-3 | Session, MFA, RBAC, action scopes, sudo lifecycle, and audit events are enforced without mock headers; break-glass remains a placeholder flow behind sudo policy. |
 | Provider-key trust | in_progress | Prompt 4 | BYOK keys are encrypted, non-viewable, rotatable/deletable, and audited. |
 | Deletion and retention | in_progress | Prompt 5 | Prompt/report deletion removes or tombstones scoped data and object artifacts with retryable evidence. |
 | Verified model registry | in_progress | Prompt 6 | Active recommendations use fresh/approved registry metadata; stale/demo rows cannot produce exact savings claims. |

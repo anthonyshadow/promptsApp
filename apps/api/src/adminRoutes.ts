@@ -4,7 +4,10 @@ import { generateReportArtifacts } from "@promptopts/report-generator";
 import {
   ADMIN_SESSION_COOKIE_NAME,
   authenticateAdminPassword,
+  canUseActionScope,
   createStoredAdminSession,
+  endSudoRequests,
+  getSudoStatus,
   redactProviderError,
   redactPromptPreview,
   requireActionScope,
@@ -14,6 +17,7 @@ import {
   requireSudo,
   revokeAdminSession,
   rotateAdminSessionAfterMfa,
+  startSudoRequest,
   verifyAdminTotp,
   writeAdminAuditEvent
 } from "@promptopts/admin-core";
@@ -55,6 +59,11 @@ import {
   adminAuthMeResponseSchema,
   adminAuthMfaRequestSchema,
   adminAuthSessionResponseSchema,
+  adminSudoEndRequestSchema,
+  adminSudoEndResponseSchema,
+  adminSudoStartRequestSchema,
+  adminSudoStartResponseSchema,
+  adminSudoStatusResponseSchema,
   adminAccountDetailResponseSchema,
   adminAccountsResponseSchema,
   adminEvalRunDetailResponseSchema,
@@ -175,6 +184,18 @@ function serializeAdminSessionCookie(
   ].join("; ");
 }
 
+function formatSudoStatus(status: Awaited<ReturnType<typeof getSudoStatus>>) {
+  const activeUntil = status.active
+    .map((request) => request.expires_at)
+    .sort()
+    .at(-1) ?? null;
+
+  return {
+    ...status,
+    active_until: activeUntil
+  };
+}
+
 export function createAdminApiRoutes() {
   return (
     new Hono<ApiEnv>()
@@ -266,6 +287,71 @@ export function createAdminApiRoutes() {
         expireAdminSessionCookie(c);
 
         return c.json(adminAuthLogoutResponseSchema.parse({ signed_out: true }));
+      })
+      .get("/sudo/status", requireSession, requireMfa, requireAdminRole, async (c) => {
+        return c.json(
+          adminSudoStatusResponseSchema.parse(
+            formatSudoStatus(await getSudoStatus(c.var.repository, c.var.adminSession))
+          )
+        );
+      })
+      .post("/sudo/start", requireSession, requireMfa, requireAdminRole, async (c) => {
+        const body = await validateJson(c, adminSudoStartRequestSchema);
+        if (!body.success) {
+          return body.response;
+        }
+
+        if (!(await verifyAdminTotp(c.var.repository, c.var.adminSession.admin_user_id, body.data.mfa_code))) {
+          return adminAuthError(c, 403, "mfa_invalid", "Invalid MFA code");
+        }
+
+        if (!canUseActionScope(c.var.adminSession, body.data.action_scope)) {
+          return adminAuthError(c, 403, "action_scope_required", "Admin action scope required");
+        }
+
+        const sudoRequest = await startSudoRequest(c.var.repository, {
+          session: c.var.adminSession,
+          actionScope: body.data.action_scope,
+          reasonCode: body.data.reason_code,
+          targetType: body.data.target_type ?? null,
+          targetId: body.data.target_id ?? null,
+          metadata: readAdminRequestMetadata(c)
+        });
+
+        return c.json(
+          adminSudoStartResponseSchema.parse({
+            sudo_request: sudoRequest,
+            status: formatSudoStatus(await getSudoStatus(c.var.repository, c.var.adminSession))
+          }),
+          201
+        );
+      })
+      .post("/sudo/end", requireSession, requireMfa, requireAdminRole, async (c) => {
+        const body = await validateJson(c, adminSudoEndRequestSchema);
+        if (!body.success) {
+          return body.response;
+        }
+
+        const revokeInput = {
+          session: c.var.adminSession,
+          reasonCode: body.data.reason_code
+        };
+        const revoked = await endSudoRequests(
+          c.var.repository,
+          body.data.action_scope
+            ? {
+                ...revokeInput,
+                actionScope: body.data.action_scope
+              }
+            : revokeInput
+        );
+
+        return c.json(
+          adminSudoEndResponseSchema.parse({
+            revoked,
+            status: formatSudoStatus(await getSudoStatus(c.var.repository, c.var.adminSession))
+          })
+        );
       })
       // Security-critical order: session -> MFA -> role -> action scope -> sudo -> audit.
       .use("*", requireSession)
@@ -1026,7 +1112,7 @@ export function createAdminApiRoutes() {
           currency: "usd",
           reason_code: body.data.reason_code,
           issued_by_admin_user_id: c.var.adminSession.admin_user_id,
-          sudo_request_id: c.var.adminSession.sudo_grant?.request_id ?? null,
+          sudo_request_id: c.var.adminActionContext.sudo_request_id,
           billing_event_id: billingEvent.id,
           is_mock: true,
           created_at: timestamp

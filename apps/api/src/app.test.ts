@@ -120,11 +120,20 @@ function createAdminTestSeed(): Required<RepositorySeed> {
   ): SudoRequest => ({
     id,
     admin_user_id: adminUserId,
+    role: adminUserId.includes("support") ? "support" : "owner",
+    requested_action: actionScope,
+    target_type: null,
+    target_id: null,
     action_scope: actionScope,
     reason_code: "route_test_sudo",
-    status: "approved",
+    status: "active",
     approved_by_admin_user_id: adminUserId,
+    approved_at: timestamp,
+    activated_at: timestamp,
+    revoked_at: null,
     expires_at: expiresAt,
+    ip_address: "127.0.0.1",
+    user_agent: "PromptOpts admin route test",
     created_at: timestamp
   });
 
@@ -1023,6 +1032,149 @@ describe("admin API routes", () => {
     expect(response.status).toBe(401);
   });
 
+  test("starts, reports, and ends sudo with MFA recheck and audit events", async () => {
+    const repository = createAdminTestRepository();
+    const app = createApp({ repository });
+    const before = await repository.admin_audit_logs.list();
+
+    const missingReason = await app.request(
+      "/admin-api/sudo/start",
+      adminJsonRequest({
+        action_scope: "issue_billing_credit",
+        reason_code: "",
+        mfa_code: createTotpCode("JBSWY3DPEHPK3PXP")
+      })
+    );
+    expect(missingReason.status).toBe(400);
+
+    const started = await expectOkJson(
+      await app.request(
+        "/admin-api/sudo/start",
+        adminJsonRequest({
+          action_scope: "issue_billing_credit",
+          reason_code: "billing_credit_test",
+          mfa_code: createTotpCode("JBSWY3DPEHPK3PXP"),
+          target_type: "billing",
+          target_id: DEMO_IDS.workspace
+        })
+      )
+    );
+    expect(started.sudo_request.status).toBe("active");
+    expect(started.sudo_request.reason_code).toBe("billing_credit_test");
+    expect(started.status.active).toHaveLength(1);
+
+    const credit = await expectOkJson(
+      await app.request(
+        `/admin-api/billing/${DEMO_IDS.workspace}/credit`,
+        adminJsonRequest({
+          feature: "report_exports",
+          quantity: 1,
+          reason_code: "billing_credit_test"
+        })
+      )
+    );
+    expect(credit.credit.sudo_request_id).toBe(started.sudo_request.id);
+
+    const status = await expectOkJson(
+      await app.request("/admin-api/sudo/status", adminGetRequest())
+    );
+    expect(status.active[0].id).toBe(started.sudo_request.id);
+
+    const ended = await expectOkJson(
+      await app.request(
+        "/admin-api/sudo/end",
+        adminJsonRequest({
+          action_scope: "issue_billing_credit",
+          reason_code: "operator_done"
+        })
+      )
+    );
+    expect(ended.revoked[0].status).toBe("revoked");
+    expect(ended.status.active).toHaveLength(0);
+
+    const afterEndCredit = await app.request(
+      `/admin-api/billing/${DEMO_IDS.workspace}/credit`,
+      adminJsonRequest({
+        feature: "report_exports",
+        quantity: 1,
+        reason_code: "billing_credit_after_end"
+      })
+    );
+    expect(afterEndCredit.status).toBe(403);
+
+    const after = await repository.admin_audit_logs.list();
+    const actions = after.slice(before.length).map((log) => log.action);
+    expect(actions).toContain("sudo_start");
+    expect(actions).toContain("sudo_required_action_allowed");
+    expect(actions).toContain("sudo_end");
+    expect(actions).toContain("sudo_required_action_denied");
+  });
+
+  test("rejects expired and wrong-action sudo grants with audit events", async () => {
+    const repository = createAdminTestRepository();
+    const app = createApp({ repository });
+    const timestamp = "2026-06-06T12:00:00.000Z";
+    await repository.sudo_requests.create({
+      id: "sudo_request_test_expired_delete",
+      admin_user_id: "admin_user_test_owner",
+      role: "owner",
+      requested_action: "delete_report",
+      target_type: "reports",
+      target_id: DEMO_IDS.report,
+      action_scope: "delete_report",
+      reason_code: "expired_delete_test",
+      status: "active",
+      approved_by_admin_user_id: "admin_user_test_owner",
+      approved_at: timestamp,
+      activated_at: timestamp,
+      revoked_at: null,
+      expires_at: "2026-06-06T12:01:00.000Z",
+      ip_address: "127.0.0.1",
+      user_agent: "PromptOpts admin route test",
+      created_at: timestamp
+    });
+    const beforeExpired = await repository.admin_audit_logs.list();
+
+    const expiredDelete = await app.request(
+      `/admin-api/reports/${DEMO_IDS.report}/delete`,
+      adminJsonRequest({
+        reason_code: "expired_delete_test",
+        sudo_request_id: "sudo_request_test_expired_delete"
+      })
+    );
+    expect(expiredDelete.status).toBe(403);
+    expect((await repository.sudo_requests.get("sudo_request_test_expired_delete"))?.status).toBe("expired");
+    expect((await repository.admin_audit_logs.list()).slice(beforeExpired.length).map((log) => log.action)).toContain(
+      "sudo_expired_rejection"
+    );
+
+    const started = await expectOkJson(
+      await app.request(
+        "/admin-api/sudo/start",
+        adminJsonRequest({
+          action_scope: "reveal_report",
+          reason_code: "raw_report_review",
+          mfa_code: createTotpCode("JBSWY3DPEHPK3PXP"),
+          target_type: "reports",
+          target_id: DEMO_IDS.report
+        })
+      )
+    );
+    expect(started.sudo_request.requested_action).toBe("reveal_report");
+
+    const wrongActionDelete = await app.request(
+      `/admin-api/reports/${DEMO_IDS.report}/delete`,
+      adminJsonRequest({
+        reason_code: "wrong_action_delete",
+        sudo_request_id: started.sudo_request.id
+      })
+    );
+    expect(wrongActionDelete.status).toBe(403);
+    expect((await repository.admin_audit_logs.list()).map((log) => log.action)).toContain(
+      "sudo_required_action_denied"
+    );
+  });
+
   test("GET /admin-api/overview returns redacted command-center metadata and writes audit", async () => {
     const repository = createAdminTestRepository();
     const app = createApp({ repository });
@@ -1311,8 +1463,7 @@ describe("admin API routes", () => {
           `/admin-api/reports/${DEMO_IDS.report}/delete`,
           adminJsonRequest(
             {
-              reason_code: "customer_request",
-              sudo_request_id: "sudo_request_mock"
+              reason_code: "customer_request"
             },
             { sudo_grant: { reason_code: "customer_request" } }
           )
@@ -1590,7 +1741,7 @@ describe("admin API routes", () => {
     await app.request(
       `/admin-api/reports/${DEMO_IDS.report}/delete`,
       adminJsonRequest(
-        { reason_code: "customer_delete", sudo_request_id: "sudo_request_mock" },
+        { reason_code: "customer_delete" },
         { sudo_grant: { reason_code: "customer_delete" } }
       )
     );
@@ -1603,15 +1754,17 @@ describe("admin API routes", () => {
     );
 
     const after = await repository.admin_audit_logs.list();
-    expect(after.length).toBe(before.length + 5);
-    expect(after.slice(-5).map((log) => log.target_type)).toEqual([
+    const added = after.slice(before.length);
+    expect(added).toHaveLength(8);
+    expect(added.filter((log) => log.action === "sudo_required_action_allowed")).toHaveLength(3);
+    expect(added.filter((log) => log.action !== "sudo_required_action_allowed").map((log) => log.target_type)).toEqual([
       "reports",
       "reports",
       "reports",
       "reports",
       "billing"
     ]);
-    expect(after.slice(-5).map((log) => log.action_scope)).toEqual([
+    expect(added.filter((log) => log.action !== "sudo_required_action_allowed").map((log) => log.action_scope)).toEqual([
       "reveal_report",
       "retry_eval",
       "retry_eval",

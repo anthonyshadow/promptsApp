@@ -72,7 +72,9 @@ function AdminBillingScreen({ apiBaseUrl }: { apiBaseUrl?: string | undefined })
         },
         {
           actionScopes: "read_metadata,issue_billing_credit",
-          sudoReasonCode: "admin_goodwill_credit"
+          sudoReasonCode: "admin_goodwill_credit",
+          targetType: "workspaces",
+          targetId: workspaceId
         }
       ).catch(() => undefined);
     }

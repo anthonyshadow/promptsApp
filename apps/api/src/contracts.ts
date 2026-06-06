@@ -25,6 +25,7 @@ import {
   recommendationReportSchema,
   reportArtifactFormatSchema,
   reportArtifactSchema,
+  sudoRequestSchema,
   taskTypeSchema,
   taskSchema,
   testCaseSchema,
@@ -114,6 +115,50 @@ export const adminAuthLogoutResponseSchema = z
   })
   .strict();
 export type AdminAuthLogoutResponse = z.infer<typeof adminAuthLogoutResponseSchema>;
+
+export const adminSudoStartRequestSchema = z
+  .object({
+    action_scope: adminActionScopeSchema,
+    reason_code: nonEmptyStringSchema,
+    mfa_code: z.string().regex(/^\d{6}$/),
+    target_type: nonEmptyStringSchema.nullable().optional(),
+    target_id: idSchema.nullable().optional()
+  })
+  .strict();
+export type AdminSudoStartRequest = z.infer<typeof adminSudoStartRequestSchema>;
+
+export const adminSudoEndRequestSchema = z
+  .object({
+    action_scope: adminActionScopeSchema.optional(),
+    reason_code: nonEmptyStringSchema
+  })
+  .strict();
+export type AdminSudoEndRequest = z.infer<typeof adminSudoEndRequestSchema>;
+
+export const adminSudoStatusResponseSchema = z
+  .object({
+    active: z.array(sudoRequestSchema),
+    expired_count: z.number().int().nonnegative(),
+    active_until: isoDateTimeSchema.nullable()
+  })
+  .strict();
+export type AdminSudoStatusResponse = z.infer<typeof adminSudoStatusResponseSchema>;
+
+export const adminSudoStartResponseSchema = z
+  .object({
+    sudo_request: sudoRequestSchema,
+    status: adminSudoStatusResponseSchema
+  })
+  .strict();
+export type AdminSudoStartResponse = z.infer<typeof adminSudoStartResponseSchema>;
+
+export const adminSudoEndResponseSchema = z
+  .object({
+    revoked: z.array(sudoRequestSchema),
+    status: adminSudoStatusResponseSchema
+  })
+  .strict();
+export type AdminSudoEndResponse = z.infer<typeof adminSudoEndResponseSchema>;
 
 export const modelsResponseSchema = z
   .object({
@@ -1060,7 +1105,7 @@ export type ReportRevealResponse = z.infer<typeof reportRevealResponseSchema>;
 export const reportDeleteRequestSchema = z
   .object({
     reason_code: nonEmptyStringSchema,
-    sudo_request_id: idSchema.nullable()
+    sudo_request_id: idSchema.nullable().optional()
   })
   .strict();
 export type ReportDeleteRequest = z.infer<typeof reportDeleteRequestSchema>;

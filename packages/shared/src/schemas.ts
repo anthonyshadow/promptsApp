@@ -133,9 +133,11 @@ export type AdminUserStatus = z.infer<typeof adminUserStatusSchema>;
 
 export const sudoRequestStatusSchema = z.enum([
   "requested",
+  "active",
   "approved",
   "denied",
   "expired",
+  "revoked",
   "used"
 ]);
 export type SudoRequestStatus = z.infer<typeof sudoRequestStatusSchema>;
@@ -257,11 +259,20 @@ export const sudoRequestSchema = z
   .object({
     id: idSchema,
     admin_user_id: idSchema,
+    role: adminRoleNameSchema,
+    requested_action: adminActionScopeSchema,
+    target_type: z.string().min(1).nullable(),
+    target_id: idSchema.nullable(),
     action_scope: adminActionScopeSchema,
     reason_code: z.string().min(1),
     status: sudoRequestStatusSchema,
     approved_by_admin_user_id: idSchema.nullable(),
+    approved_at: isoDateTimeSchema.nullable(),
+    activated_at: isoDateTimeSchema.nullable(),
+    revoked_at: isoDateTimeSchema.nullable(),
     expires_at: isoDateTimeSchema,
+    ip_address: z.string().min(1),
+    user_agent: z.string().min(1),
     created_at: isoDateTimeSchema
   })
   .strict();

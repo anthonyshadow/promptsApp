@@ -22,6 +22,7 @@ Audit `/__admin/*` and `/admin-api/*` against the internal-only trust model.
 - Admin sessions are persisted; `/admin-api/auth/login` creates pre-MFA sessions and `/admin-api/auth/mfa/verify` rotates MFA-verified sessions.
 - Mock `x-admin-*` headers are rejected and covered by tests.
 - Route policies in `admin-core` are the server-side source of truth for sensitive reads and dangerous actions.
+- Sudo start/status/end routes enforce MFA recheck, reason code, action scope binding, expiry, and revocation.
 - Public navigation does not link to `/__admin/*`.
 
 ## Audit-Log Coverage
@@ -38,20 +39,21 @@ Audit `/__admin/*` and `/admin-api/*` against the internal-only trust model.
 
 ## Sudo Coverage
 
-- Raw prompt reveal, raw report reveal, report deletion, billing credit, impersonation placeholder, and break-glass placeholder require elevated controls.
-- Dangerous actions require reason codes in request schemas.
+- Raw prompt reveal, raw report reveal, report deletion, billing credit, impersonation placeholder, and break-glass placeholder require sudo.
+- Dangerous actions reject missing, expired, or wrong-action sudo grants and audit allowed/denied decisions.
+- The admin UI shows a sudo request modal and an active sudo banner.
 
 ## Known Gaps
 
-- Full sudo request/approval lifecycle is not complete; dangerous routes currently read durable approved `sudo_requests`.
+- Raw reveal payload retrieval and break-glass behavior remain placeholders behind sudo policy.
 - Report deletion marks memory-backed records and artifacts; object storage cleanup is mocked.
 - Billing and provider-key workflows do not yet use production services.
 - Audit-log search UI is not a rich operator surface yet.
 
 ## Critical Launch Blockers
 
-- Complete real sudo request lifecycle before private beta.
 - Keep deployed environments on durable Postgres before handling real customer data.
+- Encrypt provider keys and keep them non-viewable before live provider calls.
 - Add object storage deletion jobs before claiming deletion is complete.
 
 ## Fixes Completed In This Pass
@@ -60,3 +62,4 @@ Audit `/__admin/*` and `/admin-api/*` against the internal-only trust model.
 - Added the dedicated `/__admin/audit-logs` React surface.
 - Added comments documenting security-critical route and decision boundaries in core packages.
 - Replaced mock admin header authorization with stored session/MFA/RBAC enforcement.
+- Added real sudo lifecycle with MFA recheck, expiry, revocation, wrong-action rejection, UI state, and lifecycle audits.

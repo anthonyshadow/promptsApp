@@ -1,5 +1,7 @@
 import { css } from "@emotion/css";
 import { useEffect, useState } from "react";
+import type { AdminSudoStatusResponse } from "@promptopts/api";
+import type { AdminActionScope } from "@promptopts/shared";
 import { getAdminGateCopy, getAdminGateStateFromSearch } from "../adminGate";
 import { normalizeApiUrl } from "../apiViewState";
 import type { AdminGateState } from "../viewTypes";
@@ -12,11 +14,16 @@ import AdminModelRegistryScreen from "./AdminModelRegistryScreen";
 import AdminOverviewScreen from "./AdminOverviewScreen";
 import AdminReportsVaultScreen from "./AdminReportsVaultScreen";
 import {
+  ADMIN_SUDO_REQUIRED_EVENT,
   AdminApiError,
+  type AdminSudoRequiredEventDetail,
   clearAdminSessionToken,
+  endAdminSudo,
   fetchAdminMe,
+  fetchAdminSudoStatus,
   getStoredAdminSessionToken,
   loginAdmin,
+  startAdminSudo,
   verifyAdminMfa
 } from "./adminApi";
 
@@ -27,6 +34,9 @@ function AdminRouteTree() {
     apiBaseUrl ? "checking" : getAdminGateStateFromSearch(window.location.search)
   );
   const [authError, setAuthError] = useState<string | null>(null);
+  const [sudoStatus, setSudoStatus] = useState<AdminSudoStatusResponse | null>(null);
+  const [sudoPrompt, setSudoPrompt] = useState<AdminSudoRequiredEventDetail | null>(null);
+  const [sudoMessage, setSudoMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!apiBaseUrl) {
@@ -36,6 +46,26 @@ function AdminRouteTree() {
 
     void refreshAdminSession(apiBaseUrl, setGateState, setAuthError);
   }, [apiBaseUrl]);
+
+  useEffect(() => {
+    function handleSudoRequired(event: Event) {
+      const detail = (event as CustomEvent<AdminSudoRequiredEventDetail>).detail;
+      setSudoPrompt(detail);
+      setSudoMessage("Sudo is required before that dangerous action can continue.");
+    }
+
+    window.addEventListener(ADMIN_SUDO_REQUIRED_EVENT, handleSudoRequired);
+    return () => window.removeEventListener(ADMIN_SUDO_REQUIRED_EVENT, handleSudoRequired);
+  }, []);
+
+  useEffect(() => {
+    if (!apiBaseUrl || gateState !== "authorized") {
+      setSudoStatus(null);
+      return;
+    }
+
+    void refreshSudoStatus(apiBaseUrl, setSudoStatus, setSudoMessage);
+  }, [apiBaseUrl, gateState]);
 
   async function handleLogin(input: { email: string; password: string }) {
     if (!apiBaseUrl) {
@@ -66,9 +96,57 @@ function AdminRouteTree() {
     try {
       await verifyAdminMfa(apiBaseUrl, code);
       await refreshAdminSession(apiBaseUrl, setGateState, setAuthError);
+      await refreshSudoStatus(apiBaseUrl, setSudoStatus, setSudoMessage);
     } catch {
       setAuthError("Invalid MFA code.");
       setGateState("mfa-required");
+    }
+  }
+
+  async function handleStartSudo(input: { reasonCode: string; mfaCode: string }) {
+    if (!apiBaseUrl || !sudoPrompt) {
+      setSudoMessage("Admin API URL is required to start sudo.");
+      return;
+    }
+
+    try {
+      const response = await startAdminSudo(apiBaseUrl, {
+        actionScope: sudoPrompt.actionScope,
+        reasonCode: input.reasonCode,
+        mfaCode: input.mfaCode,
+        targetType: sudoPrompt.targetType,
+        targetId: sudoPrompt.targetId
+      });
+      setSudoStatus(response.status);
+      setSudoPrompt(null);
+      setSudoMessage(`Sudo active for ${formatSudoAction(response.sudo_request.requested_action)}.`);
+    } catch (error) {
+      setSudoMessage(error instanceof AdminApiError ? error.message : "Sudo start failed.");
+    }
+  }
+
+  async function handleEndSudo(actionScope?: AdminActionScope) {
+    if (!apiBaseUrl) {
+      setSudoMessage("Admin API URL is required to revoke sudo.");
+      return;
+    }
+
+    try {
+      const response = await endAdminSudo(
+        apiBaseUrl,
+        actionScope
+          ? {
+              actionScope,
+              reasonCode: "operator_sudo_end"
+            }
+          : {
+              reasonCode: "operator_sudo_end"
+            }
+      );
+      setSudoStatus(response.status);
+      setSudoMessage(response.revoked.length ? "Sudo revoked." : "No active sudo grant was found.");
+    } catch (error) {
+      setSudoMessage(error instanceof AdminApiError ? error.message : "Sudo revoke failed.");
     }
   }
 
@@ -81,6 +159,13 @@ function AdminRouteTree() {
         </h1>
         {gateState === "authorized" ? <AdminInternalNav activeRoute={route.kind} /> : null}
         {gateState === "authorized" ? (
+          <AdminSudoBanner
+            message={sudoMessage}
+            status={sudoStatus}
+            onEnd={(actionScope) => void handleEndSudo(actionScope)}
+          />
+        ) : null}
+        {gateState === "authorized" ? (
           renderAuthorizedAdminRoute(route, apiBaseUrl)
         ) : (
           <AdminGateStateView
@@ -90,6 +175,13 @@ function AdminRouteTree() {
             onMfa={handleMfa}
           />
         )}
+        {gateState === "authorized" && sudoPrompt ? (
+          <AdminSudoModal
+            prompt={sudoPrompt}
+            onCancel={() => setSudoPrompt(null)}
+            onSubmit={handleStartSudo}
+          />
+        ) : null}
       </section>
     </main>
   );
@@ -258,6 +350,115 @@ function AdminGateStateView({
   );
 }
 
+function AdminSudoBanner({
+  message,
+  status,
+  onEnd
+}: {
+  message: string | null;
+  status: AdminSudoStatusResponse | null;
+  onEnd: (actionScope?: AdminActionScope) => void;
+}) {
+  const active = status?.active ?? [];
+  const firstActive = active[0] ?? null;
+
+  return (
+    <section className={sudoBannerStyle} aria-label="Sudo status">
+      <div>
+        <span className={gateStatusStyle}>{firstActive ? "Sudo active" : "Sudo inactive"}</span>
+        <p className={sudoBannerTextStyle}>
+          {message ??
+            (firstActive
+              ? `${formatSudoAction(firstActive.requested_action)} expires ${formatExpiry(firstActive.expires_at)}.`
+              : "Dangerous actions require MFA recheck, reason code, and a time-boxed sudo grant.")}
+        </p>
+        {status?.expired_count ? (
+          <p className={sudoExpiredTextStyle}>{status.expired_count} expired sudo grant rejected and marked expired.</p>
+        ) : null}
+      </div>
+      {firstActive ? (
+        <button className={sudoSecondaryButtonStyle} type="button" onClick={() => onEnd(firstActive.requested_action)}>
+          End sudo
+        </button>
+      ) : null}
+    </section>
+  );
+}
+
+function AdminSudoModal({
+  prompt,
+  onCancel,
+  onSubmit
+}: {
+  prompt: AdminSudoRequiredEventDetail;
+  onCancel: () => void;
+  onSubmit: (input: { reasonCode: string; mfaCode: string }) => void;
+}) {
+  const [reasonCode, setReasonCode] = useState(prompt.suggestedReasonCode);
+  const [mfaCode, setMfaCode] = useState("");
+
+  return (
+    <div className={modalBackdropStyle} role="presentation">
+      <form
+        className={sudoModalStyle}
+        aria-labelledby="sudo-modal-title"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit({ reasonCode, mfaCode });
+        }}
+      >
+        <div className={gateHeaderStyle}>
+          <span className={gateStatusStyle}>Step-up required</span>
+          <h2 className={sudoModalTitleStyle} id="sudo-modal-title">
+            Start sudo for {formatSudoAction(prompt.actionScope)}
+          </h2>
+        </div>
+        <p className={gateBodyStyle}>
+          Dangerous admin actions require MFA recheck, a reason code, and a time-boxed server-side sudo grant.
+        </p>
+        <label className={sudoLabelStyle} htmlFor="sudo-action">
+          Action
+        </label>
+        <input className={sudoInputStyle} id="sudo-action" type="text" value={prompt.actionScope} readOnly />
+        <label className={sudoLabelStyle} htmlFor="sudo-reason-code">
+          Reason code
+        </label>
+        <input
+          className={sudoInputStyle}
+          id="sudo-reason-code"
+          name="sudo-reason-code"
+          required
+          type="text"
+          value={reasonCode}
+          onChange={(event) => setReasonCode(event.currentTarget.value)}
+        />
+        <label className={sudoLabelStyle} htmlFor="sudo-mfa-code">
+          MFA code
+        </label>
+        <input
+          className={sudoInputStyle}
+          id="sudo-mfa-code"
+          inputMode="numeric"
+          maxLength={6}
+          name="sudo-mfa-code"
+          required
+          type="text"
+          value={mfaCode}
+          onChange={(event) => setMfaCode(event.currentTarget.value)}
+        />
+        <div className={sudoModalActionsStyle}>
+          <button className={sudoSecondaryButtonStyle} type="button" onClick={onCancel}>
+            Cancel
+          </button>
+          <button className={sudoButtonStyle} type="submit">
+            Start sudo
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 async function refreshAdminSession(
   apiBaseUrl: string,
   setGateState: (state: AdminGateState) => void,
@@ -375,6 +576,33 @@ function getAdminRoute(pathname: string): AdminRoute {
   return {
     kind: "overview"
   };
+}
+
+async function refreshSudoStatus(
+  apiBaseUrl: string,
+  setSudoStatus: (status: AdminSudoStatusResponse | null) => void,
+  setSudoMessage: (message: string | null) => void
+) {
+  try {
+    const status = await fetchAdminSudoStatus(apiBaseUrl);
+    setSudoStatus(status);
+    if (status.expired_count > 0) {
+      setSudoMessage("Expired sudo was rejected and marked expired.");
+    }
+  } catch {
+    setSudoStatus(null);
+  }
+}
+
+function formatSudoAction(actionScope: AdminActionScope): string {
+  return actionScope.replaceAll("_", " ");
+}
+
+function formatExpiry(value: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(new Date(value));
 }
 
 const rootStyle = css({
@@ -541,4 +769,81 @@ const sudoButtonStyle = css({
   color: "#101713",
   padding: "0 14px",
   fontWeight: 700
+});
+
+const sudoSecondaryButtonStyle = css({
+  minHeight: "42px",
+  border: "1px solid #6f8878",
+  borderRadius: "8px",
+  background: "#17211d",
+  color: "#eef4ed",
+  padding: "0 14px",
+  fontWeight: 700
+});
+
+const sudoBannerStyle = css({
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "16px",
+  marginTop: "16px",
+  border: "1px solid #526a5d",
+  borderRadius: "8px",
+  background: "#16201b",
+  padding: "14px 16px",
+  "@media (max-width: 640px)": {
+    alignItems: "stretch",
+    flexDirection: "column"
+  }
+});
+
+const sudoBannerTextStyle = css({
+  margin: "8px 0 0",
+  color: "#d4e2d9",
+  lineHeight: 1.45
+});
+
+const sudoExpiredTextStyle = css({
+  margin: "6px 0 0",
+  color: "#ffd2c7",
+  fontSize: "0.9rem",
+  fontWeight: 700
+});
+
+const modalBackdropStyle = css({
+  position: "fixed",
+  inset: 0,
+  zIndex: 50,
+  display: "grid",
+  placeItems: "center",
+  padding: "18px",
+  background: "rgba(10, 16, 13, 0.76)"
+});
+
+const sudoModalStyle = css({
+  display: "grid",
+  gap: "12px",
+  width: "min(100%, 520px)",
+  border: "1px solid #6f8878",
+  borderRadius: "8px",
+  background: "#17211d",
+  boxShadow: "0 24px 80px rgba(0, 0, 0, 0.38)",
+  padding: "22px"
+});
+
+const sudoModalTitleStyle = css({
+  margin: 0,
+  color: "#ffffff",
+  fontSize: "1.35rem",
+  lineHeight: 1.2
+});
+
+const sudoModalActionsStyle = css({
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: "10px",
+  marginTop: "4px",
+  "@media (max-width: 420px)": {
+    flexDirection: "column"
+  }
 });

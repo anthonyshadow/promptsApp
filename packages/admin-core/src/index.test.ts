@@ -128,11 +128,20 @@ function createSecurityTestRepository(): PromptOptsRepository {
   const sudo: SudoRequest = {
     id: "admin_core_sudo_delete_report",
     admin_user_id: "admin_core_user_owner_sudo",
+    role: "owner",
+    requested_action: "delete_report",
+    target_type: null,
+    target_id: null,
     action_scope: "delete_report",
     reason_code: "admin_core_delete_report",
-    status: "approved",
+    status: "active",
     approved_by_admin_user_id: "admin_core_user_owner_sudo",
+    approved_at: timestamp,
+    activated_at: timestamp,
+    revoked_at: null,
     expires_at: expiresAt,
+    ip_address: "127.0.0.1",
+    user_agent: "admin-core test",
     created_at: timestamp
   };
   const authSeed: Required<RepositorySeed> = {

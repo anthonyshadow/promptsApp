@@ -24,11 +24,10 @@ Record the pre-cleanup state for the Prompt 22 final review pass.
 - Provider adapters are isolated behind a normalized adapter interface with a mock adapter and inert live placeholders.
 - Eval/report workers execute mocked eval/report flows through package boundaries.
 - Admin UI includes overview, accounts, Account 360, eval jobs, model registry, reports vault, billing, and audit logs.
-- Admin-core enforces stored admin sessions, MFA, RBAC, action scopes, sudo policies, redaction helpers, and append-only audit logging.
+- Admin-core enforces stored admin sessions, MFA, RBAC, action scopes, sudo lifecycle, redaction helpers, and append-only audit logging.
 
 ## What Is Mocked
 
-- Full sudo request/approval lifecycle is still incomplete.
 - Repository writes are memory-backed by default.
 - Provider calls use `MockProviderAdapter`; live OpenAI/Anthropic/Gemini adapters are placeholders.
 - Queue, Redis, worker scheduling, provider spend, object storage deletion, report PDF rendering, billing provider events, and durable lifecycle jobs are mocked or represented as schema/metadata.
@@ -41,7 +40,7 @@ Record the pre-cleanup state for the Prompt 22 final review pass.
 
 ## What Is Incomplete
 
-- Full sudo lifecycle beyond durable approved `sudo_requests`.
+- Break-glass and raw reveal payload retrieval remain placeholder flows behind sudo policy.
 - Production admin provisioning and stronger password-hash policy.
 - Real provider calls, BYOK encrypted key storage, rate limits, retries, and logging policy.
 - Durable queue/job state and object storage artifact lifecycle.
@@ -61,6 +60,6 @@ Record the pre-cleanup state for the Prompt 22 final review pass.
 
 - Keep API route modules split by domain before adding more behavior.
 - Keep schema exports stable while grouping future contracts by product/admin/billing/registry.
-- Complete durable sudo request lifecycle before private beta.
+- Implement provider-key encryption and non-viewability before private beta.
 - Add real visual regression or browser smoke coverage when UI polish becomes a launch blocker.
 - Update README and audit docs so future work starts from actual implementation state.

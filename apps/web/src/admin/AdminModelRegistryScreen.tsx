@@ -71,7 +71,9 @@ function AdminModelRegistryScreen({ apiBaseUrl }: { apiBaseUrl?: string | undefi
         },
         {
           actionScopes: "read_metadata,manage_model_registry",
-          sudoReasonCode: "registry_admin_approval"
+          sudoReasonCode: "registry_admin_approval",
+          targetType: "model_registry",
+          targetId: modelId
         }
       ).catch(() => null);
 

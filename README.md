@@ -119,6 +119,8 @@ bun run dev:api
 
 The admin UI at `/__admin/*` performs `/admin-api/auth/login`, `/admin-api/auth/mfa/verify`, and then uses the returned bearer session token. Sessions are persisted, expire, revoke on logout, and rotate after MFA. Generate a current six-digit TOTP code from the MFA secret; production deployments must provision admins and secrets deliberately.
 
+Dangerous admin actions use `/admin-api/sudo/start`, `/admin-api/sudo/status`, and `/admin-api/sudo/end`. Sudo start requires an MFA recheck, allowed action scope, and reason code; active grants are time-boxed, visible in the admin UI, revocable, and audited.
+
 ## Environment Variables
 
 `.env.example` contains placeholders for:
@@ -161,13 +163,12 @@ bun run build
 - Postgres migration runner, seed command, and repository adapter behind the shared interface.
 - Deterministic prompt parsing, sensitive-content warnings, cost estimation, model-fit labels, candidate generation, model shortlist, quality checks, eval scoring, recommendation decisions, and export package generation.
 - Memory-backed local demo and test persistence.
-- Admin route policies, persisted admin sessions, MFA verification/rotation, RBAC/action scopes, redaction helpers, sudo requirements, and append-only audit-log behavior.
+- Admin route policies, persisted admin sessions, MFA verification/rotation, RBAC/action scopes, redaction helpers, real sudo lifecycle, and append-only audit-log behavior.
 - Unit/integration tests across web, API, packages, workers, repository, storage, and schema metadata.
 
 ## What Is Mocked
 
 - Public user auth and product-user session revocation.
-- Full sudo request/approval lifecycle beyond durable approved sudo rows for protected actions.
 - Live provider calls.
 - Production-grade Postgres pooling; the current adapter uses the local `psql` CLI execution layer.
 - Redis/queue execution.
@@ -179,7 +180,7 @@ bun run build
 
 ## Security And Trust Posture
 
-Prompts, reports, provider payloads, and provider keys are private by default. Admin views are redacted by default. Hidden routes are not treated as security. Dangerous actions require reason codes and sudo policies. Every admin mutation and sensitive read should write append-only `admin_audit_logs`.
+Prompts, reports, provider payloads, and provider keys are private by default. Admin views are redacted by default. Hidden routes are not treated as security. Dangerous actions require MFA recheck, reason codes, time-boxed sudo policies, and append-only audit events. Every admin mutation and sensitive read should write append-only `admin_audit_logs`.
 
 Provider keys are modeled as encrypted/opaque and are never viewable after storage. Production use requires encrypted key storage, object storage deletion, rate-limit/error logging policies, and deliberate production admin provisioning.
 
@@ -202,7 +203,7 @@ Audit is a preflight, not a switch recommendation. The original prompt and curre
 
 Current local MVP status is green for the mocked demo loop: provider selection, prompt paste, audit, model-fit label, candidate generation, model shortlist, test cases, eval matrix, recommendation report, export, hidden admin UI, guarded admin API, Account 360 redaction, eval job control, model registry admin, reports vault, billing admin, audit-log viewer, entitlements, and append-only audit-log tests.
 
-Remaining launch blockers are real sudo lifecycle, provider-key encryption, verified model registry, live provider adapters, durable queue/object storage deletion, and production billing integration.
+Remaining launch blockers are provider-key encryption, verified model registry, live provider adapters, durable queue/object storage deletion, and production billing integration.
 
 ## Audit And Roadmap
 

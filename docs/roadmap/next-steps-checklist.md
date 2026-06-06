@@ -2,7 +2,7 @@
 
 ## A. Launch Blockers
 
-- [x] P0 security M: Replace mock auth/MFA/sudo headers with real session storage. Status: complete - `/admin-api/*` now resolves persisted admin sessions from bearer/cookie tokens, rotates sessions after MFA, derives RBAC/action scopes from stored roles, rejects mock `x-admin-*` headers, and checks sudo from durable `sudo_requests` rows. Full sudo request/approval lifecycle remains the next P0 item. Why it matters: hidden routes are not security. Acceptance: `/admin-api/*` rejects unauthenticated, non-MFA, missing-scope, and missing-sudo requests without mock headers.
+- [x] P0 security M: Replace mock auth/MFA/sudo headers with real session storage. Status: complete - `/admin-api/*` now resolves persisted admin sessions from bearer/cookie tokens, rotates sessions after MFA, derives RBAC/action scopes from stored roles, and rejects mock `x-admin-*` headers. Why it matters: hidden routes are not security. Acceptance: `/admin-api/*` rejects unauthenticated, non-MFA, missing-scope, and missing-sudo requests without mock headers.
 - [x] P0 backend L: Implement Postgres repository adapter and migration runner. Status: complete - adapter, migration runner, seed/reset commands, durable schema coverage, and repository contract tests now pass against local Postgres. Why it matters: audit logs and customer prompts must be durable. Acceptance: repository contract tests pass against local Postgres.
 - [ ] P0 security M: Encrypt provider keys and keep them non-viewable. Why it matters: BYOK requires trust. Acceptance: stored keys are opaque, reveal routes do not exist, audit events cover key actions.
 - [ ] P0 infra M: Wire object storage artifact lifecycle and deletion jobs. Why it matters: report deletion cannot be memory-only. Acceptance: deletion marks DB records, removes object artifacts, and audits every step.
@@ -29,7 +29,7 @@
 
 ## E. Trust And Security
 
-- [ ] P0 security M: Add real sudo request lifecycle. Why it matters: dangerous actions require time-boxed elevation. Acceptance: sudo requests expire, require reason, and are audited.
+- [x] P0 security M: Add real sudo request lifecycle. Status: complete - sudo start/status/end routes persist action-scoped, reason-coded, time-boxed grants; start requires MFA recheck, expired/wrong-action grants reject dangerous actions, the admin UI shows sudo modal/banner states, and lifecycle events are audited. Why it matters: dangerous actions require time-boxed elevation. Acceptance: sudo requests expire, require reason, and are audited.
 - [ ] P1 security M: Add audit-log review/search UI. Why it matters: operators need fast trust review. Acceptance: filters by actor, action scope, target, reason, and time.
 - [ ] P1 backend M: Implement raw reveal encrypted payload access only where policy allows. Why it matters: support cannot casually browse raw prompts. Acceptance: raw reveal requires sudo and reason; support role remains redacted by default.
 

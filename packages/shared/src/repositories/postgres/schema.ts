@@ -45,7 +45,8 @@ export type PostgresSchemaTable = (typeof POSTGRES_SCHEMA_TABLES)[number];
 export const POSTGRES_MIGRATION_FILES = [
   "packages/shared/src/repositories/postgres/migrations/0001_initial.sql",
   "packages/shared/src/repositories/postgres/migrations/0002_operational_tables.sql",
-  "packages/shared/src/repositories/postgres/migrations/0003_admin_auth.sql"
+  "packages/shared/src/repositories/postgres/migrations/0003_admin_auth.sql",
+  "packages/shared/src/repositories/postgres/migrations/0004_sudo_lifecycle.sql"
 ] as const;
 
 export const POSTGRES_DURABILITY_INVARIANTS = {

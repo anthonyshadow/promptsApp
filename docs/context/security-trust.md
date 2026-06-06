@@ -19,7 +19,7 @@ All three PDFs state that users will paste production prompts, customer examples
 - Admin CRM is internal only and redacted by default.
 - Admin roles include owner, ops, support, finance, and read-only.
 - Admin API authorization uses persisted admin users, roles, sessions, and MFA state. Mock admin headers are not accepted as authorization.
-- Dangerous admin actions require time-boxed sudo with reason code.
+- Dangerous admin actions require time-boxed sudo with MFA recheck, action scope binding, and reason code.
 
 ## Non-Negotiables
 
@@ -50,6 +50,14 @@ Admin session implementation:
 - Admin requests use a bearer session token or the admin session cookie; `x-admin-*` mock headers do not bypass middleware.
 - `/admin-api/auth/logout` revokes the current stored admin session.
 - Local development seeds one owner admin only; production must provision admins deliberately.
+
+Sudo lifecycle implementation:
+
+- `/admin-api/sudo/start` requires an existing MFA-verified admin session, a second valid MFA code, an allowed action scope, and a non-empty reason code.
+- `/admin-api/sudo/status` returns active grants and marks expired grants as expired.
+- `/admin-api/sudo/end` revokes active grants and writes a reason-coded audit event.
+- `requireSudo(action)` rejects missing, expired, or wrong-action grants; allowed and denied dangerous actions are audited.
+- Sudo is extra authorization only. It does not bypass RBAC, action scopes, or redacted-by-default admin views.
 
 Trust UX states to build:
 

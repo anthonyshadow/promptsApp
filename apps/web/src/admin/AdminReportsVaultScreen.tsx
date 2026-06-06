@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { css } from "@emotion/css";
 import type { AdminReportsResponse, ReportExportActionResponse, ReportDeleteResponse } from "@promptopts/api";
-import { fetchAdminJson, sendAdminJson } from "./adminApi";
+import { fetchAdminJson, requestAdminSudo, sendAdminJson } from "./adminApi";
 
 function AdminReportsVaultScreen({ apiBaseUrl }: { apiBaseUrl?: string | undefined }) {
   const [vaultState, setVaultState] = useState<{
@@ -68,6 +68,13 @@ function AdminReportsVaultScreen({ apiBaseUrl }: { apiBaseUrl?: string | undefin
     }
 
     if (action === "request_sudo_for_raw") {
+      requestAdminSudo({
+        actionScope: "reveal_report",
+        suggestedReasonCode: "raw_report_review",
+        targetType: "reports",
+        targetId: reportId,
+        message: "Raw report reveal requires sudo and reason code."
+      });
       setVaultState((current) => ({
         ...current,
         message: "Raw report reveal requires sudo and reason code; normal support view remains redacted."
@@ -83,14 +90,19 @@ function AdminReportsVaultScreen({ apiBaseUrl }: { apiBaseUrl?: string | undefin
             ? "regenerate"
             : "delete";
       const options = action === "approve_deletion"
-        ? { actionScopes: "read_metadata,delete_report", sudoReasonCode: "report_deletion_approval" }
+        ? {
+            actionScopes: "read_metadata,delete_report",
+            sudoReasonCode: "report_deletion_approval",
+            targetType: "reports",
+            targetId: reportId
+          }
         : { actionScopes: "read_metadata,retry_eval" };
 
       await sendAdminJson<ReportExportActionResponse | ReportDeleteResponse>(
         `${apiBaseUrl}/admin-api/reports/${reportId}/${route}`,
         "POST",
         action === "approve_deletion"
-          ? { reason_code: "report_deletion_approval", sudo_request_id: "sudo_request_mock" }
+          ? { reason_code: "report_deletion_approval" }
           : { reason_code: `report_${action}` },
         options
       ).catch(() => undefined);
