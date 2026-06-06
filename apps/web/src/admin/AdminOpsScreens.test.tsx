@@ -36,11 +36,15 @@ describe("admin ops screens", () => {
     expect(html).toContain("fresh");
     expect(html).toContain("stale");
     expect(html).toContain("deprecated");
+    expect(html).toContain("demo unverified");
     expect(html).toContain("preview experimental");
+    expect(html).toContain("Freshness review queue");
     expect(html).toContain("Provider");
     expect(html).toContain("Model ID");
     expect(html).toContain("Input / output / cached");
     expect(html).toContain("Context");
+    expect(html).toContain("Output limit");
+    expect(html).toContain("Approval");
     expect(html).toContain("Capabilities");
     expect(html).toContain("Official source");
     expect(html).toContain("OpenAI Demo Balanced");

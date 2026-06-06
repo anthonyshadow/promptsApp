@@ -24,6 +24,9 @@ describe("postgres schema metadata", () => {
     expect(POSTGRES_MIGRATION_FILES).toContain(
       "packages/shared/src/repositories/postgres/migrations/0001_initial.sql"
     );
+    expect(POSTGRES_MIGRATION_FILES).toContain(
+      "packages/shared/src/repositories/postgres/migrations/0007_model_registry_freshness_workflow.sql"
+    );
   });
 
   test("keeps admin audit logs append-only in durable storage", async () => {
@@ -74,5 +77,9 @@ describe("postgres schema metadata", () => {
     expect(sql).toContain("last_verified_at TIMESTAMPTZ");
     expect(sql).toContain("verified_by TEXT");
     expect(sql).toContain("approval_state TEXT NOT NULL");
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS approval_state TEXT NOT NULL DEFAULT 'draft'");
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS approved_by_admin_user_id TEXT");
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ");
+    expect(sql).toContain("'demo_unverified'");
   });
 });

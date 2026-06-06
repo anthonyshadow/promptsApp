@@ -6,7 +6,7 @@
 - [x] P0 backend L: Implement Postgres repository adapter and migration runner. Status: complete - adapter, migration runner, seed/reset commands, durable schema coverage, and repository contract tests now pass against local Postgres. Why it matters: audit logs and customer prompts must be durable. Acceptance: repository contract tests pass against local Postgres.
 - [x] P0 security M: Encrypt provider keys and keep them non-viewable. Status: complete - provider connections persist encrypted blobs plus fingerprints only, lifecycle routes return metadata only, no reveal route exists, adapter decrypt-for-use is controlled, and provider-key actions are audited. Why it matters: BYOK requires trust. Acceptance: stored keys are opaque, reveal routes do not exist, audit events cover key actions.
 - [x] P0 infra M: Wire object storage artifact lifecycle and deletion jobs. Status: complete - report generation writes artifacts through storage, local filesystem storage records checksum/size metadata, admin deletion creates deletion requests, removes object content, marks DB records, keeps retryable failure state, and audits lifecycle steps. Why it matters: report deletion cannot be memory-only. Acceptance: deletion marks DB records, removes object artifacts, and audits every step.
-- [ ] P0 backend M: Verify initial model registry rows from official source URLs. Why it matters: exact savings claims require fresh metadata. Acceptance: active rows include source URL, last verified date, verifier, approval state, and stale warnings.
+- [x] P0 backend M: Verify initial model registry rows from official source URLs. Status: complete - active OpenAI, Anthropic, and Gemini seed rows carry official source URLs, verification date, verifier, approval state, approver, freshness status, and stale/demo warnings. Why it matters: exact savings claims require fresh metadata. Acceptance: active rows include source URL, last verified date, verifier, approval state, and stale warnings.
 
 ## B. Private Beta Readiness
 
@@ -37,7 +37,7 @@
 
 - [ ] P1 backend L: Calibrate token estimates with provider usage. Why it matters: audit estimates should converge on real eval data. Acceptance: eval rows store provider-reported usage when available.
 - [ ] P1 product M: Add optional LLM judge adapter with labels. Why it matters: nuanced quality needs review beyond deterministic checks. Acceptance: LLM judge results are distinct from deterministic must-pass checks.
-- [ ] P1 backend M: Add registry freshness review workflow. Why it matters: metadata ages quickly. Acceptance: stale rows appear in admin risk queue and block exact savings.
+- [x] P1 backend M: Add registry freshness review workflow. Status: complete - rows age into review after 30 days, stale/demo/unapproved rows appear in admin overview/model-registry queues, PATCH creates pending diffs, approve/reject writes review state, and exact savings are blocked unless rows are fresh/approved/non-mock. Why it matters: metadata ages quickly. Acceptance: stale rows appear in admin risk queue and block exact savings.
 
 ## G. Admin Operations
 

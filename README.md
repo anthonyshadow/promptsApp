@@ -177,6 +177,7 @@ bun run build
 - Memory-backed local demo and test persistence.
 - Admin route policies, persisted admin sessions, MFA verification/rotation, RBAC/action scopes, redaction helpers, real sudo lifecycle, and append-only audit-log behavior.
 - Storage abstraction with local filesystem report artifacts, checksum/size metadata, deletion requests, retryable deletion failures, and report-vault evidence.
+- Verified model registry seed rows, 30-day freshness classification, admin review queue, pending diff proposals, approve/reject workflow, and exact-savings blocking for stale/demo/unapproved metadata.
 - Unit/integration tests across web, API, packages, workers, repository, storage, and schema metadata.
 
 ## What Is Mocked
@@ -189,7 +190,7 @@ bun run build
 - Billing provider events.
 - Provider spend.
 - PDF rendering beyond a stub.
-- Model registry verification; seed rows are demo/unverified unless explicitly marked otherwise.
+- Automated model registry sync; seed includes approved official-doc snapshot rows plus demo/unverified placeholders.
 
 ## Security And Trust Posture
 
@@ -199,7 +200,9 @@ Provider keys are encrypted/opaque and are never viewable after storage. Report 
 
 ## Model Registry Policy
 
-Model metadata must come from registry records, not hard-coded model assumptions. Stale, demo, deprecated, or unverified rows block exact savings claims or label savings unverified. Public recommendations use active registry metadata and prefer stable same-provider models for MVP.
+Model metadata must come from registry records, not hard-coded model assumptions. Stale, preview, experimental, demo, deprecated, unapproved, or unverified rows block exact savings claims or label savings unverified. Public recommendations use active approved registry metadata and prefer stable same-provider models for MVP.
+
+The local seed includes approved official-doc snapshot rows for OpenAI, Anthropic, and Gemini, plus synthetic demo rows that remain `demo_unverified`. Active rows include source URL, `last_verified_at`, `verified_by`, `approval_state`, approver, and approval timestamp. Admin registry PATCH creates a pending diff, approve publishes active metadata, reject records review outcome, and rows older than the 30-day review window enter the freshness queue.
 
 ## Eval And Recommendation Policy
 
@@ -216,7 +219,7 @@ Audit is a preflight, not a switch recommendation. The original prompt and curre
 
 Current local MVP status is green for the mocked demo loop: provider selection, prompt paste, audit, model-fit label, candidate generation, model shortlist, test cases, eval matrix, recommendation report, export, hidden admin UI, guarded admin API, Account 360 redaction, eval job control, model registry admin, reports vault, billing admin, audit-log viewer, entitlements, and append-only audit-log tests.
 
-Remaining launch blockers are verified model registry, live provider adapters with rate limits/logging, durable queue, production KMS/S3 lifecycle configuration, and production billing integration.
+Remaining launch blockers are live provider adapters with rate limits/logging, durable queue, production KMS/S3 lifecycle configuration, and production billing integration.
 
 ## Audit And Roadmap
 

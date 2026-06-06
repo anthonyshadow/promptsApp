@@ -102,12 +102,43 @@ describe("model registry shortlist", () => {
     const demoHealth = classifyRegistryFreshness(demoModel);
     const verifiedHealth = classifyRegistryFreshness(verifiedModel);
 
+    expect(demoHealth.freshness).toBe("demo_unverified");
     expect(demoHealth.exactSavingsAllowed).toBe(false);
     expect(demoHealth.productionEligible).toBe(false);
     expect(demoHealth.warnings.join(" ")).toContain("Demo registry row");
     expect(demoHealth.warnings.join(" ")).toContain("stale");
     expect(verifiedHealth.exactSavingsAllowed).toBe(true);
     expect(verifiedHealth.productionEligible).toBe(true);
+  });
+
+  test("ages approved rows into stale review state without changing registry prices", () => {
+    const staleByAge = createModel({
+      id: "aged",
+      last_verified_at: "2026-04-01T12:00:00.000Z"
+    });
+
+    const health = classifyRegistryFreshness(staleByAge, {
+      now: new Date("2026-06-06T12:00:00.000Z")
+    });
+
+    expect(health.freshness).toBe("stale");
+    expect(health.exactSavingsAllowed).toBe(false);
+    expect(health.warnings.join(" ")).toContain("older than 30 days");
+  });
+
+  test("blocks exact savings when active rows are not approved", () => {
+    const pending = createModel({
+      id: "pending",
+      approval_state: "pending_review",
+      approved_by_admin_user_id: null,
+      approved_at: null
+    });
+
+    const health = classifyRegistryFreshness(pending);
+
+    expect(health.exactSavingsAllowed).toBe(false);
+    expect(health.productionEligible).toBe(false);
+    expect(health.warnings.join(" ")).toContain("pending_review");
   });
 
   test("filters models by capability, stability, modality, context, and output needs", () => {
@@ -137,6 +168,41 @@ describe("model registry shortlist", () => {
 
     expect(models.map((model) => model.id)).toEqual(["capable"]);
   });
+
+  test("uses registry row prices instead of model-name assumptions for cheaper role", () => {
+    const baseline = createModel({
+      id: "baseline",
+      model_id: "expensive-name-that-sounds-small",
+      input_price_per_million_tokens: 10,
+      output_price_per_million_tokens: 20,
+      quality_tier: "frontier"
+    });
+    const cheaperByRegistry = createModel({
+      id: "cheap",
+      model_id: "premium-name-that-registry-prices-cheaply",
+      input_price_per_million_tokens: 0.5,
+      output_price_per_million_tokens: 1,
+      quality_tier: "economy"
+    });
+
+    const shortlist = shortlistModels({
+      models: [baseline, cheaperByRegistry],
+      provider: "openai",
+      currentModelId: baseline.model_id,
+      taskType: "support",
+      promptTokenEstimate: 300,
+      outputEstimate: 100,
+      contextNeeds: 1000,
+      structuredOutput: false,
+      tools: false,
+      modality: "text",
+      latencyTargetMs: null,
+      priority: "cost",
+      failureCost: "medium"
+    });
+
+    expect(shortlist.entries.find((entry) => entry.role === "cheaper")?.model.id).toBe("cheap");
+  });
 });
 
 function createModel(patch: Partial<ModelRegistryRecord> = {}): ModelRegistryRecord {
@@ -164,6 +230,9 @@ function createModel(patch: Partial<ModelRegistryRecord> = {}): ModelRegistryRec
     source_url: "https://example.com/model",
     last_verified_at: createdAt,
     verified_by: "PromptOpts demo",
+    approval_state: "approved",
+    approved_by_admin_user_id: "admin_user_test",
+    approved_at: createdAt,
     pricing_note: "Synthetic verified row for registry unit tests.",
     is_mock: false,
     metadata: {},

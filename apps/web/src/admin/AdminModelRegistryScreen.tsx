@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { css } from "@emotion/css";
-import type { AdminModelRegistryResponse, ModelApproveResponse } from "@promptopts/api";
+import type { AdminModelRegistryResponse, ModelApproveResponse, ModelRejectResponse } from "@promptopts/api";
 import { fetchAdminJson, sendAdminJson } from "./adminApi";
 
 function AdminModelRegistryScreen({ apiBaseUrl }: { apiBaseUrl?: string | undefined }) {
@@ -92,6 +92,37 @@ function AdminModelRegistryScreen({ apiBaseUrl }: { apiBaseUrl?: string | undefi
     }));
   }
 
+  async function handleReject(modelId: string) {
+    if (apiBaseUrl) {
+      const rejected = await sendAdminJson<ModelRejectResponse>(
+        `${apiBaseUrl}/admin-api/models/${modelId}/reject`,
+        "POST",
+        {
+          reason_code: "registry_admin_reject"
+        },
+        {
+          actionScopes: "read_metadata,manage_model_registry",
+          sudoReasonCode: "registry_admin_reject",
+          targetType: "model_registry",
+          targetId: modelId
+        }
+      ).catch(() => null);
+
+      if (rejected) {
+        setRegistryState((current) => ({
+          ...current,
+          message: "Registry proposal rejected. Active metadata remains unchanged."
+        }));
+        return;
+      }
+    }
+
+    setRegistryState((current) => ({
+      ...current,
+      message: "Local rejection simulated. Real rejection requires sudo and writes admin audit logs."
+    }));
+  }
+
   return (
     <div className={rootStyle}>
       <section className={headerPanelStyle} aria-labelledby="admin-model-registry-title">
@@ -120,6 +151,40 @@ function AdminModelRegistryScreen({ apiBaseUrl }: { apiBaseUrl?: string | undefi
         ))}
       </section>
 
+      <section className={tableWrapStyle} aria-label="Freshness review queue">
+        <div className={queueHeaderStyle}>
+          <h3>Freshness review queue</h3>
+          <span>{registryState.response.freshness_review_queue.length} row(s)</span>
+        </div>
+        <table className={tableStyle}>
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>Provider</th>
+              <th>Freshness</th>
+              <th>Approval</th>
+              <th>Reason</th>
+              <th>Severity</th>
+            </tr>
+          </thead>
+          <tbody>
+            {registryState.response.freshness_review_queue.map((item) => (
+              <tr key={item.id}>
+                <td>
+                  <strong>{item.display_name}</strong>
+                  <span className={subtleLineStyle}>{item.model_id}</span>
+                </td>
+                <td>{item.provider}</td>
+                <td>{item.freshness_status}</td>
+                <td>{item.approval_state}</td>
+                <td>{item.reason}</td>
+                <td>{item.severity}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+
       <section className={tableWrapStyle} aria-label="Model registry table">
         <table className={tableStyle}>
           <thead>
@@ -129,10 +194,12 @@ function AdminModelRegistryScreen({ apiBaseUrl }: { apiBaseUrl?: string | undefi
               <th>Display name</th>
               <th>Input / output / cached</th>
               <th>Context</th>
+              <th>Output limit</th>
               <th>Capabilities</th>
               <th>Stability</th>
               <th>Source</th>
               <th>Verified</th>
+              <th>Approval</th>
             </tr>
           </thead>
           <tbody>
@@ -151,6 +218,7 @@ function AdminModelRegistryScreen({ apiBaseUrl }: { apiBaseUrl?: string | undefi
                   {model.cached_input_price_per_million_tokens === null ? "none" : formatPrice(model.cached_input_price_per_million_tokens)}
                 </td>
                 <td>{formatNumber(model.context_window)}</td>
+                <td>{formatNumber(model.max_output_tokens)}</td>
                 <td>{formatCapabilities(model.capabilities)}</td>
                 <td>
                   {model.stability_status}
@@ -168,6 +236,10 @@ function AdminModelRegistryScreen({ apiBaseUrl }: { apiBaseUrl?: string | undefi
                 <td>
                   {model.last_verified_at ?? "Unverified"}
                   <span className={subtleLineStyle}>{model.verified_by ?? "No verifier"}</span>
+                </td>
+                <td>
+                  {model.approval_state}
+                  <span className={subtleLineStyle}>{model.approved_at ?? "Not approved"}</span>
                 </td>
               </tr>
             ))}
@@ -225,7 +297,11 @@ function AdminModelRegistryScreen({ apiBaseUrl }: { apiBaseUrl?: string | undefi
               >
                 Approve
               </button>
-              <button className={disabledButtonStyle} type="button" disabled>
+              <button
+                className={buttonStyle}
+                type="button"
+                onClick={() => void handleReject(proposal.version.model_registry_id)}
+              >
                 Reject
               </button>
               <span className={actionNoteStyle}>{proposal.approval_actions.note}</span>
@@ -245,6 +321,9 @@ function createLocalRegistryResponse(): AdminModelRegistryResponse {
       fresh: 0,
       stale: 0,
       deprecated: 0,
+      preview: 0,
+      experimental: 0,
+      demo_unverified: 1,
       preview_experimental: 0,
       unverified: 1
     },
@@ -258,6 +337,7 @@ function createLocalRegistryResponse(): AdminModelRegistryResponse {
         output_price_per_million_tokens: 4,
         cached_input_price_per_million_tokens: null,
         context_window: 128000,
+        max_output_tokens: 4096,
         capabilities: {
           text: true,
           image: false,
@@ -267,13 +347,33 @@ function createLocalRegistryResponse(): AdminModelRegistryResponse {
           structured_output: true
         },
         stability_status: "unverified",
-        freshness_status: "unverified",
+        freshness_status: "demo_unverified",
+        recommended_task_types: ["support", "classification"],
         source_url: "https://example.com/promptopts/demo-model-registry",
         last_verified_at: null,
         verified_by: null,
+        approval_state: "draft",
+        approved_by_admin_user_id: null,
+        approved_at: null,
         pricing_note: "Demo placeholder pricing only; not production model metadata.",
         active_for_public_recommendations: false,
         pending_version_id: "model_registry_version_openai_balanced_pending"
+      }
+    ],
+    freshness_review_queue: [
+      {
+        id: "registry_review_model_registry_openai_demo_balanced",
+        model_registry_id: "model_registry_openai_demo_balanced",
+        model_id: "openai-demo-balanced",
+        display_name: "OpenAI Demo Balanced",
+        provider: "openai",
+        freshness_status: "demo_unverified",
+        approval_state: "draft",
+        severity: "high",
+        reason: "Demo registry row; exact savings claims are disabled.",
+        source_url: "https://example.com/promptopts/demo-model-registry",
+        last_verified_at: null,
+        verified_by: null
       }
     ],
     proposed_changes: [
@@ -313,8 +413,8 @@ function createLocalRegistryResponse(): AdminModelRegistryResponse {
         ],
         approval_actions: {
           approve_enabled: true,
-          reject_enabled: false,
-          note: "Approve is implemented; reject remains placeholder-only until a reject route is added."
+          reject_enabled: true,
+          note: "Approve publishes active metadata; reject records review outcome without changing public recommendations."
         }
       }
     ],
@@ -401,8 +501,11 @@ const noticeStyle = css({
 
 const summaryGridStyle = css({
   display: "grid",
-  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+  gridTemplateColumns: "repeat(8, minmax(0, 1fr))",
   gap: "10px",
+  "@media (max-width: 1120px)": {
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))"
+  },
   "@media (max-width: 820px)": {
     gridTemplateColumns: "repeat(2, minmax(0, 1fr))"
   }
@@ -430,6 +533,24 @@ const tableWrapStyle = css({
   border: "1px solid #415149",
   borderRadius: "8px",
   background: "#17211d"
+});
+
+const queueHeaderStyle = css({
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "12px",
+  padding: "14px",
+  borderBottom: "1px solid #33463d",
+  h3: {
+    margin: 0,
+    color: "#ffffff",
+    fontSize: "1rem"
+  },
+  span: {
+    color: "#c7d6ce",
+    fontSize: "0.9rem"
+  }
 });
 
 const tableStyle = css({
@@ -544,16 +665,6 @@ const buttonStyle = css({
   background: "#dcebe0",
   color: "#101713",
   cursor: "pointer",
-  fontWeight: 800,
-  padding: "9px 11px"
-});
-
-const disabledButtonStyle = css({
-  border: "1px solid #526a5d",
-  borderRadius: "8px",
-  background: "#26352e",
-  color: "#9fbaaa",
-  cursor: "not-allowed",
   fontWeight: 800,
   padding: "9px 11px"
 });

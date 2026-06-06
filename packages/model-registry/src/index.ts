@@ -62,6 +62,8 @@ export type ModelShortlistResult = {
   warnings: string[];
 };
 
+export const REGISTRY_FRESHNESS_REVIEW_DAYS = 30;
+
 // Same-provider shortlist keeps the MVP implementable and uses registry rows as the only source of capability truth.
 export function shortlistModels(input: ModelShortlistInput): ModelShortlistResult {
   const sameProvider = input.models.filter((model) => model.provider === input.provider);
@@ -108,29 +110,60 @@ export function filterByCapability(input: ModelCapabilityFilterInput): ModelRegi
 
 // Freshness controls savings language: demo, stale, or unverifiable rows cannot support exact savings claims.
 export function classifyRegistryFreshness(
-  record: ModelRegistryRecord
+  record: ModelRegistryRecord,
+  options: { now?: Date; reviewWindowDays?: number } = {}
 ): RegistryFreshnessClassification {
   const warnings: string[] = [];
   let freshness = record.freshness_status;
+  const now = options.now ?? new Date();
+  const reviewWindowDays = options.reviewWindowDays ?? REGISTRY_FRESHNESS_REVIEW_DAYS;
 
   if (record.stability_status === "deprecated" || record.freshness_status === "deprecated") {
     freshness = "deprecated";
     warnings.push("Deprecated registry row; preserve as baseline only.");
   }
 
+  if (record.stability_status === "preview" || record.freshness_status === "preview") {
+    freshness = "preview";
+    warnings.push("Preview registry row; production recommendations prefer stable active metadata.");
+  }
+
+  if (record.stability_status === "experimental" || record.freshness_status === "experimental") {
+    freshness = "experimental";
+    warnings.push("Experimental registry row; exact savings claims are disabled.");
+  }
+
   if (record.is_mock) {
-    freshness = "unverified";
+    freshness = "demo_unverified";
     warnings.push("Demo registry row; exact savings claims are disabled.");
   }
 
   if (!record.source_url) {
-    freshness = "unverified";
+    freshness = freshness === "demo_unverified" ? freshness : "unverified";
     warnings.push("Missing source URL; exact savings claims are disabled.");
   }
 
   if (!record.last_verified_at) {
-    freshness = "unverified";
+    freshness = freshness === "demo_unverified" ? freshness : "unverified";
     warnings.push("Missing verification timestamp; exact savings claims are disabled.");
+  } else if (isVerificationStale(record.last_verified_at, now, reviewWindowDays)) {
+    freshness = freshness === "fresh" ? "stale" : freshness;
+    warnings.push(`Registry verification is older than ${reviewWindowDays} days; review official docs before exact savings claims.`);
+  }
+
+  if (!record.verified_by) {
+    freshness = freshness === "demo_unverified" ? freshness : "unverified";
+    warnings.push("Missing verifier identity; exact savings claims are disabled.");
+  }
+
+  if (record.approval_state !== "approved") {
+    freshness = freshness === "fresh" ? "unverified" : freshness;
+    warnings.push(`Approval state is ${record.approval_state}; active public recommendations require approved metadata.`);
+  }
+
+  if (!record.approved_by_admin_user_id || !record.approved_at) {
+    freshness = freshness === "fresh" ? "unverified" : freshness;
+    warnings.push("Missing approval metadata; exact savings claims are disabled.");
   }
 
   if (record.freshness_status === "stale") {
@@ -142,11 +175,19 @@ export function classifyRegistryFreshness(
     warnings.push(`Stability is ${record.stability_status}; stable models are preferred for production recommendations.`);
   }
 
+  if (record.is_mock) {
+    freshness = "demo_unverified";
+  }
+
   const exactSavingsAllowed =
     freshness === "fresh" &&
     !record.is_mock &&
     Boolean(record.source_url) &&
-    Boolean(record.last_verified_at);
+    Boolean(record.last_verified_at) &&
+    Boolean(record.verified_by) &&
+    record.approval_state === "approved" &&
+    Boolean(record.approved_by_admin_user_id) &&
+    Boolean(record.approved_at);
 
   return {
     freshness,
@@ -361,7 +402,7 @@ function buildShortlistWarnings(
   }
 
   if (entries.some((entry) => !entry.exactSavingsAllowed)) {
-    warnings.add("No exact savings claim is allowed for stale, demo, or unverified registry rows.");
+    warnings.add("No exact savings claim is allowed for stale, preview, experimental, demo, or unverified registry rows.");
   }
 
   return Array.from(warnings);
@@ -413,4 +454,19 @@ function latencyScore(latencyTier: LatencyTier): number {
 
 function priceScore(model: ModelRegistryRecord): number {
   return model.input_price_per_million_tokens + model.output_price_per_million_tokens;
+}
+
+function isVerificationStale(
+  lastVerifiedAt: string,
+  now: Date,
+  reviewWindowDays: number
+): boolean {
+  const verifiedAt = new Date(lastVerifiedAt);
+
+  if (Number.isNaN(verifiedAt.getTime())) {
+    return true;
+  }
+
+  const maxAgeMs = reviewWindowDays * 24 * 60 * 60 * 1000;
+  return now.getTime() - verifiedAt.getTime() > maxAgeMs;
 }

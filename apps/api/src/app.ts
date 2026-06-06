@@ -53,6 +53,7 @@ export type {
   AdminSudoStatusResponse,
   ModelApproveResponse,
   ModelPatchResponse,
+  ModelRejectResponse,
   ModelsResponse,
   ReportExportActionResponse,
   ReportDeleteResponse,

@@ -59,7 +59,11 @@ describe("public API routes", () => {
     const imageModels = await expectOkJson(
       await app.request("/models?provider=openai&taskType=support&modality=image")
     );
-    expect(imageModels.models).toHaveLength(0);
+    expect(imageModels.models.map((model: { model_id: string }) => model.model_id)).toEqual([
+      "gpt-5.4",
+      "gpt-5.4-mini",
+      "gpt-5.4-nano"
+    ]);
 
     expect((await app.request("/models?provider=openai&task_type=unknown")).status).toBe(400);
     expect((await app.request("/models?provider=openai&stability=retired")).status).toBe(400);
@@ -717,7 +721,10 @@ describe("public API routes", () => {
     expect(models.models.map((model: { model_id: string }) => model.model_id)).toEqual([
       "openai-demo-frontier",
       "openai-demo-balanced",
-      "openai-demo-economy"
+      "openai-demo-economy",
+      "gpt-5.4",
+      "gpt-5.4-mini",
+      "gpt-5.4-nano"
     ]);
 
     const audit = await expectOkJson(

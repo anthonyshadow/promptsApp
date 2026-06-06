@@ -44,7 +44,15 @@ export type RiskLevel = z.infer<typeof riskLevelSchema>;
 export const modelFitSchema = z.enum(["overpowered", "appropriate", "underpowered"]);
 export type ModelFit = z.infer<typeof modelFitSchema>;
 
-export const registryFreshnessSchema = z.enum(["fresh", "stale", "unverified", "deprecated"]);
+export const registryFreshnessSchema = z.enum([
+  "fresh",
+  "stale",
+  "unverified",
+  "deprecated",
+  "preview",
+  "experimental",
+  "demo_unverified"
+]);
 export type RegistryFreshness = z.infer<typeof registryFreshnessSchema>;
 
 export const stabilityStatusSchema = z.enum([

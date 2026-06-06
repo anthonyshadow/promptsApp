@@ -45,7 +45,7 @@ describe("memory repository", () => {
       name: "Support classifier"
     });
     expect(await repo.test_cases.list()).toHaveLength(5);
-    expect(await repo.model_registry.list()).toHaveLength(5);
+    expect(await repo.model_registry.list()).toHaveLength(14);
     expect(await repo.model_registry_versions.get(DEMO_IDS.modelRegistryVersion)).toMatchObject({
       approval_state: "pending_review"
     });

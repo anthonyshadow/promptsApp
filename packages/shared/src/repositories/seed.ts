@@ -2,6 +2,8 @@ import type { ModelRegistryRecord } from "../schemas";
 import type { RepositorySeed } from "./types";
 
 const DEMO_TIMESTAMP = "2026-01-15T12:00:00.000Z";
+const OFFICIAL_MODEL_REGISTRY_VERIFIED_AT = "2026-06-06T12:00:00.000Z";
+const OFFICIAL_MODEL_REGISTRY_VERIFIER = "promptopts_official_docs_snapshot";
 
 export const DEMO_IDS = {
   workspace: "workspace_acme_ai",
@@ -36,6 +38,15 @@ export function createDemoRepositorySeed(): Required<RepositorySeed> {
   const openAiEconomyModelId = "model_registry_openai_demo_economy";
   const anthropicModelId = "model_registry_anthropic_demo_balanced";
   const geminiModelId = "model_registry_gemini_demo_balanced";
+  const openAiVerifiedFrontierModelId = "model_registry_openai_gpt_5_4";
+  const openAiVerifiedBalancedModelId = "model_registry_openai_gpt_5_4_mini";
+  const openAiVerifiedEconomyModelId = "model_registry_openai_gpt_5_4_nano";
+  const anthropicVerifiedFallbackModelId = "model_registry_anthropic_claude_opus_4_8";
+  const anthropicVerifiedBalancedModelId = "model_registry_anthropic_claude_sonnet_4_6";
+  const anthropicVerifiedEconomyModelId = "model_registry_anthropic_claude_haiku_4_5";
+  const geminiVerifiedFallbackModelId = "model_registry_gemini_2_5_pro";
+  const geminiVerifiedBalancedModelId = "model_registry_gemini_2_5_flash";
+  const geminiVerifiedEconomyModelId = "model_registry_gemini_2_5_flash_lite";
   const candidateBaselineId = "candidate_support_classifier_baseline";
   const candidateBalancedId = "candidate_support_classifier_balanced";
   const mustPassCheckId = "check_support_classifier_json_shape";
@@ -471,6 +482,192 @@ export function createDemoRepositorySeed(): Required<RepositorySeed> {
         provider: "gemini",
         model_id: "gemini-demo-balanced",
         display_name: "Gemini Demo Balanced"
+      }),
+      createVerifiedModelRegistryRecord({
+        id: openAiVerifiedFrontierModelId,
+        provider: "openai",
+        model_id: "gpt-5.4",
+        display_name: "GPT-5.4",
+        input_price_per_million_tokens: 2.5,
+        output_price_per_million_tokens: 15,
+        cached_input_price_per_million_tokens: 0.25,
+        context_window: 1050000,
+        max_output_tokens: 128000,
+        supports_image: true,
+        supports_tools: true,
+        supports_structured_output: true,
+        latency_tier: "standard",
+        quality_tier: "frontier",
+        recommended_task_types: ["support", "summarization", "extraction", "coding", "rag", "agent", "classification", "other"],
+        source_url: "https://developers.openai.com/api/docs/models/gpt-5.4",
+        pricing_source_url: "https://platform.openai.com/docs/pricing",
+        pricing_note: "Official OpenAI API docs snapshot; verify before exact savings if row becomes stale."
+      }),
+      createVerifiedModelRegistryRecord({
+        id: openAiVerifiedBalancedModelId,
+        provider: "openai",
+        model_id: "gpt-5.4-mini",
+        display_name: "GPT-5.4 mini",
+        input_price_per_million_tokens: 0.75,
+        output_price_per_million_tokens: 4.5,
+        cached_input_price_per_million_tokens: 0.075,
+        context_window: 400000,
+        max_output_tokens: 128000,
+        supports_image: true,
+        supports_tools: true,
+        supports_structured_output: true,
+        latency_tier: "low",
+        quality_tier: "balanced",
+        recommended_task_types: ["support", "summarization", "extraction", "coding", "rag", "classification", "other"],
+        source_url: "https://developers.openai.com/api/docs/models",
+        pricing_source_url: "https://platform.openai.com/docs/pricing",
+        pricing_note: "Official OpenAI API docs snapshot; verify before exact savings if row becomes stale."
+      }),
+      createVerifiedModelRegistryRecord({
+        id: openAiVerifiedEconomyModelId,
+        provider: "openai",
+        model_id: "gpt-5.4-nano",
+        display_name: "GPT-5.4 nano",
+        input_price_per_million_tokens: 0.15,
+        output_price_per_million_tokens: 1.2,
+        cached_input_price_per_million_tokens: 0.015,
+        context_window: 400000,
+        max_output_tokens: 128000,
+        supports_image: true,
+        supports_tools: true,
+        supports_structured_output: true,
+        latency_tier: "low",
+        quality_tier: "economy",
+        recommended_task_types: ["support", "summarization", "extraction", "classification", "other"],
+        source_url: "https://developers.openai.com/api/docs/models",
+        pricing_source_url: "https://platform.openai.com/docs/pricing",
+        pricing_note: "Official OpenAI API docs snapshot; verify before exact savings if row becomes stale."
+      }),
+      createVerifiedModelRegistryRecord({
+        id: anthropicVerifiedFallbackModelId,
+        provider: "anthropic",
+        model_id: "claude-opus-4-8",
+        display_name: "Claude Opus 4.8",
+        input_price_per_million_tokens: 5,
+        output_price_per_million_tokens: 25,
+        cached_input_price_per_million_tokens: 0.5,
+        context_window: 1000000,
+        max_output_tokens: 128000,
+        supports_image: true,
+        supports_tools: false,
+        supports_structured_output: false,
+        latency_tier: "standard",
+        quality_tier: "frontier",
+        recommended_task_types: ["coding", "rag", "agent", "summarization", "other"],
+        source_url: "https://docs.anthropic.com/en/docs/about-claude/models/overview",
+        pricing_source_url: "https://docs.anthropic.com/en/docs/about-claude/pricing",
+        pricing_note: "Official Anthropic docs snapshot; cached input stores cache-hit price for PromptOpts estimates."
+      }),
+      createVerifiedModelRegistryRecord({
+        id: anthropicVerifiedBalancedModelId,
+        provider: "anthropic",
+        model_id: "claude-sonnet-4-6",
+        display_name: "Claude Sonnet 4.6",
+        input_price_per_million_tokens: 3,
+        output_price_per_million_tokens: 15,
+        cached_input_price_per_million_tokens: 0.3,
+        context_window: 1000000,
+        max_output_tokens: 64000,
+        supports_image: true,
+        supports_tools: false,
+        supports_structured_output: false,
+        latency_tier: "standard",
+        quality_tier: "balanced",
+        recommended_task_types: ["support", "summarization", "extraction", "coding", "rag", "classification", "other"],
+        source_url: "https://docs.anthropic.com/en/docs/about-claude/models/overview",
+        pricing_source_url: "https://docs.anthropic.com/en/docs/about-claude/pricing",
+        pricing_note: "Official Anthropic docs snapshot; cached input stores cache-hit price for PromptOpts estimates."
+      }),
+      createVerifiedModelRegistryRecord({
+        id: anthropicVerifiedEconomyModelId,
+        provider: "anthropic",
+        model_id: "claude-haiku-4-5",
+        display_name: "Claude Haiku 4.5",
+        input_price_per_million_tokens: 1,
+        output_price_per_million_tokens: 5,
+        cached_input_price_per_million_tokens: 0.1,
+        context_window: 200000,
+        max_output_tokens: 64000,
+        supports_image: true,
+        supports_tools: false,
+        supports_structured_output: false,
+        latency_tier: "low",
+        quality_tier: "economy",
+        recommended_task_types: ["support", "summarization", "extraction", "classification", "other"],
+        source_url: "https://docs.anthropic.com/en/docs/about-claude/models/overview",
+        pricing_source_url: "https://docs.anthropic.com/en/docs/about-claude/pricing",
+        pricing_note: "Official Anthropic docs snapshot; cached input stores cache-hit price for PromptOpts estimates."
+      }),
+      createVerifiedModelRegistryRecord({
+        id: geminiVerifiedFallbackModelId,
+        provider: "gemini",
+        model_id: "gemini-2.5-pro",
+        display_name: "Gemini 2.5 Pro",
+        input_price_per_million_tokens: 1.25,
+        output_price_per_million_tokens: 10,
+        cached_input_price_per_million_tokens: 0.125,
+        context_window: 1048576,
+        max_output_tokens: 65536,
+        supports_image: true,
+        supports_audio: true,
+        supports_video: true,
+        supports_tools: true,
+        supports_structured_output: true,
+        latency_tier: "standard",
+        quality_tier: "frontier",
+        recommended_task_types: ["coding", "rag", "agent", "summarization", "other"],
+        source_url: "https://ai.google.dev/gemini-api/docs/models",
+        pricing_source_url: "https://ai.google.dev/gemini-api/docs/pricing",
+        pricing_note: "Official Gemini API docs snapshot; Pro pricing is tiered by prompt length, so exact claims require fresh review."
+      }),
+      createVerifiedModelRegistryRecord({
+        id: geminiVerifiedBalancedModelId,
+        provider: "gemini",
+        model_id: "gemini-2.5-flash",
+        display_name: "Gemini 2.5 Flash",
+        input_price_per_million_tokens: 0.3,
+        output_price_per_million_tokens: 2.5,
+        cached_input_price_per_million_tokens: 0.03,
+        context_window: 1048576,
+        max_output_tokens: 65536,
+        supports_image: true,
+        supports_audio: true,
+        supports_video: true,
+        supports_tools: true,
+        supports_structured_output: true,
+        latency_tier: "low",
+        quality_tier: "balanced",
+        recommended_task_types: ["support", "summarization", "extraction", "coding", "rag", "classification", "other"],
+        source_url: "https://ai.google.dev/gemini-api/docs/models",
+        pricing_source_url: "https://ai.google.dev/gemini-api/docs/pricing",
+        pricing_note: "Official Gemini API docs snapshot; verify before exact savings if row becomes stale."
+      }),
+      createVerifiedModelRegistryRecord({
+        id: geminiVerifiedEconomyModelId,
+        provider: "gemini",
+        model_id: "gemini-2.5-flash-lite",
+        display_name: "Gemini 2.5 Flash-Lite",
+        input_price_per_million_tokens: 0.1,
+        output_price_per_million_tokens: 0.4,
+        cached_input_price_per_million_tokens: 0.025,
+        context_window: 1048576,
+        max_output_tokens: 65536,
+        supports_image: true,
+        supports_audio: true,
+        supports_video: true,
+        supports_tools: true,
+        supports_structured_output: true,
+        latency_tier: "low",
+        quality_tier: "economy",
+        recommended_task_types: ["support", "summarization", "extraction", "classification", "other"],
+        source_url: "https://ai.google.dev/gemini-api/docs/models",
+        pricing_source_url: "https://ai.google.dev/gemini-api/docs/pricing",
+        pricing_note: "Official Gemini API docs snapshot; verify before exact savings if row becomes stale."
       })
     ],
     model_registry_versions: [
@@ -856,6 +1053,67 @@ export function createDemoRepositorySeed(): Required<RepositorySeed> {
   };
 }
 
+function createVerifiedModelRegistryRecord(input: {
+  id: string;
+  provider: ModelRegistryRecord["provider"];
+  model_id: string;
+  display_name: string;
+  input_price_per_million_tokens: number;
+  output_price_per_million_tokens: number;
+  cached_input_price_per_million_tokens: number | null;
+  context_window: number;
+  max_output_tokens: number;
+  supports_image?: boolean;
+  supports_audio?: boolean;
+  supports_video?: boolean;
+  supports_tools?: boolean;
+  supports_structured_output?: boolean;
+  latency_tier: ModelRegistryRecord["latency_tier"];
+  quality_tier: ModelRegistryRecord["quality_tier"];
+  recommended_task_types: ModelRegistryRecord["recommended_task_types"];
+  source_url: string;
+  pricing_source_url: string;
+  pricing_note: string;
+}): ModelRegistryRecord {
+  return {
+    id: input.id,
+    provider: input.provider,
+    model_id: input.model_id,
+    display_name: input.display_name,
+    input_price_per_million_tokens: input.input_price_per_million_tokens,
+    output_price_per_million_tokens: input.output_price_per_million_tokens,
+    cached_input_price_per_million_tokens: input.cached_input_price_per_million_tokens,
+    context_window: input.context_window,
+    max_output_tokens: input.max_output_tokens,
+    supports_text: true,
+    supports_image: input.supports_image ?? false,
+    supports_audio: input.supports_audio ?? false,
+    supports_video: input.supports_video ?? false,
+    supports_tools: input.supports_tools ?? false,
+    supports_structured_output: input.supports_structured_output ?? false,
+    latency_tier: input.latency_tier,
+    quality_tier: input.quality_tier,
+    recommended_task_types: input.recommended_task_types,
+    stability_status: "stable",
+    freshness_status: "fresh",
+    source_url: input.source_url,
+    last_verified_at: OFFICIAL_MODEL_REGISTRY_VERIFIED_AT,
+    verified_by: OFFICIAL_MODEL_REGISTRY_VERIFIER,
+    approval_state: "approved",
+    approved_by_admin_user_id: DEMO_IDS.adminUser,
+    approved_at: OFFICIAL_MODEL_REGISTRY_VERIFIED_AT,
+    pricing_note: input.pricing_note,
+    is_mock: false,
+    metadata: {
+      official_source_urls: [input.source_url, input.pricing_source_url],
+      pricing_source_url: input.pricing_source_url,
+      verification_note: "Seeded from official provider docs for local MVP registry workflow."
+    },
+    created_at: OFFICIAL_MODEL_REGISTRY_VERIFIED_AT,
+    updated_at: OFFICIAL_MODEL_REGISTRY_VERIFIED_AT
+  };
+}
+
 function createDemoModelRegistryRecord(input: {
   id: string;
   provider: "openai" | "anthropic" | "gemini";
@@ -891,6 +1149,9 @@ function createDemoModelRegistryRecord(input: {
     source_url: "https://example.com/promptopts/demo-model-registry",
     last_verified_at: null,
     verified_by: null,
+    approval_state: "draft",
+    approved_by_admin_user_id: null,
+    approved_at: null,
     pricing_note: "Demo placeholder pricing only; not production model metadata.",
     is_mock: true,
     metadata: { demo_unverified: true },

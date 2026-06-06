@@ -1,5 +1,6 @@
 import { Hono, type Context } from "hono";
 import { decideRecommendation } from "@promptopts/eval-core";
+import { classifyRegistryFreshness } from "@promptopts/model-registry";
 import { generateReportArtifacts, persistGeneratedReportArtifacts } from "@promptopts/report-generator";
 import {
   ADMIN_SESSION_COOKIE_NAME,
@@ -91,6 +92,8 @@ import {
   modelApproveResponseSchema,
   modelPatchRequestSchema,
   modelPatchResponseSchema,
+  modelRejectRequestSchema,
+  modelRejectResponseSchema,
   promptRevealResponseSchema,
   regenerateReportResponseSchema,
   reportDeleteRequestSchema,
@@ -261,7 +264,10 @@ export function createAdminApiRoutes() {
           c.var.repository.admin_audit_logs.list(),
           c.var.repository.deletion_requests.list()
         ]);
-        const unverifiedModelCount = models.filter((model) => model.freshness_status !== "fresh").length;
+        const modelsNeedingReview = models.filter(
+          (model) => !classifyRegistryFreshness(model).exactSavingsAllowed
+        );
+        const unverifiedModelCount = modelsNeedingReview.length;
         const convertedAccounts = new Set(
           opportunities
             .filter((opportunity) =>
@@ -768,7 +774,7 @@ export function createAdminApiRoutes() {
             typeof body.data.metadata?.change_reason === "string"
               ? body.data.metadata.change_reason
               : "Admin registry metadata proposal.",
-          is_mock: true,
+          is_mock: false,
           created_at: timestamp
         };
 
@@ -809,6 +815,10 @@ export function createAdminApiRoutes() {
           source_url: body.data.source_url,
           last_verified_at: body.data.last_verified_at,
           verified_by: body.data.verified_by,
+          approval_state: "approved",
+          approved_by_admin_user_id: c.var.adminSession.admin_user_id,
+          approved_at: timestamp,
+          is_mock: false,
           updated_at: timestamp
         });
 
@@ -838,7 +848,7 @@ export function createAdminApiRoutes() {
                 approved_by_admin_user_id: c.var.adminSession.admin_user_id,
                 approved_at: timestamp,
                 change_reason: `Approval without pending diff. Reason: ${body.data.reason_code}`,
-                is_mock: true,
+                is_mock: false,
                 created_at: timestamp
               });
 
@@ -849,6 +859,50 @@ export function createAdminApiRoutes() {
             diff: approvedVersion ? createModelRegistryDiff(currentModel, approvedVersion) : [],
             registry_note:
               "Approved metadata is active for public recommendations; stale/demo savings warnings remain when any selected registry row is not fresh."
+          })
+        );
+      })
+      .post("/models/:id/reject", async (c) => {
+        const body = await validateJson(c, modelRejectRequestSchema);
+        if (!body.success) {
+          return body.response;
+        }
+
+        const currentModel = await c.var.repository.model_registry.get(c.req.param("id"));
+        if (!currentModel) {
+          return notFound(c, "Model registry record not found");
+        }
+
+        const versions = await c.var.repository.model_registry_versions.list();
+        const pendingVersion = versions
+          .filter(
+            (version) =>
+              version.model_registry_id === currentModel.id && version.approval_state === "pending_review"
+          )
+          .sort((a, b) => b.version_number - a.version_number)
+          .at(0);
+
+        if (!pendingVersion) {
+          return notFound(c, "Pending model registry proposal not found");
+        }
+
+        const rejectedVersion = await c.var.repository.model_registry_versions.update(
+          pendingVersion.id,
+          {
+            approval_state: "rejected",
+            change_reason: `${pendingVersion.change_reason} Rejected: ${body.data.reason_code}`
+          }
+        );
+
+        if (!rejectedVersion) {
+          return notFound(c, "Pending model registry proposal not found");
+        }
+
+        return c.json(
+          modelRejectResponseSchema.parse({
+            rejected_version: rejectedVersion,
+            registry_note:
+              "Registry proposal rejected. Active metadata remains unchanged and exact-savings eligibility still depends on the current approved row."
           })
         );
       })

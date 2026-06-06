@@ -13,6 +13,7 @@ import {
   billingResponseSchema,
   modelApproveResponseSchema,
   modelPatchResponseSchema,
+  modelRejectResponseSchema,
   reportDeleteResponseSchema,
   reportExportActionResponseSchema
 } from "./contracts";
@@ -445,7 +446,7 @@ describe("admin API routes", () => {
     const registry = adminModelRegistryResponseSchema.parse(
       await expectOkJson(await app.request("/admin-api/models", adminGetRequest()))
     );
-    expect(registry.freshness_summary.unverified).toBeGreaterThan(0);
+    expect(registry.freshness_summary.demo_unverified).toBeGreaterThan(0);
     const firstProposal = registry.proposed_changes.at(0);
     expect(firstProposal).toBeDefined();
     expect(firstProposal?.approval_actions.approve_enabled).toBe(true);
@@ -594,6 +595,96 @@ describe("admin API routes", () => {
 
     expect(JSON.stringify(accountDetail)).not.toContain("Classify the inbound support message");
     expect(accountDetail.account.redacted_prompt_preview).toContain("Support classifier");
+  });
+
+  test("enforces model registry freshness review, reject, and active approval metadata", async () => {
+    const app = createTestApp();
+
+    const missingSource = await app.request(
+      "/admin-api/models/model_registry_openai_demo_economy",
+      adminPatchJsonRequest(
+        {
+          display_name: "No Source Proposal"
+        },
+        { sudo_grant: { reason_code: "registry_missing_source" } }
+      )
+    );
+    expect(missingSource.status).toBe(400);
+
+    const proposal = modelPatchResponseSchema.parse(
+      await expectOkJson(
+        await app.request(
+          "/admin-api/models/model_registry_openai_demo_economy",
+          adminPatchJsonRequest(
+            {
+              display_name: "OpenAI Demo Economy Rejected Draft",
+              source_url: "https://platform.openai.com/docs/pricing"
+            },
+            { sudo_grant: { reason_code: "registry_reject_test" } }
+          )
+        )
+      )
+    );
+    expect(proposal.proposal.approval_state).toBe("pending_review");
+    expect(proposal.proposal.is_mock).toBe(false);
+
+    const rejected = modelRejectResponseSchema.parse(
+      await expectOkJson(
+        await app.request(
+          "/admin-api/models/model_registry_openai_demo_economy/reject",
+          adminJsonRequest(
+            {
+              reason_code: "official_source_mismatch"
+            },
+            { sudo_grant: { reason_code: "registry_reject_test" } }
+          )
+        )
+      )
+    );
+    expect(rejected.rejected_version.approval_state).toBe("rejected");
+
+    await expectOkJson(
+      await app.request(
+        "/admin-api/models/model_registry_openai_demo_frontier",
+        adminPatchJsonRequest(
+          {
+            stability_status: "stable",
+            source_url: "https://platform.openai.com/docs/pricing",
+            last_verified_at: "2026-06-06T12:00:00.000Z",
+            verified_by: "promptopts_official_docs_snapshot"
+          },
+          { sudo_grant: { reason_code: "registry_approve_test" } }
+        )
+      )
+    );
+
+    const approved = modelApproveResponseSchema.parse(
+      await expectOkJson(
+        await app.request(
+          "/admin-api/models/model_registry_openai_demo_frontier/approve",
+          adminJsonRequest(
+            {
+              verified_by: "promptopts_official_docs_snapshot",
+              source_url: "https://platform.openai.com/docs/pricing",
+              last_verified_at: "2026-06-06T12:00:00.000Z",
+              reason_code: "official_docs_snapshot"
+            },
+            { sudo_grant: { reason_code: "registry_approve_test" } }
+          )
+        )
+      )
+    );
+    expect(approved.model.freshness_status).toBe("fresh");
+    expect(approved.model.approval_state).toBe("approved");
+    expect(approved.model.approved_by_admin_user_id).toBe("admin_user_test_owner_sudo");
+    expect(approved.model.is_mock).toBe(false);
+
+    const registry = adminModelRegistryResponseSchema.parse(
+      await expectOkJson(await app.request("/admin-api/models", adminGetRequest()))
+    );
+    const approvedRow = registry.models.find((model) => model.id === "model_registry_openai_demo_frontier");
+    expect(approvedRow?.active_for_public_recommendations).toBe(true);
+    expect(registry.proposed_changes.some((item) => item.version.id === proposal.proposal.id)).toBe(false);
   });
 
   test("redacts Account 360 contact and prompt metadata for support role", async () => {

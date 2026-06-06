@@ -124,7 +124,7 @@ describe("shared domain schemas", () => {
     expect(connection.status).toBe("active");
   });
 
-  test("demo seed is synthetic and keeps model metadata unverified", () => {
+  test("demo seed keeps placeholders unverified and official rows approved", () => {
     const seed = createDemoRepositorySeed();
 
     expect(seed.workspaces[0]?.name).toBe("Acme AI");
@@ -157,12 +157,27 @@ describe("shared domain schemas", () => {
     expect(seed.test_cases).toHaveLength(5);
     expect(seed.reports[0]?.production_recommendation_allowed).toBe(false);
 
-    for (const model of seed.model_registry) {
+    const demoModels = seed.model_registry.filter((model) => model.is_mock);
+    const verifiedModels = seed.model_registry.filter((model) => !model.is_mock);
+
+    expect(verifiedModels.length).toBeGreaterThanOrEqual(3);
+
+    for (const model of demoModels) {
       expect(model.is_mock).toBe(true);
       expect(model.stability_status).toBe("unverified");
       expect(model.freshness_status).toBe("unverified");
+      expect(model.approval_state).toBe("draft");
       expect(model.last_verified_at).toBeNull();
       expect(model.pricing_note).toContain("Demo placeholder");
+    }
+
+    for (const model of verifiedModels) {
+      expect(model.freshness_status).toBe("fresh");
+      expect(model.approval_state).toBe("approved");
+      expect(model.source_url).toContain("https://");
+      expect(model.last_verified_at).toBe("2026-06-06T12:00:00.000Z");
+      expect(model.verified_by).toBe("promptopts_official_docs_snapshot");
+      expect(model.approved_by_admin_user_id).toBe("admin_user_demo");
     }
   });
 });

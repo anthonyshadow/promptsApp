@@ -288,7 +288,7 @@ export const recommendationDecisionResponseSchema = z
     riskNotes: z.array(nonEmptyStringSchema),
     productionRecommendationAllowed: z.boolean(),
     productionBlockers: z.array(nonEmptyStringSchema),
-    registryFreshness: z.enum(["fresh", "stale", "unverified", "deprecated"]),
+    registryFreshness: z.enum(["fresh", "stale", "unverified", "deprecated", "preview", "experimental", "demo_unverified"]),
     savingsSummary: nonEmptyStringSchema.nullable(),
     rankedPassingResultIds: z.array(idSchema)
   })

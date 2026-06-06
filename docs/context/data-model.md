@@ -115,9 +115,13 @@ Minimum model registry fields:
 - `quality_tier`
 - `recommended_task_types`
 - `stability_status`
+- `freshness_status`
 - `source_url`
 - `last_verified_at`
 - `verified_by`
+- `approval_state`
+- `approved_by_admin_user_id`
+- `approved_at`
 
 Free audit to CRM mapping:
 

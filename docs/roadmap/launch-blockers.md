@@ -6,7 +6,7 @@ Track the blockers that prevent PromptOpts from moving from founder-demoable loc
 
 ## Current Verdict
 
-PromptOpts is demo-ready with mocked infrastructure. It is not private-beta ready until the remaining P0 trust, key, storage, and registry blockers below are closed.
+PromptOpts is demo-ready with mocked infrastructure. It is not private-beta ready until the remaining trust, live-provider, queue, logging, storage hardening, and billing blockers below are closed.
 
 ## Blockers
 
@@ -17,7 +17,7 @@ PromptOpts is demo-ready with mocked infrastructure. It is not private-beta read
 | Real sudo lifecycle | Trust And Security E | complete | Sudo start/status/end routes persist action-scoped, reason-coded, time-boxed grants; start requires MFA recheck, expired/wrong-action grants reject dangerous actions, UI shows sudo modal/banner state, and lifecycle events are audited. | Keep break-glass and raw reveal payload flows placeholder-only until encrypted payload access lands. | Dangerous actions only pass with valid unexpired sudo and reason code. |
 | Provider-key encryption and non-viewability | Launch Blockers A; Data Model | complete | Provider connections store encrypted blobs plus fingerprints only, lifecycle routes return metadata only, no reveal route exists, admin metadata reads are audited, and adapters can use controlled decrypt-for-use. | Replace local encryption key material with production KMS before external customer data. | Keys are opaque after storage; all key actions are audited; adapters can use scoped keys safely. |
 | Object storage artifact lifecycle and deletion jobs | Launch Blockers A | complete | Report artifacts are storage-backed locally, deletion requests are durable, object content deletion is audited, partial failures are retryable, and vault evidence shows checksum/size/status. | Choose and harden production S3/MinIO lifecycle policies before external customer data. | Report deletion removes artifacts or records failure/retry evidence and writes audit events. |
-| Verified model registry rows | Launch Blockers A | in_progress | Registry admin/version flow and stale warnings exist; seed rows are demo/unverified. | Verify OpenAI, Anthropic, and Gemini MVP rows from official source URLs. | Active rows include source URL, verification date, verifier, approval state, and freshness status. |
+| Verified model registry rows | Launch Blockers A | complete | Seed includes approved official-doc snapshot rows for OpenAI, Anthropic, and Gemini; demo rows remain `demo_unverified`; admin review queue, approve/reject workflow, and stale warnings are wired. | Re-verify before external use and whenever provider docs change. | Active rows include source URL, verification date, verifier, approval state, and freshness status. |
 
 ## Beta-Blocking Dependencies
 

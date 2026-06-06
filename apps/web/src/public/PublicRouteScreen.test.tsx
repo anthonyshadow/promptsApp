@@ -258,6 +258,7 @@ describe("public route screens", () => {
     expect(reportHtml).toContain("Stronger fallback");
     expect(reportHtml).toContain("Deployment routing");
     expect(reportHtml).toContain("Risk notes");
+    expect(reportHtml).toContain("Unverified estimate");
     expect(exportHtml).toContain("Redacted by default");
     expect(exportHtml).toContain("Selected export");
     expect(exportHtml).toContain("Share package");

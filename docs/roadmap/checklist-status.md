@@ -27,7 +27,7 @@ Provide the update-safe status ledger for `docs/roadmap/next-steps-checklist.md`
 | Implement Postgres repository adapter and migration runner. | P0 | complete | Adapter, migration runner, seed/reset commands, missing ops tables, prompt deletion state, and memory/Postgres contract tests exist. Local Postgres role/database were created, migrations applied, seed completed, and live Postgres contract tests passed. | Future production hardening can replace the `psql` execution layer with a pooled client under the same repository interface. |
 | Encrypt provider keys and keep them non-viewable. | P0 | complete | Provider connections persist encrypted blobs plus fingerprints only; public lifecycle routes create/rotate/revoke and return metadata only; `/admin-api/provider-connections` is redacted and audited; no reveal route exists; adapter placeholders can resolve decrypted keys through the controlled decrypt-for-use helper. | Replace local key material with production KMS before external customer data. |
 | Wire object storage artifact lifecycle and deletion jobs. | P0 | complete | Report artifacts are written through storage, local filesystem storage keeps checksum/size metadata, deletion requests are durable, admin delete removes object content or records retryable failures, and lifecycle audit events cover request/start/deleted/failed/completed. | Production S3/MinIO adapter and lifecycle policy choices remain a deployment hardening task. |
-| Verify initial model registry rows from official source URLs. | P0 | in_progress | Registry admin supports source URL, versioning, approval, and stale warnings. | Verify OpenAI/Anthropic/Gemini rows from official sources and mark active rows fresh/approved. |
+| Verify initial model registry rows from official source URLs. | P0 | complete | Seed includes approved OpenAI, Anthropic, and Gemini official-doc snapshot rows with source URL, verification date, verifier, approval state, approver, and freshness status; demo placeholders remain `demo_unverified`. | Re-verify rows when the 30-day freshness window expires or provider docs change. |
 
 ### B. Private Beta Readiness
 
@@ -68,7 +68,7 @@ Provide the update-safe status ledger for `docs/roadmap/next-steps-checklist.md`
 | --- | --- | --- | --- | --- |
 | Calibrate token estimates with provider usage. | P1 | not_started | Token estimates are deterministic heuristics. | Store provider-reported usage from live eval rows and calibrate estimates. |
 | Add optional LLM judge adapter with labels. | P1 | not_started | LLM judge is conceptually separated in eval policy. | Implement optional judge adapter and label results separately from deterministic checks. |
-| Add registry freshness review workflow. | P1 | in_progress | Admin risk queue and stale warnings exist. | Add durable freshness review workflow, ownership, reminders, and exact-savings blocking by active row. |
+| Add registry freshness review workflow. | P1 | complete | Active rows age into review after 30 days; stale/demo/unapproved rows appear in admin overview and model-registry review queue; PATCH creates pending diffs; approve/reject records review outcome; exact savings are blocked unless rows are fresh/approved/non-mock. | Automated sync/reminders remain excluded from MVP; re-run official-doc verification before external use. |
 
 ### G. Admin Operations
 
@@ -93,6 +93,7 @@ Provide the update-safe status ledger for `docs/roadmap/next-steps-checklist.md`
 - Real admin auth/session/MFA with stored sessions and mock-header rejection.
 - Real sudo lifecycle with MFA recheck, reason code, expiry, revocation, wrong-action rejection, and audit events.
 - Provider-key encryption and non-viewability with metadata-only lifecycle routes and audited key actions.
+- Verified model registry official-doc rows and freshness review workflow.
 
 ## Blocked
 
@@ -101,13 +102,13 @@ Provide the update-safe status ledger for `docs/roadmap/next-steps-checklist.md`
 
 ## Validation Results
 
-- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run db:migrate`: passed against local Postgres; 0 migrations applied and 6 skipped because the test path had already applied the storage/deletion lifecycle migration.
-- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run db:seed`: passed; demo seed completed.
-- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun test`: passed with local Postgres integration, 136 tests across 23 files. The Postgres repository contract branch executed against local Postgres.
+- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run db:migrate`: passed against local Postgres; 0 migrations applied and 7 skipped because the test path had already applied the model-registry freshness migration.
+- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run db:seed`: passed; demo seed completed with approved official-doc registry rows and demo placeholders.
+- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun test`: passed with local Postgres integration, 140 tests across 25 files. The Postgres repository contract branch executed against local Postgres.
 - `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run typecheck`: passed.
 - `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run lint`: passed; current script delegates to `bun run typecheck`.
 - `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run build`: passed for packages, API, workers, and web.
 
 ## Recommended Next Prompt
 
-Move to Prompt 6 from `implementation-sequence.md`: model registry verification and freshness workflow.
+Move to Prompt 7 from `implementation-sequence.md`: rate limits, request logging, and data-use controls.
