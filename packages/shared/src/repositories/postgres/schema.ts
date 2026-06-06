@@ -12,6 +12,7 @@ export const POSTGRES_SCHEMA_TABLES = [
   "optimization_candidates",
   "reports",
   "report_artifacts",
+  "deletion_requests",
   "model_registry",
   "free_audits",
   "accounts",
@@ -47,7 +48,8 @@ export const POSTGRES_MIGRATION_FILES = [
   "packages/shared/src/repositories/postgres/migrations/0002_operational_tables.sql",
   "packages/shared/src/repositories/postgres/migrations/0003_admin_auth.sql",
   "packages/shared/src/repositories/postgres/migrations/0004_sudo_lifecycle.sql",
-  "packages/shared/src/repositories/postgres/migrations/0005_provider_key_lifecycle.sql"
+  "packages/shared/src/repositories/postgres/migrations/0005_provider_key_lifecycle.sql",
+  "packages/shared/src/repositories/postgres/migrations/0006_storage_deletion_lifecycle.sql"
 ] as const;
 
 export const POSTGRES_DURABILITY_INVARIANTS = {
@@ -56,7 +58,7 @@ export const POSTGRES_DURABILITY_INVARIANTS = {
   providerKeysOpaque:
     "provider_keys store encrypted ciphertext plus fingerprint metadata only; raw provider keys are not modeled.",
   reportDeletionRepresentable:
-    "prompts, prompt_versions, reports, and report_artifacts include deletion state fields so deletes can be audited and artifact cleanup can be tracked.",
+    "prompts, prompt_versions, reports, report_artifacts, and deletion_requests include deletion state fields so deletes can be audited and artifact cleanup can be tracked.",
   modelRegistryVersioned:
     "model_registry_versions preserve source URL, last verification metadata, verifier identity, and approval state."
 } as const;

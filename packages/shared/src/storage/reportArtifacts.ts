@@ -7,16 +7,20 @@ import {
 
 export type ReportArtifactStorageObject = {
   storage_uri: string;
+  storage_key: string;
   report_id: string;
   format: ReportArtifactFormat;
   content_type: string;
   content: string;
   checksum: string;
+  etag: string;
   size_bytes: number;
   redaction_state: RedactionState;
   created_at: string;
   deleted_at: string | null;
 };
+
+export type ReportArtifactObjectMetadata = Omit<ReportArtifactStorageObject, "content">;
 
 export type PutReportArtifactInput = {
   reportId: string;
@@ -45,6 +49,21 @@ export type GetReportArtifactOptions = {
 };
 
 export interface ReportArtifactStorage {
+  putObject(input: PutReportArtifactInput): Promise<ReportArtifactStorageObject>;
+  getObject(
+    storageKeyOrUri: string,
+    options?: GetReportArtifactOptions
+  ): Promise<ReportArtifactStorageObject | undefined>;
+  getObjectMetadata(
+    storageKeyOrUri: string,
+    options?: GetReportArtifactOptions
+  ): Promise<ReportArtifactObjectMetadata | undefined>;
+  deleteObject(
+    storageKeyOrUri: string,
+    options?: DeleteReportArtifactOptions
+  ): Promise<DeleteReportArtifactResult | undefined>;
+  objectExists(storageKeyOrUri: string): Promise<boolean>;
+  calculateChecksum(content: string): Promise<string>;
   put(input: PutReportArtifactInput): Promise<ReportArtifactStorageObject>;
   get(
     storageUri: string,
@@ -73,18 +92,25 @@ class MemoryReportArtifactStorage implements ReportArtifactStorage {
   }
 
   async put(input: PutReportArtifactInput): Promise<ReportArtifactStorageObject> {
+    return this.putObject(input);
+  }
+
+  async putObject(input: PutReportArtifactInput): Promise<ReportArtifactStorageObject> {
     const format = reportArtifactFormatSchema.parse(input.format);
     const redactionState = redactionStateSchema.parse(input.redactionState ?? "redacted");
-    const storageUri = createStorageUri(input.reportId, input.artifactId, format);
-    const checksum = await sha256Hex(input.content);
+    const storageKey = createStorageKey(input.reportId, input.artifactId, format);
+    const storageUri = createStorageUri(storageKey);
+    const checksum = await this.calculateChecksum(input.content);
     const sizeBytes = new TextEncoder().encode(input.content).byteLength;
     const object: ReportArtifactStorageObject = {
       storage_uri: storageUri,
+      storage_key: storageKey,
       report_id: input.reportId,
       format,
       content_type: input.contentType ?? defaultContentTypeForFormat(format),
       content: input.content,
       checksum,
+      etag: checksum,
       size_bytes: sizeBytes,
       redaction_state: redactionState,
       created_at: input.createdAt ?? new Date().toISOString(),
@@ -99,7 +125,14 @@ class MemoryReportArtifactStorage implements ReportArtifactStorage {
     storageUri: string,
     options: GetReportArtifactOptions = {}
   ): Promise<ReportArtifactStorageObject | undefined> {
-    const object = this.objects.get(storageUri);
+    return this.getObject(storageUri, options);
+  }
+
+  async getObject(
+    storageKeyOrUri: string,
+    options: GetReportArtifactOptions = {}
+  ): Promise<ReportArtifactStorageObject | undefined> {
+    const object = this.objects.get(resolveMemoryStorageUri(storageKeyOrUri));
     if (!object || (object.deleted_at && !options.includeDeleted)) {
       return undefined;
     }
@@ -107,10 +140,31 @@ class MemoryReportArtifactStorage implements ReportArtifactStorage {
     return cloneObject(object);
   }
 
+  async getObjectMetadata(
+    storageKeyOrUri: string,
+    options: GetReportArtifactOptions = {}
+  ): Promise<ReportArtifactObjectMetadata | undefined> {
+    const object = await this.getObject(storageKeyOrUri, options);
+    if (!object) {
+      return undefined;
+    }
+
+    const { content: _content, ...metadata } = object;
+    return metadata;
+  }
+
   async delete(
     storageUri: string,
     options: DeleteReportArtifactOptions = {}
   ): Promise<DeleteReportArtifactResult | undefined> {
+    return this.deleteObject(storageUri, options);
+  }
+
+  async deleteObject(
+    storageKeyOrUri: string,
+    options: DeleteReportArtifactOptions = {}
+  ): Promise<DeleteReportArtifactResult | undefined> {
+    const storageUri = resolveMemoryStorageUri(storageKeyOrUri);
     const object = this.objects.get(storageUri);
     if (!object) {
       return undefined;
@@ -133,17 +187,35 @@ class MemoryReportArtifactStorage implements ReportArtifactStorage {
       .filter((object) => options.includeDeleted || !object.deleted_at)
       .map(cloneObject);
   }
+
+  async objectExists(storageKeyOrUri: string): Promise<boolean> {
+    return Boolean(await this.getObject(storageKeyOrUri));
+  }
+
+  async calculateChecksum(content: string): Promise<string> {
+    return sha256Hex(content);
+  }
 }
 
-function createStorageUri(
+function createStorageKey(
   reportId: string,
   artifactId: string | undefined,
   format: ReportArtifactFormat
 ): string {
   const safeArtifactId = artifactId ?? crypto.randomUUID();
-  return `memory://reports/${encodeURIComponent(reportId)}/${encodeURIComponent(
+  return `reports/${encodeURIComponent(reportId)}/${encodeURIComponent(
     safeArtifactId
   )}.${format}`;
+}
+
+function createStorageUri(storageKey: string): string {
+  return `memory://${storageKey}`;
+}
+
+function resolveMemoryStorageUri(storageKeyOrUri: string): string {
+  return storageKeyOrUri.startsWith("memory://")
+    ? storageKeyOrUri
+    : createStorageUri(storageKeyOrUri);
 }
 
 function defaultContentTypeForFormat(format: ReportArtifactFormat): string {
@@ -169,4 +241,3 @@ async function sha256Hex(content: string): Promise<string> {
 function cloneObject<TObject>(object: TObject): TObject {
   return structuredClone(object);
 }
-

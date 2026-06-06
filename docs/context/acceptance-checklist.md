@@ -58,7 +58,7 @@ The wireframes and playbooks define readiness targets: under two minutes to publ
 - [ ] User support actions require role checks and write admin audit logs.
 - [ ] Eval job control supports inspect sanitized payload, retry, cancel, and regenerate report.
 - [ ] Model registry admin supports source URL, `last_verified_at`, diff, approval, and stale warnings.
-- [ ] Reports privacy vault supports redacted/default views, raw locked state, failed export retry, and deletion workflow.
+- [x] Reports privacy vault supports redacted/default views, raw locked state, failed export retry, and deletion workflow.
 - [ ] Billing admin supports plans, entitlements, usage ledger, invoices, credits, and feature flags.
 - [ ] `admin_audit_logs` are append-only and cover all mutations and sensitive reads.
 
@@ -74,7 +74,7 @@ The wireframes and playbooks define readiness targets: under two minutes to publ
 - [ ] Middleware checks route and action scopes, not just session.
 - [ ] Raw reveal, delete, credit, and impersonation actions require sudo.
 - [x] Provider keys remain encrypted and non-viewable.
-- [ ] Report and prompt deletion remove object storage artifacts and write audit events.
+- [ ] Report and prompt deletion remove object storage artifacts and write audit events. Status: report artifact deletion is storage-backed, durable, and audited; public prompt deletion route remains future work.
 
 ## MVP Exclusions
 

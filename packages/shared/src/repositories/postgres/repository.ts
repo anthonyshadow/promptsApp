@@ -9,6 +9,7 @@ import {
   contactSchema,
   creditSchema,
   crmNoteSchema,
+  deletionRequestSchema,
   entitlementSchema,
   evalResultSchema,
   evalRunSchema,
@@ -43,6 +44,7 @@ import {
   type Credit,
   type CrmNote,
   type CrmTask,
+  type DeletionRequest,
   type Entitlement,
   type EvalResult,
   type EvalRun,
@@ -401,6 +403,7 @@ const configs = {
   },
   reports: { tableName: "reports", schema: recommendationReportSchema },
   report_artifacts: { tableName: "report_artifacts", schema: reportArtifactSchema },
+  deletion_requests: { tableName: "deletion_requests", schema: deletionRequestSchema },
   model_registry: { tableName: "model_registry", schema: modelRegistryRecordSchema },
   model_registry_versions: {
     tableName: "model_registry_versions",
@@ -477,6 +480,10 @@ export function createPostgresRepository(options: PostgresRepositoryOptions = {}
     reports: new PostgresCrudRepository<RecommendationReport>(configs.reports, executorOptions),
     report_artifacts: new PostgresCrudRepository<ReportArtifact>(
       configs.report_artifacts,
+      executorOptions
+    ),
+    deletion_requests: new PostgresCrudRepository<DeletionRequest>(
+      configs.deletion_requests,
       executorOptions
     ),
     model_registry: new PostgresCrudRepository<ModelRegistryRecord>(

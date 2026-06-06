@@ -64,6 +64,11 @@ describe("postgres schema metadata", () => {
     expect(sql).toContain("delete_reason_code TEXT");
     expect(sql).toContain("delete_requested_by_user_id TEXT REFERENCES users(id)");
     expect(sql).toContain("storage_delete_status TEXT NOT NULL DEFAULT 'active'");
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS deletion_requests");
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS storage_key TEXT");
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS deletion_status TEXT NOT NULL DEFAULT 'active'");
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS deletion_attempts INTEGER NOT NULL DEFAULT 0");
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS last_deletion_error TEXT");
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS model_registry_versions");
     expect(sql).toContain("source_url TEXT NOT NULL");
     expect(sql).toContain("last_verified_at TIMESTAMPTZ");

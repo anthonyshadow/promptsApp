@@ -5,9 +5,11 @@ import {
   type AdminRoleRecord,
   type AdminSessionRecord,
   type AdminUserRecord,
+  type ReportArtifactStorage,
   type RepositorySeed,
   type SudoRequest,
   createDemoRepositorySeed,
+  createMemoryReportArtifactStorage,
   createMemoryRepository,
   healthResponseSchema
 } from "@promptopts/shared";
@@ -51,6 +53,23 @@ function createTestApp() {
   return createApp({
     repository: createAdminTestRepository()
   });
+}
+
+function createDeleteFailingStorage(): ReportArtifactStorage {
+  const storage = createMemoryReportArtifactStorage();
+
+  return {
+    put: storage.put.bind(storage),
+    putObject: storage.putObject.bind(storage),
+    get: storage.get.bind(storage),
+    getObject: storage.getObject.bind(storage),
+    getObjectMetadata: storage.getObjectMetadata.bind(storage),
+    list: storage.list.bind(storage),
+    objectExists: storage.objectExists.bind(storage),
+    calculateChecksum: storage.calculateChecksum.bind(storage),
+    delete: async () => undefined,
+    deleteObject: async () => undefined
+  };
 }
 
 function createAdminTestRepository() {
@@ -1579,9 +1598,11 @@ describe("admin API routes", () => {
         )
       )
     );
-    expect(deleteResponse.deletion_queued).toBe(true);
+    expect(deleteResponse.deletion_queued).toBe(false);
     expect(deleteResponse.deletion_status).toBe("deleted");
-    expect(deleteResponse.scoped_records_marked).toContain("report_artifacts.storage_uri");
+    expect(deleteResponse.artifact_failures).toBe(0);
+    expect(deleteResponse.artifacts_deleted).toBeGreaterThan(0);
+    expect(deleteResponse.scoped_records_marked).toContain("object_storage.artifacts");
 
     const billing = billingResponseSchema.parse(
       await expectOkJson(await app.request("/admin-api/billing", adminGetRequest()))
@@ -1864,22 +1885,56 @@ describe("admin API routes", () => {
 
     const after = await repository.admin_audit_logs.list();
     const added = after.slice(before.length);
-    expect(added).toHaveLength(8);
+    expect(added).toHaveLength(16);
     expect(added.filter((log) => log.action === "sudo_required_action_allowed")).toHaveLength(3);
-    expect(added.filter((log) => log.action !== "sudo_required_action_allowed").map((log) => log.target_type)).toEqual([
-      "reports",
-      "reports",
-      "reports",
-      "reports",
-      "billing"
-    ]);
-    expect(added.filter((log) => log.action !== "sudo_required_action_allowed").map((log) => log.action_scope)).toEqual([
-      "reveal_report",
-      "retry_eval",
-      "retry_eval",
-      "delete_report",
-      "issue_billing_credit"
-    ]);
+    expect(added.map((log) => log.action)).toContain("report_deletion_requested");
+    expect(added.map((log) => log.action)).toContain("report_artifact_delete_started");
+    expect(added.map((log) => log.action)).toContain("report_artifact_deleted");
+    expect(added.map((log) => log.action)).toContain("report_deletion_completed");
+    expect(added.filter((log) => log.action_scope === "delete_report")).toHaveLength(10);
+    expect(added.filter((log) => log.target_type === "billing")).toHaveLength(2);
+  });
+
+  test("keeps report deletion retryable when object deletion fails", async () => {
+    const repository = createAdminTestRepository();
+    const app = createApp({
+      repository,
+      reportArtifactStorage: createDeleteFailingStorage()
+    });
+
+    await expectOkJson(
+      await app.request(
+        `/admin-api/reports/${DEMO_IDS.report}/retry-export`,
+        adminJsonRequest({ reason_code: "prepare_storage_failure" })
+      )
+    );
+
+    const deleteResponse = reportDeleteResponseSchema.parse(
+      await expectOkJson(
+        await app.request(
+          `/admin-api/reports/${DEMO_IDS.report}/delete`,
+          adminJsonRequest(
+            { reason_code: "customer_delete_failure" },
+            { sudo_grant: { reason_code: "customer_delete_failure" } }
+          )
+        )
+      )
+    );
+
+    expect(deleteResponse.deletion_queued).toBe(true);
+    expect(deleteResponse.deletion_status).toBe("failed");
+    expect(deleteResponse.artifact_failures).toBeGreaterThan(0);
+
+    const artifacts = await repository.report_artifacts.list();
+    expect(artifacts.filter((artifact) => artifact.report_id === DEMO_IDS.report)).toContainEqual(
+      expect.objectContaining({
+        deletion_status: "failed",
+        last_deletion_error: "Object was missing or could not be deleted."
+      })
+    );
+    const auditLogs = await repository.admin_audit_logs.list();
+    expect(auditLogs.map((log) => log.action)).toContain("report_artifact_delete_failed");
+    expect(auditLogs.map((log) => log.action)).toContain("report_deletion_failed");
   });
 
   test("keeps public and admin namespaces separated", async () => {

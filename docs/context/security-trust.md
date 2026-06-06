@@ -21,6 +21,7 @@ All three PDFs state that users will paste production prompts, customer examples
 - Admin API authorization uses persisted admin users, roles, sessions, and MFA state. Mock admin headers are not accepted as authorization.
 - Dangerous admin actions require time-boxed sudo with MFA recheck, action scope binding, and reason code.
 - Provider keys are stored through provider-connection lifecycle routes as encrypted blobs plus fingerprints only; plaintext is not returned after save.
+- Report artifacts are written through a storage abstraction. Deletion removes object content, retains checksum/size/status tombstones, records a durable deletion request, and audits each lifecycle step.
 
 ## Non-Negotiables
 
@@ -70,6 +71,14 @@ Provider-key implementation:
 - Local development uses `PROMPTOPTS_SECRET_ENCRYPTION_KEY`; production should replace local key material with KMS-backed encryption without changing repository callers.
 - Provider adapters request decrypted keys only through the controlled decrypt-for-use helper inside provider execution paths; decrypted keys are not persisted or returned.
 
+Report artifact and retention implementation:
+
+- Report generation persists Markdown, JSON, PDF-stub, and redacted share-package artifacts through `ReportArtifactStorage`.
+- Local development uses a filesystem storage adapter rooted at `PROMPTOPTS_REPORT_STORAGE_DIR`; memory storage remains available for tests/demo mode.
+- `/admin-api/reports/:id/delete` requires sudo, creates a deletion request, marks report/artifact records, deletes object content, records retryable failures, and writes explicit audit events for request/start/deleted/failed/completed.
+- Report artifact metadata retains checksum, size, format, redaction state, deletion state, attempts, and last error. Raw artifact content is not returned from admin metadata views.
+- Default retention rules live in `packages/shared/src/retention/policy.ts`: admin audit logs and billing metadata are retained, while raw prompt/report artifact content can be tombstoned/deleted with reason-coded audit evidence.
+
 Trust UX states to build:
 
 - Secret detected: block or redact before provider call.
@@ -86,6 +95,7 @@ Trust UX states to build:
 - SOC 2 workstream.
 - Enterprise SSO and custom retention controls.
 - Production KMS/key hierarchy.
+- Production S3/KMS lifecycle policies and customer-specific retention controls.
 - Public prompt sharing by default.
 - Public admin docs.
 - Raw prompt support browsing.

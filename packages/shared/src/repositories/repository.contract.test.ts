@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   createMemoryRepository,
   type AdminAuditLog,
+  type DeletionRequest,
   type PromptOptsRepository,
   type ProviderConnection,
   type Workspace
@@ -98,6 +99,32 @@ async function exerciseProviderConnectionContract(repository: PromptOptsReposito
   });
 }
 
+async function exerciseDeletionRequestContract(repository: PromptOptsRepository) {
+  const deletionRequest: DeletionRequest = {
+    id: uniqueId("deletion_request_contract"),
+    target_type: "reports",
+    target_id: "report_contract",
+    requested_by: "admin_user_contract",
+    verified_by: "admin_user_contract",
+    status: "processing",
+    reason_code: "repository_contract",
+    created_at: createdAt,
+    completed_at: null
+  };
+
+  await expect(repository.deletion_requests.create(deletionRequest)).resolves.toEqual(deletionRequest);
+  const completed = await repository.deletion_requests.update(deletionRequest.id, {
+    status: "completed",
+    completed_at: updatedAt
+  });
+
+  expect(completed).toMatchObject({
+    id: deletionRequest.id,
+    status: "completed",
+    completed_at: updatedAt
+  });
+}
+
 async function appendAuditLog(repository: PromptOptsRepository): Promise<AdminAuditLog> {
   const log: AdminAuditLog = {
     id: uniqueId("admin_audit_log_contract"),
@@ -131,6 +158,7 @@ describe("repository contract", () => {
     expect(repository.backend).toBe("memory");
     await exerciseRepositoryContract(repository);
     await exerciseProviderConnectionContract(repository);
+    await exerciseDeletionRequestContract(repository);
 
     const auditRepository = repository.admin_audit_logs as object;
 
@@ -158,6 +186,7 @@ describe("repository contract", () => {
     expect(repository.backend).toBe("postgres");
     await exerciseRepositoryContract(repository);
     await exerciseProviderConnectionContract(repository);
+    await exerciseDeletionRequestContract(repository);
 
     const auditRepository = repository.admin_audit_logs as object;
 

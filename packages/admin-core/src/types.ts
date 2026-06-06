@@ -1,4 +1,4 @@
-import type { PromptOptsRepository, RedactionState } from "@promptopts/shared";
+import type { PromptOptsRepository, RedactionState, ReportArtifactStorage } from "@promptopts/shared";
 import type { AdminActionScope, AdminRole, AdminRouteScope } from "./scopes";
 
 export type AdminSudoGrant = {
@@ -47,6 +47,7 @@ export type AdminRoutePolicy = {
 
 export type AdminSecurityVariables = {
   repository: PromptOptsRepository;
+  reportArtifactStorage: ReportArtifactStorage;
   adminSession: AdminSession;
   adminActionContext: AdminActionContext;
 };

@@ -5,7 +5,7 @@
 - [x] P0 security M: Replace mock auth/MFA/sudo headers with real session storage. Status: complete - `/admin-api/*` now resolves persisted admin sessions from bearer/cookie tokens, rotates sessions after MFA, derives RBAC/action scopes from stored roles, and rejects mock `x-admin-*` headers. Why it matters: hidden routes are not security. Acceptance: `/admin-api/*` rejects unauthenticated, non-MFA, missing-scope, and missing-sudo requests without mock headers.
 - [x] P0 backend L: Implement Postgres repository adapter and migration runner. Status: complete - adapter, migration runner, seed/reset commands, durable schema coverage, and repository contract tests now pass against local Postgres. Why it matters: audit logs and customer prompts must be durable. Acceptance: repository contract tests pass against local Postgres.
 - [x] P0 security M: Encrypt provider keys and keep them non-viewable. Status: complete - provider connections persist encrypted blobs plus fingerprints only, lifecycle routes return metadata only, no reveal route exists, adapter decrypt-for-use is controlled, and provider-key actions are audited. Why it matters: BYOK requires trust. Acceptance: stored keys are opaque, reveal routes do not exist, audit events cover key actions.
-- [ ] P0 infra M: Wire object storage artifact lifecycle and deletion jobs. Why it matters: report deletion cannot be memory-only. Acceptance: deletion marks DB records, removes object artifacts, and audits every step.
+- [x] P0 infra M: Wire object storage artifact lifecycle and deletion jobs. Status: complete - report generation writes artifacts through storage, local filesystem storage records checksum/size metadata, admin deletion creates deletion requests, removes object content, marks DB records, keeps retryable failure state, and audits lifecycle steps. Why it matters: report deletion cannot be memory-only. Acceptance: deletion marks DB records, removes object artifacts, and audits every step.
 - [ ] P0 backend M: Verify initial model registry rows from official source URLs. Why it matters: exact savings claims require fresh metadata. Acceptance: active rows include source URL, last verified date, verifier, approval state, and stale warnings.
 
 ## B. Private Beta Readiness
@@ -18,7 +18,7 @@
 ## C. Production Readiness
 
 - [ ] P1 infra L: Add billing provider integration and webhook handling. Why it matters: credits, invoices, plans, and entitlements must reflect real events. Acceptance: plan changes and credits reconcile with external billing state.
-- [ ] P1 backend M: Add retention/deletion policy implementation. Why it matters: prompt/report deletion is a trust promise. Acceptance: scoped data deletion is durable, audited, and observable.
+- [x] P1 backend M: Add retention/deletion policy implementation. Status: complete for MVP - default retention rules are repo-native, report deletion tombstones scoped metadata while deleting object content, admin audit logs remain append-only, and partial failures are observable/retryable. Why it matters: prompt/report deletion is a trust promise. Acceptance: scoped data deletion is durable, audited, and observable.
 - [ ] P1 security L: Add rate limits, request logging policy, and data-use controls. Why it matters: provider calls and prompt ingestion need abuse and privacy controls. Acceptance: limits and logs redact sensitive payloads.
 
 ## D. Product Polish
@@ -42,7 +42,7 @@
 ## G. Admin Operations
 
 - [ ] P1 ops M: Expand job retry diagnostics. Why it matters: failed jobs should be actionable without logs. Acceptance: detail page explains provider error class, retry hints, and affected combinations.
-- [ ] P1 ops M: Wire report vault to object storage status. Why it matters: export/deletion lifecycle needs evidence. Acceptance: vault shows artifact existence, deletion state, checksum, and retry status.
+- [x] P1 ops M: Wire report vault to object storage status. Status: complete - `/__admin/reports` and `/admin-api/reports` show artifact existence, shortened storage key, checksum, size, deletion state, attempts, last error, and retry status without raw report content. Why it matters: export/deletion lifecycle needs evidence. Acceptance: vault shows artifact existence, deletion state, checksum, and retry status.
 - [ ] P2 ops S: Add Account 360 filtering. Why it matters: operators need focused metadata without CRM bloat. Acceptance: filter projects/reports by status and risk.
 
 ## H. Growth And Monetization

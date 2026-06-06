@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./postgres": "./src/repositories/postgres/index.ts",
-    "./security": "./src/security/index.ts"
+    "./security": "./src/security/index.ts",
+    "./storage/local": "./src/storage/localFilesystem.ts"
   },
   "types": "./src/index.ts",
   "scripts": {

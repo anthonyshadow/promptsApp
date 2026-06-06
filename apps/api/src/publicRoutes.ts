@@ -2,7 +2,7 @@ import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { autoDraftQualityContract, costQualityFrontier, decideRecommendation } from "@promptopts/eval-core";
 import { runEvalRun } from "@promptopts/eval-runner";
-import { generateReportArtifacts } from "@promptopts/report-generator";
+import { generateReportArtifacts, persistGeneratedReportArtifacts } from "@promptopts/report-generator";
 import {
   filterByCapability,
   type ModelCapabilityFilterInput,
@@ -44,7 +44,6 @@ import {
   type PromptOptsRepository,
   type QualityContract,
   type RecommendationReport,
-  type ReportArtifact,
   type TestCase,
   type UsageLedgerEntry
 } from "@promptopts/shared";
@@ -807,7 +806,18 @@ export function createPublicApiRoutes() {
       const generated = generateReportArtifacts({ report, evalRun, results, decision, generatedAt: timestamp });
 
       await c.var.repository.reports.create(report);
-      await persistReportArtifacts(c.var.repository, generated.artifacts);
+      const project = await c.var.repository.projects.get(report.project_id);
+      if (!project) {
+        return notFound(c, "Project not found");
+      }
+      await persistGeneratedReportArtifacts({
+        repository: c.var.repository,
+        storage: c.var.reportArtifactStorage,
+        report,
+        project,
+        generated,
+        createdAt: timestamp
+      });
 
       return c.json(report, 201);
     })
@@ -869,10 +879,16 @@ export function createPublicApiRoutes() {
         testCaseCount: testCases.length
       });
       const generated = generateReportArtifacts({ report, evalRun, results, decision });
-      await persistReportArtifacts(c.var.repository, generated.artifacts);
+      const artifacts = await persistGeneratedReportArtifacts({
+        repository: c.var.repository,
+        storage: c.var.reportArtifactStorage,
+        report,
+        project,
+        generated
+      });
 
       const content = generated.contents.find((item) => item.format === formatResult.data);
-      const artifact = generated.artifacts.find((item) => item.format === formatResult.data);
+      const artifact = artifacts.find((item) => item.format === formatResult.data);
 
       if (!content || !artifact) {
         return notFound(c, "Report artifact not found");
@@ -890,7 +906,7 @@ export function createPublicApiRoutes() {
       return c.json(
         reportExportResponseSchema.parse({
           report,
-          artifacts: generated.artifacts,
+          artifacts,
           export_package: {
             format: formatResult.data,
             download_url: artifact.storage_uri,
@@ -900,7 +916,7 @@ export function createPublicApiRoutes() {
             content: content.content,
             redacted_share_package: generated.redacted_share_package,
             eval_snapshot: generated.eval_snapshot,
-            todo: "Object storage download signing is not implemented yet; MVP returns generated content inline."
+            todo: "Object storage signing is not implemented yet; MVP returns redacted generated content inline while storing artifact metadata."
           }
         })
       );
@@ -1241,19 +1257,6 @@ async function getEvalResults(repository: PromptOptsRepository, evalRunId: strin
   const results = await repository.eval_results.list();
 
   return results.filter((result) => result.eval_run_id === evalRunId);
-}
-
-async function persistReportArtifacts(
-  repository: PromptOptsRepository,
-  artifacts: ReportArtifact[]
-): Promise<void> {
-  for (const artifact of artifacts) {
-    const existing = await repository.report_artifacts.get(artifact.id);
-
-    if (!existing) {
-      await repository.report_artifacts.create(artifact);
-    }
-  }
 }
 
 async function getReportDetail(repository: PromptOptsRepository, reportId: string) {

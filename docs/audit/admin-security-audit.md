@@ -46,7 +46,7 @@ Audit `/__admin/*` and `/admin-api/*` against the internal-only trust model.
 ## Known Gaps
 
 - Raw reveal payload retrieval and break-glass behavior remain placeholders behind sudo policy.
-- Report deletion marks memory-backed records and artifacts; object storage cleanup is mocked.
+- Report deletion creates durable deletion requests, removes local object content, records retryable failures, and writes lifecycle audit events.
 - Billing and provider-key workflows do not yet use production billing/KMS services.
 - Audit-log search UI is not a rich operator surface yet.
 
@@ -54,7 +54,7 @@ Audit `/__admin/*` and `/admin-api/*` against the internal-only trust model.
 
 - Keep deployed environments on durable Postgres before handling real customer data.
 - Use production KMS-backed provider-key handling before live provider calls.
-- Add object storage deletion jobs before claiming deletion is complete.
+- Configure production S3/MinIO lifecycle policy before handling external customer report artifacts.
 
 ## Fixes Completed In This Pass
 

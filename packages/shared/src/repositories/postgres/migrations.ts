@@ -110,6 +110,7 @@ export async function seedRepository(
   await upsertMany(repository.eval_results, seed.eval_results);
   await upsertMany(repository.reports, seed.reports);
   await upsertMany(repository.report_artifacts, seed.report_artifacts);
+  await upsertMany(repository.deletion_requests, seed.deletion_requests);
   await upsertMany(repository.accounts, seed.accounts);
   await upsertMany(repository.contacts, seed.contacts);
   await upsertMany(repository.opportunities, seed.opportunities);

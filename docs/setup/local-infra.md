@@ -9,6 +9,7 @@ Run optional local services for durable PromptOpts development without replacing
 - Postgres: durable application data and admin audit logs.
 - Redis: future eval/report queues and retry state.
 - MinIO: object-storage-compatible report artifact storage.
+- Local filesystem: default dev/test report artifact storage through `PROMPTOPTS_REPORT_STORAGE_DIR`.
 
 The migration runner and Postgres repository adapter currently execute SQL through the local `psql` CLI. Install Postgres client tools before running DB commands.
 
@@ -43,6 +44,8 @@ OBJECT_STORAGE_URL=http://localhost:9000
 OBJECT_STORAGE_BUCKET=promptopts-reports
 OBJECT_STORAGE_ACCESS_KEY=promptopts
 OBJECT_STORAGE_SECRET_KEY=promptopts-local-only
+PROMPTOPTS_REPORT_STORAGE_DRIVER=local
+PROMPTOPTS_REPORT_STORAGE_DIR=.promptopts-storage/report-artifacts
 PROMPTOPTS_SECRET_ENCRYPTION_KEY=replace-with-local-32-plus-character-secret
 ```
 
@@ -52,5 +55,5 @@ PROMPTOPTS_SECRET_ENCRYPTION_KEY=replace-with-local-32-plus-character-secret
 - The memory repository remains available for tests and no-service local demos.
 - Provider keys are stored through BYOK routes as encrypted ciphertext plus fingerprint metadata only. They must never be displayed after storage, and raw provider keys should not be placed in `.env`.
 - `admin_audit_logs` are append-only in both the repository contract and the Postgres migration.
-- Report deletion is represented with report and artifact deletion state so object cleanup can be audited.
+- Report deletion creates deletion requests, removes local object content, preserves checksum/size/status tombstones, and writes audit events. MinIO/S3-compatible lifecycle configuration is production hardening work.
 - Model registry edits should create `model_registry_versions` rows with source URL, `last_verified_at`, `verified_by`, and approval state.

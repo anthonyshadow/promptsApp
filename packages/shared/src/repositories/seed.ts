@@ -397,6 +397,10 @@ export function createDemoRepositorySeed(): Required<RepositorySeed> {
           "Model registry rows are mock/unverified."
         ],
         registry_freshness: "unverified",
+        deleted_at: null,
+        delete_requested_by_user_id: null,
+        delete_reason_code: null,
+        retention_state: "active",
         is_mock: true,
         generated_at: null,
         created_at: DEMO_TIMESTAMP,
@@ -407,15 +411,24 @@ export function createDemoRepositorySeed(): Required<RepositorySeed> {
       {
         id: DEMO_IDS.reportArtifact,
         report_id: DEMO_IDS.report,
+        workspace_id: DEMO_IDS.workspace,
+        project_id: DEMO_IDS.project,
         format: "json",
+        privacy_state: "failed_export",
+        storage_key: "reports/report_support_classifier_shell/report_artifact_support_classifier_json.json",
         storage_uri: "memory://reports/report_support_classifier_shell.json",
         checksum: null,
         size_bytes: null,
         redaction_state: "redacted",
+        deleted_at: null,
+        deletion_status: "active",
+        deletion_attempts: 0,
+        last_deletion_error: null,
         is_mock: true,
         created_at: DEMO_TIMESTAMP
       }
     ],
+    deletion_requests: [],
     model_registry: [
       createDemoModelRegistryRecord({
         id: openAiFrontierModelId,

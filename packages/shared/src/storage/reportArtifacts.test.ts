@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createMemoryReportArtifactStorage } from "./reportArtifacts";
+import { createLocalFileSystemReportArtifactStorage } from "./localFilesystem";
 
 describe("report artifact storage", () => {
   test("stores redacted report artifacts behind a swappable abstraction", async () => {
@@ -15,10 +16,17 @@ describe("report artifact storage", () => {
 
     expect(artifact.storage_uri).toBe("memory://reports/report_test/artifact_markdown.markdown");
     expect(artifact.content_type).toBe("text/markdown");
+    expect(artifact.storage_key).toBe("reports/report_test/artifact_markdown.markdown");
     expect(artifact.redaction_state).toBe("redacted");
     expect(artifact.checksum).toMatch(/^[a-f0-9]{64}$/);
+    expect(artifact.etag).toBe(artifact.checksum);
     expect(artifact.size_bytes).toBeGreaterThan(0);
     expect(await storage.get(artifact.storage_uri)).toEqual(artifact);
+    expect(await storage.getObjectMetadata(artifact.storage_key)).toMatchObject({
+      storage_key: artifact.storage_key,
+      checksum: artifact.checksum
+    });
+    expect(await storage.objectExists(artifact.storage_key)).toBe(true);
   });
 
   test("represents artifact deletion without exposing deleted content by default", async () => {
@@ -48,5 +56,37 @@ describe("report artifact storage", () => {
       deleted_at: "2026-01-16T12:00:00.000Z"
     });
   });
-});
 
+  test("writes and deletes local filesystem artifacts with metadata evidence", async () => {
+    const rootDir = `/tmp/promptopts-storage-test-${crypto.randomUUID()}`;
+    const storage = createLocalFileSystemReportArtifactStorage({ rootDir });
+    const artifact = await storage.putObject({
+      reportId: "report_local",
+      artifactId: "artifact_json",
+      format: "json",
+      content: "{\"redacted\":true}",
+      contentType: "application/json",
+      redactionState: "redacted",
+      createdAt: "2026-01-15T12:00:00.000Z"
+    });
+
+    expect(artifact.storage_uri).toBe("local://reports/report_local/artifact_json.json");
+    expect(await storage.objectExists(artifact.storage_key)).toBe(true);
+    expect(await storage.getObjectMetadata(artifact.storage_uri)).toMatchObject({
+      checksum: artifact.checksum,
+      size_bytes: artifact.size_bytes,
+      deleted_at: null
+    });
+
+    await storage.deleteObject(artifact.storage_key, {
+      reasonCode: "retention_delete",
+      deletedAt: "2026-01-16T12:00:00.000Z"
+    });
+
+    expect(await storage.objectExists(artifact.storage_key)).toBe(false);
+    expect(await storage.getObjectMetadata(artifact.storage_key, { includeDeleted: true })).toMatchObject({
+      storage_key: artifact.storage_key,
+      deleted_at: "2026-01-16T12:00:00.000Z"
+    });
+  });
+});

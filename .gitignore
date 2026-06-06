@@ -38,6 +38,7 @@ temp/
 .tmp/
 uploads/
 artifacts/
+.promptopts-storage/
 
 # OS/editor
 .DS_Store

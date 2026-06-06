@@ -26,7 +26,7 @@ Provide the update-safe status ledger for `docs/roadmap/next-steps-checklist.md`
 | Replace mock auth/MFA/sudo headers with real session storage. | P0 | complete | `/admin-api/auth/login` creates persisted pre-MFA admin sessions; `/admin-api/auth/mfa/verify` validates TOTP and rotates sessions; middleware resolves bearer/cookie sessions from `admin_sessions`, derives RBAC/action scopes from `admin_users`/`admin_roles`, rejects mock `x-admin-*` headers, and tests cover unauthenticated/non-MFA/missing-scope/missing-sudo paths. | None for the current MVP scope. |
 | Implement Postgres repository adapter and migration runner. | P0 | complete | Adapter, migration runner, seed/reset commands, missing ops tables, prompt deletion state, and memory/Postgres contract tests exist. Local Postgres role/database were created, migrations applied, seed completed, and live Postgres contract tests passed. | Future production hardening can replace the `psql` execution layer with a pooled client under the same repository interface. |
 | Encrypt provider keys and keep them non-viewable. | P0 | complete | Provider connections persist encrypted blobs plus fingerprints only; public lifecycle routes create/rotate/revoke and return metadata only; `/admin-api/provider-connections` is redacted and audited; no reveal route exists; adapter placeholders can resolve decrypted keys through the controlled decrypt-for-use helper. | Replace local key material with production KMS before external customer data. |
-| Wire object storage artifact lifecycle and deletion jobs. | P0 | in_progress | Storage abstraction, MinIO service, and memory deletion states exist. | Implement object adapter, deletion worker, retention policy, checksums, and retry evidence. |
+| Wire object storage artifact lifecycle and deletion jobs. | P0 | complete | Report artifacts are written through storage, local filesystem storage keeps checksum/size metadata, deletion requests are durable, admin delete removes object content or records retryable failures, and lifecycle audit events cover request/start/deleted/failed/completed. | Production S3/MinIO adapter and lifecycle policy choices remain a deployment hardening task. |
 | Verify initial model registry rows from official source URLs. | P0 | in_progress | Registry admin supports source URL, versioning, approval, and stale warnings. | Verify OpenAI/Anthropic/Gemini rows from official sources and mark active rows fresh/approved. |
 
 ### B. Private Beta Readiness
@@ -43,7 +43,7 @@ Provide the update-safe status ledger for `docs/roadmap/next-steps-checklist.md`
 | Item | Priority | Status | Evidence | Remaining work |
 | --- | --- | --- | --- | --- |
 | Add billing provider integration and webhook handling. | P1 | blocked | Billing admin, invoices, credits, entitlements, and usage ledger exist locally. | Select billing provider and beta packaging terms, then wire webhooks/reconciliation. |
-| Add retention/deletion policy implementation. | P1 | in_progress | Schema and memory deletion states exist. | Implement durable retention/deletion jobs and object artifact cleanup. |
+| Add retention/deletion policy implementation. | P1 | complete | `DEFAULT_RETENTION_POLICY` documents delete-vs-retain behavior; report deletion tombstones scoped metadata, preserves audit/billing metadata, deletes artifact content, and keeps retry evidence. | Customer-specific retention controls remain excluded from MVP. |
 | Add rate limits, request logging policy, and data-use controls. | P1 | not_started | Security docs define data-use posture. | Implement redacted logs, route limits, provider-call limits, and opt-in data-use controls. |
 
 ### D. Product Polish
@@ -75,7 +75,7 @@ Provide the update-safe status ledger for `docs/roadmap/next-steps-checklist.md`
 | Item | Priority | Status | Evidence | Remaining work |
 | --- | --- | --- | --- | --- |
 | Expand job retry diagnostics. | P1 | in_progress | Eval job admin shows sanitized payload, actions, worker health, and retry hints. | Add real provider error classes, affected combinations, queue events, and incident links. |
-| Wire report vault to object storage status. | P1 | in_progress | Reports vault shows privacy states and memory storage URIs. | Add artifact existence, deletion state, checksum, and object retry status. |
+| Wire report vault to object storage status. | P1 | complete | Reports vault API/UI show artifact existence, shortened storage key, checksum, size, deletion status, attempts, last error, and retry status with raw content locked. | Browser screenshot coverage remains a separate P1 frontend item. |
 | Add Account 360 filtering. | P2 | not_started | Account 360 shows redacted metadata and tabs. | Add project/report filters by status and risk without CRM bloat. |
 
 ### H. Growth And Monetization
@@ -101,13 +101,13 @@ Provide the update-safe status ledger for `docs/roadmap/next-steps-checklist.md`
 
 ## Validation Results
 
-- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run db:migrate`: passed against local Postgres; provider-key lifecycle migration applied, 4 existing migrations skipped.
+- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run db:migrate`: passed against local Postgres; 0 migrations applied and 6 skipped because the test path had already applied the storage/deletion lifecycle migration.
 - `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run db:seed`: passed; demo seed completed.
-- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun test`: passed with local Postgres integration, 134 tests across 23 files. The Postgres repository contract branch executed against local Postgres.
+- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun test`: passed with local Postgres integration, 136 tests across 23 files. The Postgres repository contract branch executed against local Postgres.
 - `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run typecheck`: passed.
 - `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run lint`: passed; current script delegates to `bun run typecheck`.
 - `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run build`: passed for packages, API, workers, and web.
 
 ## Recommended Next Prompt
 
-Move to Prompt 5 from `implementation-sequence.md`: object storage, deletion jobs, and retention.
+Move to Prompt 6 from `implementation-sequence.md`: model registry verification and freshness workflow.

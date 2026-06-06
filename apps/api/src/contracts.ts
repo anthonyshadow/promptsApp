@@ -1138,6 +1138,14 @@ export const adminReportsResponseSchema = z
           redacted_summary: nonEmptyStringSchema,
           artifact_id: idSchema.nullable(),
           storage_uri: nonEmptyStringSchema.nullable(),
+          storage_key_short: nonEmptyStringSchema.nullable(),
+          artifact_exists: z.boolean(),
+          checksum: nonEmptyStringSchema.nullable(),
+          size_bytes: z.number().int().nonnegative().nullable(),
+          deletion_status: z.enum(["active", "delete_requested", "deleted", "failed"]),
+          deletion_attempts: z.number().int().nonnegative(),
+          last_deletion_error: nonEmptyStringSchema.nullable(),
+          retry_status: z.enum(["not_needed", "retry_available", "retrying", "blocked"]),
           generated_at: isoDateTimeSchema.nullable(),
           deletion_note: nonEmptyStringSchema.nullable()
         })
@@ -1189,8 +1197,9 @@ export const reportDeleteResponseSchema = z
   .object({
     report_id: idSchema,
     deletion_queued: z.boolean(),
-    deletion_status: z.enum(["deletion_pending", "deleted"]),
+    deletion_status: z.enum(["deletion_pending", "deleted", "failed"]),
     artifacts_deleted: z.number().int().nonnegative(),
+    artifact_failures: z.number().int().nonnegative(),
     scoped_records_marked: z.array(nonEmptyStringSchema),
     todo: nonEmptyStringSchema
   })

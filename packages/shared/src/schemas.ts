@@ -113,6 +113,34 @@ export type ReportStatus = z.infer<typeof reportStatusSchema>;
 export const reportArtifactFormatSchema = z.enum(["markdown", "json", "pdf"]);
 export type ReportArtifactFormat = z.infer<typeof reportArtifactFormatSchema>;
 
+export const reportArtifactPrivacyStateSchema = z.enum([
+  "ready_redacted",
+  "raw_locked",
+  "failed_export",
+  "deletion_pending",
+  "deleted"
+]);
+export type ReportArtifactPrivacyState = z.infer<typeof reportArtifactPrivacyStateSchema>;
+
+export const artifactDeletionStatusSchema = z.enum([
+  "active",
+  "delete_requested",
+  "deleted",
+  "failed"
+]);
+export type ArtifactDeletionStatus = z.infer<typeof artifactDeletionStatusSchema>;
+
+export const retentionStateSchema = z.enum(["active", "delete_requested", "deleted"]);
+export type RetentionState = z.infer<typeof retentionStateSchema>;
+
+export const deletionRequestStatusSchema = z.enum([
+  "requested",
+  "processing",
+  "completed",
+  "failed"
+]);
+export type DeletionRequestStatus = z.infer<typeof deletionRequestStatusSchema>;
+
 export const adminActionScopeSchema = z.enum([
   "read_metadata",
   "reveal_prompt",
@@ -499,6 +527,9 @@ export const promptSchema = z
     name: z.string().min(1),
     current_version_id: idSchema.nullable(),
     redacted_preview: z.string().min(1),
+    deleted_at: isoDateTimeSchema.nullable().optional(),
+    delete_reason_code: z.string().min(1).nullable().optional(),
+    retention_state: retentionStateSchema.optional(),
     is_mock: z.boolean(),
     created_at: isoDateTimeSchema,
     updated_at: isoDateTimeSchema
@@ -516,6 +547,9 @@ export const promptVersionSchema = z
     variables: z.array(z.string().min(1)),
     status: promptStatusSchema,
     redacted_preview: z.string().min(1),
+    deleted_at: isoDateTimeSchema.nullable().optional(),
+    delete_reason_code: z.string().min(1).nullable().optional(),
+    retention_state: retentionStateSchema.optional(),
     is_mock: z.boolean(),
     created_by_user_id: idSchema.nullable(),
     created_at: isoDateTimeSchema
@@ -675,6 +709,10 @@ export const recommendationReportSchema = z
     production_recommendation_allowed: z.boolean(),
     production_blockers: z.array(z.string().min(1)),
     registry_freshness: registryFreshnessSchema,
+    deleted_at: isoDateTimeSchema.nullable().optional(),
+    delete_requested_by_user_id: idSchema.nullable().optional(),
+    delete_reason_code: z.string().min(1).nullable().optional(),
+    retention_state: retentionStateSchema.optional(),
     is_mock: z.boolean(),
     generated_at: isoDateTimeSchema.nullable(),
     created_at: isoDateTimeSchema,
@@ -687,16 +725,39 @@ export const reportArtifactSchema = z
   .object({
     id: idSchema,
     report_id: idSchema,
+    workspace_id: idSchema.nullable().optional(),
+    project_id: idSchema.nullable().optional(),
     format: reportArtifactFormatSchema,
+    privacy_state: reportArtifactPrivacyStateSchema.optional(),
+    storage_key: z.string().min(1).optional(),
     storage_uri: z.string().min(1),
     checksum: z.string().min(1).nullable(),
     size_bytes: z.number().int().nonnegative().nullable(),
     redaction_state: redactionStateSchema,
+    deleted_at: isoDateTimeSchema.nullable().optional(),
+    deletion_status: artifactDeletionStatusSchema.optional(),
+    deletion_attempts: z.number().int().nonnegative().optional(),
+    last_deletion_error: z.string().min(1).nullable().optional(),
     is_mock: z.boolean(),
     created_at: isoDateTimeSchema
   })
   .strict();
 export type ReportArtifact = z.infer<typeof reportArtifactSchema>;
+
+export const deletionRequestSchema = z
+  .object({
+    id: idSchema,
+    target_type: z.string().min(1),
+    target_id: idSchema,
+    requested_by: idSchema,
+    verified_by: idSchema.nullable(),
+    status: deletionRequestStatusSchema,
+    reason_code: z.string().min(1),
+    created_at: isoDateTimeSchema,
+    completed_at: isoDateTimeSchema.nullable()
+  })
+  .strict();
+export type DeletionRequest = z.infer<typeof deletionRequestSchema>;
 
 export const adminActionContextSchema = z
   .object({

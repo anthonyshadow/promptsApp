@@ -1,4 +1,13 @@
-import { APP_NAME, type EvalResult, type EvalRun, type RecommendationReport, type ReportArtifact } from "@promptopts/shared";
+import {
+  APP_NAME,
+  type EvalResult,
+  type EvalRun,
+  type PromptOptsRepository,
+  type PromptProject,
+  type RecommendationReport,
+  type ReportArtifact,
+  type ReportArtifactStorage
+} from "@promptopts/shared";
 import type { RecommendationDecision } from "@promptopts/eval-core";
 
 export type ReportArtifactContent = {
@@ -58,6 +67,16 @@ export type GenerateReportArtifactsInput = {
   generatedAt?: string;
 };
 
+export type PersistGeneratedReportArtifactsInput = {
+  repository: PromptOptsRepository;
+  storage: ReportArtifactStorage;
+  report: RecommendationReport;
+  project: PromptProject;
+  generated: GeneratedReportPackage;
+  reasonCode?: string;
+  createdAt?: string;
+};
+
 // Report generation snapshots eval results; regenerating exports must not mutate or rerun the underlying eval matrix.
 export function generateReportArtifacts(input: GenerateReportArtifactsInput): GeneratedReportPackage {
   const generatedAt = input.generatedAt ?? new Date().toISOString();
@@ -89,6 +108,62 @@ export function generateReportArtifacts(input: GenerateReportArtifactsInput): Ge
     redacted_share_package: redactedSharePackage,
     eval_snapshot: evalSnapshot
   };
+}
+
+export async function persistGeneratedReportArtifacts(
+  input: PersistGeneratedReportArtifactsInput
+): Promise<ReportArtifact[]> {
+  const timestamp = input.createdAt ?? new Date().toISOString();
+  const existing = await input.repository.report_artifacts.list();
+  const persisted: ReportArtifact[] = [];
+
+  for (const content of input.generated.contents) {
+    const existingArtifact = existing.find(
+      (artifact) => artifact.report_id === input.report.id && artifact.format === content.format
+    );
+    const artifactId =
+      existingArtifact?.id ?? `report_artifact_${sanitizeId(input.report.id)}_${content.format}`;
+    const stored = await input.storage.putObject({
+      reportId: input.report.id,
+      artifactId,
+      format: content.format,
+      content: content.content,
+      contentType: content.content_type,
+      redactionState: content.redaction_state,
+      createdAt: timestamp
+    });
+    const artifact: ReportArtifact = {
+      id: artifactId,
+      report_id: input.report.id,
+      workspace_id: input.project.workspace_id,
+      project_id: input.project.id,
+      format: content.format,
+      privacy_state: "ready_redacted",
+      storage_key: stored.storage_key,
+      storage_uri: stored.storage_uri,
+      checksum: stored.checksum,
+      size_bytes: stored.size_bytes,
+      redaction_state: content.redaction_state,
+      deleted_at: null,
+      deletion_status: "active",
+      deletion_attempts: 0,
+      last_deletion_error: null,
+      is_mock: input.report.is_mock,
+      created_at: existingArtifact?.created_at ?? timestamp
+    };
+
+    if (existingArtifact) {
+      const { id: _artifactId, ...artifactPatch } = artifact;
+      const updated = await input.repository.report_artifacts.update(existingArtifact.id, artifactPatch);
+      if (updated) {
+        persisted.push(updated);
+      }
+    } else {
+      persisted.push(await input.repository.report_artifacts.create(artifact));
+    }
+  }
+
+  return persisted;
 }
 
 export function startReportGenerator() {

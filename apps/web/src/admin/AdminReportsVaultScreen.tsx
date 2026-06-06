@@ -151,6 +151,8 @@ function AdminReportsVaultScreen({ apiBaseUrl }: { apiBaseUrl?: string | undefin
               <th>Format</th>
               <th>Privacy state</th>
               <th>Status</th>
+              <th>Storage</th>
+              <th>Deletion</th>
               <th>Action</th>
             </tr>
           </thead>
@@ -167,6 +169,24 @@ function AdminReportsVaultScreen({ apiBaseUrl }: { apiBaseUrl?: string | undefin
                   <span className={statusBadgeStyle}>{report.privacy_state}</span>
                 </td>
                 <td>{report.status}</td>
+                <td>
+                  <strong>{report.artifact_exists ? "exists" : "not found"}</strong>
+                  <span className={subtleLineStyle}>{report.storage_key_short ?? "no storage key"}</span>
+                  <span className={subtleLineStyle}>
+                    {report.checksum ? `checksum ${shortenValue(report.checksum)}` : "checksum unavailable"}
+                  </span>
+                  <span className={subtleLineStyle}>
+                    {report.size_bytes === null ? "size unavailable" : `${report.size_bytes} bytes`}
+                  </span>
+                </td>
+                <td>
+                  <span className={statusBadgeStyle}>{report.deletion_status}</span>
+                  <span className={subtleLineStyle}>attempts {report.deletion_attempts}</span>
+                  <span className={subtleLineStyle}>retry {report.retry_status}</span>
+                  {report.last_deletion_error ? (
+                    <span className={subtleLineStyle}>{report.last_deletion_error}</span>
+                  ) : null}
+                </td>
                 <td>
                   <button className={buttonStyle} type="button" onClick={() => void handleAction(report.action, report.report_id)}>
                     {report.action.replaceAll("_", " ")}
@@ -204,6 +224,14 @@ function createLocalReportsResponse(): AdminReportsResponse {
         redacted_summary: "Redacted report metadata; eval-backed recommendation is available.",
         artifact_id: "report_artifact_ready",
         storage_uri: "memory://reports/report_support_classifier_shell.json",
+        storage_key_short: "reports/.../report_support_classifier_shell.json",
+        artifact_exists: true,
+        checksum: "d8a8fca2dc0f896fd7cb4cb0031ba249",
+        size_bytes: 2048,
+        deletion_status: "active",
+        deletion_attempts: 0,
+        last_deletion_error: null,
+        retry_status: "not_needed",
         generated_at: "2026-01-15T12:00:00.000Z",
         deletion_note: null
       },
@@ -217,6 +245,14 @@ function createLocalReportsResponse(): AdminReportsResponse {
         redacted_summary: "Redacted markdown export can be regenerated from the eval snapshot.",
         artifact_id: "report_artifact_regenerate",
         storage_uri: "memory://reports/report_support_classifier_shell.md",
+        storage_key_short: "reports/.../report_support_classifier_shell.md",
+        artifact_exists: true,
+        checksum: "85f6047f90c15f14a79c21d03b95bba8",
+        size_bytes: 4096,
+        deletion_status: "active",
+        deletion_attempts: 0,
+        last_deletion_error: null,
+        retry_status: "not_needed",
         generated_at: "2026-01-15T12:00:00.000Z",
         deletion_note: null
       },
@@ -230,6 +266,14 @@ function createLocalReportsResponse(): AdminReportsResponse {
         redacted_summary: "Raw report content is locked behind sudo and reason code.",
         artifact_id: null,
         storage_uri: null,
+        storage_key_short: null,
+        artifact_exists: false,
+        checksum: null,
+        size_bytes: null,
+        deletion_status: "active",
+        deletion_attempts: 0,
+        last_deletion_error: null,
+        retry_status: "blocked",
         generated_at: "2026-01-15T12:00:00.000Z",
         deletion_note: null
       },
@@ -243,6 +287,14 @@ function createLocalReportsResponse(): AdminReportsResponse {
         redacted_summary: "Export failed checksum confirmation; retry is available.",
         artifact_id: "report_artifact_failed",
         storage_uri: "memory://reports/failed.markdown",
+        storage_key_short: "reports/.../failed.markdown",
+        artifact_exists: false,
+        checksum: null,
+        size_bytes: null,
+        deletion_status: "failed",
+        deletion_attempts: 1,
+        last_deletion_error: "Checksum confirmation failed.",
+        retry_status: "retry_available",
         generated_at: "2026-01-15T12:00:00.000Z",
         deletion_note: null
       },
@@ -256,8 +308,16 @@ function createLocalReportsResponse(): AdminReportsResponse {
         redacted_summary: "Deletion request is pending approval.",
         artifact_id: "report_artifact_pending_delete",
         storage_uri: "memory://reports/delete-pending.json",
+        storage_key_short: "reports/.../delete-pending.json",
+        artifact_exists: true,
+        checksum: "6df3d125b5c32fcebfb1321a6b8fc884",
+        size_bytes: 512,
+        deletion_status: "delete_requested",
+        deletion_attempts: 1,
+        last_deletion_error: null,
+        retry_status: "retrying",
         generated_at: null,
-        deletion_note: "Scoped artifacts will be marked deleted; object storage cleanup is mocked."
+        deletion_note: "Deletion is pending; object content is not considered safe until completion."
       },
       {
         report_id: "report_deleted_demo",
@@ -268,13 +328,25 @@ function createLocalReportsResponse(): AdminReportsResponse {
         action: "open_redacted",
         redacted_summary: "Report artifact has been marked deleted.",
         artifact_id: "report_artifact_deleted",
-        storage_uri: "deleted://report_artifact_deleted",
+        storage_uri: "memory://reports/deleted.json",
+        storage_key_short: "reports/.../deleted.json",
+        artifact_exists: false,
+        checksum: "ecadc45d3a9b8f01703ee039c7aa5b85",
+        size_bytes: 256,
+        deletion_status: "deleted",
+        deletion_attempts: 1,
+        last_deletion_error: null,
+        retry_status: "blocked",
         generated_at: null,
-        deletion_note: "Deleted artifacts are unavailable."
+        deletion_note: "Object content deleted; checksum and size remain as deletion evidence."
       }
     ],
     notes: ["Local reports are synthetic and redacted."]
   };
+}
+
+function shortenValue(value: string): string {
+  return value.length > 12 ? `${value.slice(0, 12)}...` : value;
 }
 
 const rootStyle = css({
@@ -380,7 +452,7 @@ const tableWrapStyle = css({
 
 const tableStyle = css({
   width: "100%",
-  minWidth: "900px",
+  minWidth: "1120px",
   borderCollapse: "collapse",
   th: {
     color: "#9fbaaa",

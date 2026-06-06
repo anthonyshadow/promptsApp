@@ -1,6 +1,6 @@
 import { Hono, type Context } from "hono";
 import { decideRecommendation } from "@promptopts/eval-core";
-import { generateReportArtifacts } from "@promptopts/report-generator";
+import { generateReportArtifacts, persistGeneratedReportArtifacts } from "@promptopts/report-generator";
 import {
   ADMIN_SESSION_COOKIE_NAME,
   authenticateAdminPassword,
@@ -19,6 +19,7 @@ import {
   rotateAdminSessionAfterMfa,
   startSudoRequest,
   verifyAdminTotp,
+  writeAdminSecurityAuditEvent,
   writeAdminAuditEvent
 } from "@promptopts/admin-core";
 import type {
@@ -29,6 +30,7 @@ import type {
   Credit,
   CrmNote,
   CrmTask,
+  DeletionRequest,
   Entitlement,
   EvalResult,
   EvalRun,
@@ -45,6 +47,7 @@ import type {
   ProviderConnection,
   RecommendationReport,
   ReportArtifact,
+  ReportArtifactStorage,
   UsageLedgerEntry,
   Workspace
 } from "@promptopts/shared";
@@ -373,7 +376,8 @@ export function createAdminApiRoutes() {
           models,
           usageLedger,
           promptAnalyses,
-          auditLogs
+          auditLogs,
+          deletionRequests
         ] = await Promise.all([
           c.var.repository.accounts.list(),
           c.var.repository.free_audits.list(),
@@ -384,7 +388,8 @@ export function createAdminApiRoutes() {
           c.var.repository.model_registry.list(),
           c.var.repository.usage_ledger.list(),
           c.var.repository.prompt_analyses.list(),
-          c.var.repository.admin_audit_logs.list()
+          c.var.repository.admin_audit_logs.list(),
+          c.var.repository.deletion_requests.list()
         ]);
         const unverifiedModelCount = models.filter((model) => model.freshness_status !== "fresh").length;
         const convertedAccounts = new Set(
@@ -462,10 +467,12 @@ export function createAdminApiRoutes() {
               {
                 id: "risk_deletion_requests",
                 label: "Deletion requests",
-                severity: "low",
-                count: 0,
+                severity: deletionRequests.some((request) => request.status === "failed") ? "high" : deletionRequests.length > 0 ? "medium" : "low",
+                count: deletionRequests.filter((request) => request.status !== "completed").length,
                 link: "/__admin/reports",
-                redacted_summary: "Deletion request tracking is placeholder-only until durable lifecycle jobs are wired."
+                redacted_summary: deletionRequests.length > 0
+                  ? "Deletion requests are tracked with durable status and retry evidence."
+                  : "No active deletion requests are visible."
               }
             ],
             live_activity: createLiveActivityFeed({
@@ -984,7 +991,15 @@ export function createAdminApiRoutes() {
         ]);
 
         return c.json(
-          adminReportsResponseSchema.parse(createAdminReportsVault({ reports, artifacts, projects, workspaces }))
+          adminReportsResponseSchema.parse(
+            await createAdminReportsVault({
+              reports,
+              artifacts,
+              projects,
+              workspaces,
+              storage: c.var.reportArtifactStorage
+            })
+          )
         );
       })
       .get("/reports/:id/reveal", async (c) => {
@@ -1015,7 +1030,12 @@ export function createAdminApiRoutes() {
           return notFound(c, "Report not found");
         }
 
-        const artifacts = await retryReportExport(c.var.repository, report, body.data.reason_code);
+        const artifacts = await retryReportExport(
+          c.var.repository,
+          c.var.reportArtifactStorage,
+          report,
+          body.data.reason_code
+        );
 
         return c.json(
           reportExportActionResponseSchema.parse({
@@ -1037,7 +1057,12 @@ export function createAdminApiRoutes() {
           return notFound(c, "Report not found");
         }
 
-        const artifacts = await regenerateReportExports(c.var.repository, report, body.data.reason_code);
+        const artifacts = await regenerateReportExports(
+          c.var.repository,
+          c.var.reportArtifactStorage,
+          report,
+          body.data.reason_code
+        );
 
         return c.json(
           reportExportActionResponseSchema.parse({
@@ -1059,16 +1084,27 @@ export function createAdminApiRoutes() {
           return notFound(c, "Report not found");
         }
 
-        const deletion = await markReportDeleted(c.var.repository, report, body.data.reason_code);
+        const deletion = await markReportDeleted({
+          repository: c.var.repository,
+          storage: c.var.reportArtifactStorage,
+          report,
+          reasonCode: body.data.reason_code,
+          adminUserId: c.var.adminSession.admin_user_id,
+          session: c.var.adminSession,
+          sudoRequestId: c.var.adminActionContext.sudo_request_id
+        });
 
         return c.json(
           reportDeleteResponseSchema.parse({
             report_id: report.id,
-            deletion_queued: true,
-            deletion_status: "deleted",
+            deletion_queued: deletion.artifactFailures > 0,
+            deletion_status: deletion.artifactFailures > 0 ? "failed" : "deleted",
             artifacts_deleted: deletion.artifactsDeleted,
+            artifact_failures: deletion.artifactFailures,
             scoped_records_marked: deletion.scopedRecordsMarked,
-            todo: `Deletion workflow marked scoped report artifacts deleted in memory. Object storage deletion is mocked until durable storage is wired. Reason: ${body.data.reason_code}`
+            todo: deletion.artifactFailures > 0
+              ? `Deletion is partially complete and retryable. Failed artifacts: ${deletion.artifactFailures}. Reason: ${body.data.reason_code}`
+              : `Deletion removed object artifacts, marked scoped DB records deleted, and wrote audit events. Reason: ${body.data.reason_code}`
           })
         );
       })
@@ -1319,13 +1355,14 @@ function getAgeSeconds(isoTimestamp: string): number {
   return Number.isFinite(ageMs) ? Math.max(0, Math.floor(ageMs / 1000)) : 0;
 }
 
-function createAdminReportsVault(input: {
+async function createAdminReportsVault(input: {
   reports: RecommendationReport[];
   artifacts: ReportArtifact[];
   projects: PromptProject[];
   workspaces: Workspace[];
+  storage: ReportArtifactStorage;
 }) {
-  const rows = input.reports.flatMap((report) => {
+  const rowGroups = await Promise.all(input.reports.map(async (report) => {
     const reportArtifacts = input.artifacts.filter((artifact) => artifact.report_id === report.id);
     const artifacts = reportArtifacts.length > 0
       ? reportArtifacts
@@ -1334,8 +1371,11 @@ function createAdminReportsVault(input: {
     const workspace = project
       ? input.workspaces.find((item) => item.id === project.workspace_id) ?? null
       : null;
-    const artifactRows = artifacts.map((artifact) => {
+    const artifactRows = await Promise.all(artifacts.map(async (artifact) => {
       const privacyState = getReportPrivacyState(report, artifact);
+      const artifactExists = await getArtifactExists(input.storage, artifact);
+      const deletionStatus = artifact.deletion_status ?? inferArtifactDeletionStatus(privacyState);
+      const retryStatus = getReportVaultRetryStatus(privacyState, deletionStatus);
 
       return {
         report_id: report.id,
@@ -1347,12 +1387,18 @@ function createAdminReportsVault(input: {
         redacted_summary: createReportVaultSummary(report, privacyState),
         artifact_id: artifact.id.startsWith("virtual_") ? null : artifact.id,
         storage_uri: artifact.storage_uri,
+        storage_key_short: artifact.storage_key ? shortenStorageKey(artifact.storage_key) : null,
+        artifact_exists: artifactExists,
+        checksum: artifact.checksum,
+        size_bytes: artifact.size_bytes,
+        deletion_status: deletionStatus,
+        deletion_attempts: artifact.deletion_attempts ?? 0,
+        last_deletion_error: artifact.last_deletion_error ?? null,
+        retry_status: retryStatus,
         generated_at: report.generated_at,
-        deletion_note: privacyState === "deleted" || privacyState === "deletion_pending"
-          ? "Scoped report artifacts are marked for deletion in memory; object storage cleanup is mocked."
-          : null
+        deletion_note: getReportVaultDeletionNote(artifact, artifactExists)
       };
-    });
+    }));
     const rawLockedRow = {
       report_id: report.id,
       workspace: workspace?.name ?? "Workspace metadata unavailable",
@@ -1363,12 +1409,21 @@ function createAdminReportsVault(input: {
       redacted_summary: "Raw report content is locked; request sudo with reason before any reveal workflow.",
       artifact_id: null,
       storage_uri: null,
+      storage_key_short: null,
+      artifact_exists: false,
+      checksum: null,
+      size_bytes: null,
+      deletion_status: "active" as const,
+      deletion_attempts: 0,
+      last_deletion_error: null,
+      retry_status: "blocked" as const,
       generated_at: report.generated_at,
       deletion_note: null
     };
 
     return [...artifactRows, rawLockedRow];
-  });
+  }));
+  const rows = rowGroups.flat();
 
   return {
     reports: rows,
@@ -1382,7 +1437,7 @@ function createAdminReportsVault(input: {
     notes: [
       "Reports vault returns redacted metadata by default; raw report reveal remains sudo-gated.",
       "Retry and regenerate export actions use the existing eval snapshot and do not rerun evals.",
-      "Deletion workflow is represented in memory; durable object deletion is production-incomplete."
+      "Artifact existence, checksum, deletion state, attempts, and retry status come from storage-backed metadata."
     ]
   };
 }
@@ -1394,11 +1449,19 @@ function createVirtualReportArtifact(
   return {
     id: `virtual_${report.id}_${format}`,
     report_id: report.id,
+    workspace_id: null,
+    project_id: report.project_id,
     format,
+    privacy_state: "failed_export",
+    storage_key: `reports/${report.id}/${format}`,
     storage_uri: `memory://reports/${report.id}/${format}`,
     checksum: null,
     size_bytes: null,
     redaction_state: "redacted",
+    deleted_at: null,
+    deletion_status: "failed",
+    deletion_attempts: 0,
+    last_deletion_error: "No persisted artifact metadata exists.",
     is_mock: true,
     created_at: report.created_at
   };
@@ -1408,19 +1471,97 @@ function getReportPrivacyState(
   report: RecommendationReport,
   artifact: ReportArtifact
 ) {
-  if (artifact.storage_uri.startsWith("deleted://")) {
+  if ((artifact.deletion_status ?? "active") === "deleted" || artifact.privacy_state === "deleted") {
     return "deleted" as const;
   }
 
-  if (report.production_blockers.some((blocker) => blocker.toLowerCase().includes("deletion pending"))) {
+  if (
+    (artifact.deletion_status ?? "active") === "delete_requested" ||
+    artifact.privacy_state === "deletion_pending" ||
+    report.production_blockers.some((blocker) => blocker.toLowerCase().includes("deletion pending"))
+  ) {
     return "deletion_pending" as const;
   }
 
-  if (artifact.checksum === null && artifact.size_bytes === null) {
+  if ((artifact.deletion_status ?? "active") === "failed" || artifact.checksum === null || artifact.size_bytes === null) {
     return "failed_export" as const;
   }
 
   return "ready_redacted" as const;
+}
+
+function inferArtifactDeletionStatus(
+  privacyState: ReturnType<typeof getReportPrivacyState>
+): NonNullable<ReportArtifact["deletion_status"]> {
+  if (privacyState === "deleted") {
+    return "deleted";
+  }
+
+  if (privacyState === "deletion_pending") {
+    return "delete_requested";
+  }
+
+  if (privacyState === "failed_export") {
+    return "failed";
+  }
+
+  return "active";
+}
+
+function getReportVaultRetryStatus(
+  privacyState: ReturnType<typeof getReportPrivacyState>,
+  deletionStatus: NonNullable<ReportArtifact["deletion_status"]>
+) {
+  if (privacyState === "failed_export" || deletionStatus === "failed") {
+    return "retry_available" as const;
+  }
+
+  if (deletionStatus === "delete_requested") {
+    return "retrying" as const;
+  }
+
+  if (privacyState === "deleted") {
+    return "blocked" as const;
+  }
+
+  return "not_needed" as const;
+}
+
+async function getArtifactExists(
+  storage: ReportArtifactStorage,
+  artifact: ReportArtifact
+): Promise<boolean> {
+  if (artifact.id.startsWith("virtual_") || (artifact.deletion_status ?? "active") === "deleted") {
+    return false;
+  }
+
+  return storage.objectExists(artifact.storage_key ?? artifact.storage_uri).catch(() => false);
+}
+
+function shortenStorageKey(storageKey: string): string {
+  const parts = storageKey.split("/");
+  return parts.length > 2 ? `${parts[0]}/.../${parts.at(-1)}` : storageKey;
+}
+
+function getReportVaultDeletionNote(
+  artifact: ReportArtifact,
+  artifactExists: boolean
+): string | null {
+  if ((artifact.deletion_status ?? "active") === "deleted") {
+    return artifactExists
+      ? "Deleted DB state exists, but the object still appears present; retry deletion."
+      : "Object content deleted; checksum and size remain as deletion evidence.";
+  }
+
+  if ((artifact.deletion_status ?? "active") === "failed") {
+    return artifact.last_deletion_error ?? "Export or deletion failed; retry is available.";
+  }
+
+  if ((artifact.deletion_status ?? "active") === "delete_requested") {
+    return "Deletion is pending or retrying; object content is not considered safe until completion.";
+  }
+
+  return null;
 }
 
 function getReportVaultAction(privacyState: ReturnType<typeof getReportPrivacyState> | "raw_locked") {
@@ -1458,46 +1599,22 @@ function createReportVaultSummary(report: RecommendationReport, privacyState: Re
 
 async function retryReportExport(
   repository: ApiEnv["Variables"]["repository"],
+  storage: ReportArtifactStorage,
   report: RecommendationReport,
   reasonCode: string
 ): Promise<ReportArtifact[]> {
-  const artifacts = (await repository.report_artifacts.list()).filter(
-    (artifact) => artifact.report_id === report.id
-  );
-  const timestamp = nowIso();
-  const refreshed = artifacts.length > 0 ? artifacts : [createVirtualReportArtifact(report, "json")];
-
-  return Promise.all(
-    refreshed.map(async (artifact) => {
-      const next: ReportArtifact = {
-        ...artifact,
-        id: artifact.id.startsWith("virtual_") ? createId("report_artifact") : artifact.id,
-        storage_uri: artifact.storage_uri.startsWith("deleted://")
-          ? `memory://reports/${report.id}/${artifact.format}`
-          : artifact.storage_uri,
-        checksum: `mock_checksum_${reasonCode.replace(/[^a-z0-9]/gi, "_")}`,
-        size_bytes: artifact.size_bytes ?? 1024,
-        redaction_state: "redacted",
-        created_at: artifact.created_at ?? timestamp
-      };
-
-      if (artifact.id.startsWith("virtual_")) {
-        return repository.report_artifacts.create(next);
-      }
-
-      return repository.report_artifacts.update(artifact.id, next) as Promise<ReportArtifact>;
-    })
-  );
+  return regenerateReportExports(repository, storage, report, reasonCode);
 }
 
 async function regenerateReportExports(
   repository: ApiEnv["Variables"]["repository"],
+  storage: ReportArtifactStorage,
   report: RecommendationReport,
   reasonCode: string
 ): Promise<ReportArtifact[]> {
   const evalRun = await repository.eval_runs.get(report.eval_run_id);
   if (!evalRun) {
-    return retryReportExport(repository, report, reasonCode);
+    return writeFallbackReportArtifact(repository, storage, report, reasonCode);
   }
 
   const [results, testCases] = await Promise.all([
@@ -1514,69 +1631,273 @@ async function regenerateReportExports(
     passThreshold: evalRun.pass_threshold,
     testCaseCount: contractTestCases.length
   });
-  const generated = generateReportArtifacts({ report, evalRun, results: evalResults, decision });
-  const existing = await repository.report_artifacts.list();
-
-  for (const artifact of generated.artifacts) {
-    const current = existing.find(
-      (item) => item.report_id === report.id && item.format === artifact.format
-    );
-
-    if (current) {
-      await repository.report_artifacts.update(current.id, {
-        storage_uri: artifact.storage_uri,
-        checksum: artifact.checksum ?? `mock_regenerated_${reasonCode}`,
-        size_bytes: artifact.size_bytes ?? 1024,
-        redaction_state: "redacted"
-      });
-    } else {
-      await repository.report_artifacts.create({
-        ...artifact,
-        id: createId("report_artifact"),
-        checksum: artifact.checksum ?? `mock_regenerated_${reasonCode}`,
-        size_bytes: artifact.size_bytes ?? 1024,
-        redaction_state: "redacted"
-      });
-    }
+  const project = await repository.projects.get(report.project_id);
+  if (!project) {
+    return writeFallbackReportArtifact(repository, storage, report, reasonCode);
   }
+  const generated = generateReportArtifacts({ report, evalRun, results: evalResults, decision });
 
-  return (await repository.report_artifacts.list()).filter((artifact) => artifact.report_id === report.id);
+  return persistGeneratedReportArtifacts({
+    repository,
+    storage,
+    report,
+    project,
+    generated,
+    reasonCode
+  });
 }
 
-async function markReportDeleted(
+async function writeFallbackReportArtifact(
   repository: ApiEnv["Variables"]["repository"],
+  storage: ReportArtifactStorage,
   report: RecommendationReport,
   reasonCode: string
-): Promise<{ artifactsDeleted: number; scopedRecordsMarked: string[] }> {
+): Promise<ReportArtifact[]> {
+  const project = await repository.projects.get(report.project_id);
+  const timestamp = nowIso();
+  const stored = await storage.putObject({
+    reportId: report.id,
+    artifactId: `report_artifact_${report.id}_json`,
+    format: "json",
+    content: JSON.stringify(
+      {
+        report_id: report.id,
+        redaction_state: "redacted",
+        reason_code: reasonCode,
+        note: "Fallback redacted report artifact generated without rerunning evals."
+      },
+      null,
+      2
+    ),
+    contentType: "application/json",
+    redactionState: "redacted",
+    createdAt: timestamp
+  });
+  const artifact: ReportArtifact = {
+    id: `report_artifact_${report.id}_json`,
+    report_id: report.id,
+    workspace_id: project?.workspace_id ?? null,
+    project_id: project?.id ?? report.project_id,
+    format: "json",
+    privacy_state: "ready_redacted",
+    storage_key: stored.storage_key,
+    storage_uri: stored.storage_uri,
+    checksum: stored.checksum,
+    size_bytes: stored.size_bytes,
+    redaction_state: "redacted",
+    deleted_at: null,
+    deletion_status: "active",
+    deletion_attempts: 0,
+    last_deletion_error: null,
+    is_mock: report.is_mock,
+    created_at: timestamp
+  };
+  const existing = (await repository.report_artifacts.list()).find(
+    (item) => item.report_id === report.id && item.format === "json"
+  );
+
+  if (!existing) {
+    return [await repository.report_artifacts.create(artifact)];
+  }
+
+  const { id: _id, ...patch } = artifact;
+  const updated = await repository.report_artifacts.update(existing.id, patch);
+  return updated ? [updated] : [];
+}
+
+async function markReportDeleted(input: {
+  repository: ApiEnv["Variables"]["repository"];
+  storage: ReportArtifactStorage;
+  report: RecommendationReport;
+  reasonCode: string;
+  adminUserId: string;
+  session: ApiEnv["Variables"]["adminSession"];
+  sudoRequestId: string | null;
+}): Promise<{ artifactsDeleted: number; artifactFailures: number; scopedRecordsMarked: string[] }> {
+  const { repository, storage, report, reasonCode, adminUserId, session, sudoRequestId } = input;
   const artifacts = (await repository.report_artifacts.list()).filter(
     (artifact) => artifact.report_id === report.id
   );
+  const timestamp = nowIso();
+  const deletionRequest: DeletionRequest = {
+    id: createId("deletion_request"),
+    target_type: "reports",
+    target_id: report.id,
+    requested_by: adminUserId,
+    verified_by: adminUserId,
+    status: "processing",
+    reason_code: reasonCode,
+    created_at: timestamp,
+    completed_at: null
+  };
 
-  await repository.reports.update(report.id, {
-    production_blockers: Array.from(new Set([
-      ...report.production_blockers,
-      `deletion pending approved: ${reasonCode}`
-    ])),
-    updated_at: nowIso()
+  await repository.deletion_requests.create(deletionRequest);
+  await writeReportDeletionAudit(repository, session, {
+    action: "report_deletion_requested",
+    reasonCode,
+    targetId: report.id,
+    sudoRequestId,
+    metadata: {
+      deletion_request_id: deletionRequest.id,
+      artifact_count: artifacts.length
+    }
   });
 
+  await repository.reports.update(report.id, {
+    deleted_at: null,
+    delete_requested_by_user_id: adminUserId,
+    delete_reason_code: reasonCode,
+    retention_state: "delete_requested",
+    production_blockers: Array.from(new Set([
+      ...report.production_blockers,
+      `deletion pending: ${reasonCode}`
+    ])),
+    updated_at: timestamp
+  });
+
+  let artifactsDeleted = 0;
+  let artifactFailures = 0;
+
   for (const artifact of artifacts) {
+    const attempts = (artifact.deletion_attempts ?? 0) + 1;
     await repository.report_artifacts.update(artifact.id, {
-      storage_uri: `deleted://${artifact.id}`,
-      checksum: null,
-      size_bytes: 0,
+      privacy_state: "deletion_pending",
+      deletion_status: "delete_requested",
+      deletion_attempts: attempts,
+      last_deletion_error: null
+    });
+    await writeReportDeletionAudit(repository, session, {
+      action: "report_artifact_delete_started",
+      reasonCode,
+      targetId: artifact.id,
+      sudoRequestId,
+      metadata: {
+        report_id: report.id,
+        storage_key: artifact.storage_key ? shortenStorageKey(artifact.storage_key) : null,
+        attempt: attempts
+      }
+    });
+
+    const deletionResult = await storage
+      .deleteObject(artifact.storage_key ?? artifact.storage_uri, {
+        reasonCode,
+        deletedAt: timestamp
+      })
+      .catch((error: unknown) => ({
+        error: error instanceof Error ? error.message : String(error)
+      }));
+
+    if (!deletionResult || "error" in deletionResult) {
+      artifactFailures += 1;
+      const failureMessage =
+        deletionResult && "error" in deletionResult
+          ? deletionResult.error
+          : "Object was missing or could not be deleted.";
+      await repository.report_artifacts.update(artifact.id, {
+        privacy_state: "failed_export",
+        deletion_status: "failed",
+        deletion_attempts: attempts,
+        last_deletion_error: failureMessage
+      });
+      await writeReportDeletionAudit(repository, session, {
+        action: "report_artifact_delete_failed",
+        reasonCode,
+        targetId: artifact.id,
+        sudoRequestId,
+        metadata: {
+          report_id: report.id,
+          error: failureMessage,
+          retryable: true
+        }
+      });
+      continue;
+    }
+
+    await repository.report_artifacts.update(artifact.id, {
+      privacy_state: "deleted",
+      deleted_at: deletionResult.deleted_at,
+      deletion_status: "deleted",
+      deletion_attempts: attempts,
+      last_deletion_error: null,
       redaction_state: "redacted"
     });
+    await writeReportDeletionAudit(repository, session, {
+      action: "report_artifact_deleted",
+      reasonCode,
+      targetId: artifact.id,
+      sudoRequestId,
+      metadata: {
+        report_id: report.id,
+        storage_key: artifact.storage_key ? shortenStorageKey(artifact.storage_key) : null,
+        checksum_retained: Boolean(artifact.checksum)
+      }
+    });
+    artifactsDeleted += 1;
   }
 
+  const finalStatus = artifactFailures > 0 ? "failed" : "completed";
+  await repository.deletion_requests.update(deletionRequest.id, {
+    status: finalStatus,
+    completed_at: artifactFailures > 0 ? null : timestamp
+  });
+  await repository.reports.update(report.id, {
+    deleted_at: artifactFailures > 0 ? null : timestamp,
+    retention_state: artifactFailures > 0 ? "delete_requested" : "deleted",
+    production_blockers: Array.from(new Set([
+      ...report.production_blockers,
+      artifactFailures > 0
+        ? `deletion partial failure: ${reasonCode}`
+        : `deletion completed: ${reasonCode}`
+    ])),
+    updated_at: timestamp
+  });
+  await writeReportDeletionAudit(repository, session, {
+    action: artifactFailures > 0 ? "report_deletion_failed" : "report_deletion_completed",
+    reasonCode,
+    targetId: report.id,
+    sudoRequestId,
+    metadata: {
+      deletion_request_id: deletionRequest.id,
+      artifacts_deleted: artifactsDeleted,
+      artifact_failures: artifactFailures
+    }
+  });
+
   return {
-    artifactsDeleted: artifacts.length,
+    artifactsDeleted,
+    artifactFailures,
     scopedRecordsMarked: [
-      "reports.production_blockers",
-      "report_artifacts.storage_uri",
-      "report_artifacts.redaction_state"
+      "deletion_requests.status",
+      "reports.retention_state",
+      "reports.deleted_at",
+      "report_artifacts.deletion_status",
+      "report_artifacts.deleted_at",
+      "object_storage.artifacts"
     ]
   };
+}
+
+async function writeReportDeletionAudit(
+  repository: ApiEnv["Variables"]["repository"],
+  session: ApiEnv["Variables"]["adminSession"],
+  input: {
+    action: string;
+    reasonCode: string;
+    targetId: string;
+    sudoRequestId: string | null;
+    metadata: Record<string, unknown>;
+  }
+): Promise<void> {
+  await writeAdminSecurityAuditEvent(repository, {
+    session,
+    action: input.action,
+    actionScope: "delete_report",
+    targetType: "reports",
+    targetId: input.targetId,
+    reasonCode: input.reasonCode,
+    sudoRequestId: input.sudoRequestId,
+    metadata: input.metadata
+  });
 }
 
 function createBillingAdminResponse(input: {

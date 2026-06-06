@@ -9,6 +9,7 @@ import {
   contactSchema,
   creditSchema,
   crmNoteSchema,
+  deletionRequestSchema,
   entitlementSchema,
   evalResultSchema,
   evalRunSchema,
@@ -43,6 +44,7 @@ import {
   type Credit,
   type CrmNote,
   type CrmTask,
+  type DeletionRequest,
   type Entitlement,
   type EvalResult,
   type EvalRun,
@@ -208,6 +210,10 @@ export function createMemoryRepository(seed: RepositorySeed = {}): PromptOptsRep
     report_artifacts: new MemoryCrudRepository<ReportArtifact>(
       reportArtifactSchema,
       seed.report_artifacts
+    ),
+    deletion_requests: new MemoryCrudRepository<DeletionRequest>(
+      deletionRequestSchema,
+      seed.deletion_requests
     ),
     model_registry: new MemoryCrudRepository<ModelRegistryRecord>(
       modelRegistryRecordSchema,

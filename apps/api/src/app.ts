@@ -2,20 +2,30 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import {
   createDemoRepositorySeed,
+  createMemoryReportArtifactStorage,
   createMemoryRepository,
   type PromptOptsRepository
 } from "@promptopts/shared";
 import { createPostgresRepository } from "@promptopts/shared/postgres";
+import { createLocalFileSystemReportArtifactStorage } from "@promptopts/shared/storage/local";
 import { createAdminApiRoutes } from "./adminRoutes";
-import { injectRepository, type ApiEnv, type AppDependencies } from "./context";
+import {
+  injectReportArtifactStorage,
+  injectRepository,
+  type ApiEnv,
+  type AppDependencies
+} from "./context";
 import { createPublicApiRoutes } from "./publicRoutes";
 
 export function createApp(dependencies: AppDependencies = {}) {
   const repository = dependencies.repository ?? createRuntimeRepository();
+  const reportArtifactStorage =
+    dependencies.reportArtifactStorage ?? createRuntimeReportArtifactStorage(Boolean(dependencies.repository));
 
   return new Hono<ApiEnv>()
     .use("*", cors())
     .use("*", injectRepository(repository))
+    .use("*", injectReportArtifactStorage(reportArtifactStorage))
     .route("/", createPublicApiRoutes())
     .route("/admin-api", createAdminApiRoutes());
 }
@@ -84,4 +94,12 @@ function createRuntimeRepository(): PromptOptsRepository {
   }
 
   return createMemoryRepository(createDemoRepositorySeed());
+}
+
+function createRuntimeReportArtifactStorage(repositoryInjected: boolean) {
+  if (process.env.PROMPTOPTS_REPORT_STORAGE_DRIVER === "memory" || repositoryInjected) {
+    return createMemoryReportArtifactStorage();
+  }
+
+  return createLocalFileSystemReportArtifactStorage();
 }

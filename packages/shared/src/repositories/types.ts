@@ -9,6 +9,7 @@ import type {
   Credit,
   CrmNote,
   CrmTask,
+  DeletionRequest,
   Entitlement,
   EvalResult,
   EvalRun,
@@ -68,6 +69,7 @@ export type RepositoryCollections = {
   optimization_candidates: OptimizationCandidate;
   reports: RecommendationReport;
   report_artifacts: ReportArtifact;
+  deletion_requests: DeletionRequest;
   model_registry: ModelRegistryRecord;
   model_registry_versions: ModelRegistryVersion;
   free_audits: FreeAudit;
@@ -113,6 +115,7 @@ export interface PromptOptsRepository {
   optimization_candidates: CrudRepository<OptimizationCandidate>;
   reports: CrudRepository<RecommendationReport>;
   report_artifacts: CrudRepository<ReportArtifact>;
+  deletion_requests: CrudRepository<DeletionRequest>;
   model_registry: CrudRepository<ModelRegistryRecord>;
   model_registry_versions: CrudRepository<ModelRegistryVersion>;
   free_audits: CrudRepository<FreeAudit>;

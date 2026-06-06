@@ -127,6 +127,10 @@ Workspace BYOK lives at `/app/workspace/acme-ai/security` in the local shell. `P
 
 Set `PROMPTOPTS_SECRET_ENCRYPTION_KEY` for local encrypted storage before saving provider keys. The local crypto abstraction is intentionally small and can be replaced by KMS without changing repository callers.
 
+### Report Storage And Deletion
+
+Report Markdown, JSON, PDF-stub, and redacted share artifacts are written through the shared storage abstraction. Local API runtime uses `PROMPTOPTS_REPORT_STORAGE_DIR` with the filesystem adapter unless `PROMPTOPTS_REPORT_STORAGE_DRIVER=memory` is set. Admin report deletion creates a durable deletion request, deletes object content, marks report/artifact records, keeps checksum/size tombstones, and writes lifecycle audit events. Partial object deletion failures stay retryable and visible in `/__admin/reports`.
+
 ## Environment Variables
 
 `.env.example` contains placeholders for:
@@ -137,6 +141,8 @@ Set `PROMPTOPTS_SECRET_ENCRYPTION_KEY` for local encrypted storage before saving
 - `PROMPTOPTS_REPOSITORY`
 - `REDIS_URL`
 - object storage settings
+- `PROMPTOPTS_REPORT_STORAGE_DRIVER`
+- `PROMPTOPTS_REPORT_STORAGE_DIR`
 - `PROMPTOPTS_SECRET_ENCRYPTION_KEY`
 - `ENCRYPTION_KEY`
 - `SESSION_SECRET`
@@ -170,6 +176,7 @@ bun run build
 - Deterministic prompt parsing, sensitive-content warnings, cost estimation, model-fit labels, candidate generation, model shortlist, quality checks, eval scoring, recommendation decisions, and export package generation.
 - Memory-backed local demo and test persistence.
 - Admin route policies, persisted admin sessions, MFA verification/rotation, RBAC/action scopes, redaction helpers, real sudo lifecycle, and append-only audit-log behavior.
+- Storage abstraction with local filesystem report artifacts, checksum/size metadata, deletion requests, retryable deletion failures, and report-vault evidence.
 - Unit/integration tests across web, API, packages, workers, repository, storage, and schema metadata.
 
 ## What Is Mocked
@@ -178,7 +185,7 @@ bun run build
 - Live provider calls.
 - Production-grade Postgres pooling; the current adapter uses the local `psql` CLI execution layer.
 - Redis/queue execution.
-- Object storage artifact deletion.
+- S3/MinIO adapter and lifecycle policies; local filesystem storage is wired for dev/test.
 - Billing provider events.
 - Provider spend.
 - PDF rendering beyond a stub.
@@ -188,7 +195,7 @@ bun run build
 
 Prompts, reports, provider payloads, and provider keys are private by default. Admin views are redacted by default. Hidden routes are not treated as security. Dangerous actions require MFA recheck, reason codes, time-boxed sudo policies, and append-only audit events. Every admin mutation and sensitive read should write append-only `admin_audit_logs`.
 
-Provider keys are encrypted/opaque and are never viewable after storage. Production use still requires KMS-backed key material, object storage deletion, rate-limit/error logging policies, and deliberate production admin provisioning.
+Provider keys are encrypted/opaque and are never viewable after storage. Report artifacts are redacted by default and raw report reveal remains sudo-gated. Production use still requires KMS-backed key material, S3-compatible storage/KMS policies, rate-limit/error logging policies, and deliberate production admin provisioning.
 
 ## Model Registry Policy
 
@@ -201,7 +208,7 @@ Audit is a preflight, not a switch recommendation. The original prompt and curre
 ## Known Limitations
 
 - Demo-ready does not mean private-beta ready.
-- Real customer data should wait until KMS-backed provider-key encryption, deletion jobs, live provider controls, rate limits, and billing controls are in place.
+- Real customer data should wait until KMS-backed provider-key encryption, S3-compatible storage lifecycle policies, live provider controls, rate limits, and billing controls are in place.
 - Browser-level responsive screenshots are recommended before external demos.
 - API route modules and schema files are intentionally stable but broad; split by domain before adding much more behavior.
 
@@ -209,7 +216,7 @@ Audit is a preflight, not a switch recommendation. The original prompt and curre
 
 Current local MVP status is green for the mocked demo loop: provider selection, prompt paste, audit, model-fit label, candidate generation, model shortlist, test cases, eval matrix, recommendation report, export, hidden admin UI, guarded admin API, Account 360 redaction, eval job control, model registry admin, reports vault, billing admin, audit-log viewer, entitlements, and append-only audit-log tests.
 
-Remaining launch blockers are verified model registry, live provider adapters with rate limits/logging, durable queue/object storage deletion, production KMS configuration, and production billing integration.
+Remaining launch blockers are verified model registry, live provider adapters with rate limits/logging, durable queue, production KMS/S3 lifecycle configuration, and production billing integration.
 
 ## Audit And Roadmap
 
