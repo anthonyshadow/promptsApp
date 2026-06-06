@@ -25,7 +25,9 @@ export const DEMO_IDS = {
   featureFlagCliBeta: "feature_flag_cli_beta",
   freeAudit: "free_audit_acme_support_classifier",
   crmNote: "crm_note_acme_free_audit",
-  task: "task_acme_eval_followup"
+  task: "task_acme_eval_followup",
+  adminRoleOwner: "admin_role_owner_demo",
+  adminUser: "admin_user_demo"
 } as const;
 
 export function createDemoRepositorySeed(): Required<RepositorySeed> {
@@ -523,7 +525,7 @@ export function createDemoRepositorySeed(): Required<RepositorySeed> {
         id: DEMO_IDS.crmNote,
         account_id: DEMO_IDS.account,
         opportunity_id: DEMO_IDS.opportunity,
-        author_admin_user_id: "admin_user_demo",
+        author_admin_user_id: DEMO_IDS.adminUser,
         body_redacted: "Free audit captured overpowered fit; prompt details remain redacted.",
         redaction_state: "redacted",
         metadata: { source: "free_audit" },
@@ -580,10 +582,47 @@ export function createDemoRepositorySeed(): Required<RepositorySeed> {
         updated_at: DEMO_TIMESTAMP
       }
     ],
+    admin_roles: [
+      {
+        id: DEMO_IDS.adminRoleOwner,
+        name: "owner",
+        scopes: [
+          "read_metadata",
+          "reveal_prompt",
+          "reveal_report",
+          "manage_workspace",
+          "manage_model_registry",
+          "retry_eval",
+          "delete_report",
+          "issue_billing_credit",
+          "impersonate_user",
+          "revoke_user",
+          "break_glass"
+        ],
+        is_system: true,
+        created_at: DEMO_TIMESTAMP
+      }
+    ],
+    admin_users: [
+      {
+        id: DEMO_IDS.adminUser,
+        user_id: null,
+        email: "ops@acme-ai.example",
+        display_name: "Acme Ops Admin",
+        role_ids: [DEMO_IDS.adminRoleOwner],
+        status: "active",
+        password_hash: "sha256:3049b742957bf075de0f9cb0921707659065972bef873d86131f57f61d9a796e",
+        mfa_secret: "JBSWY3DPEHPK3PXP",
+        created_at: DEMO_TIMESTAMP,
+        updated_at: DEMO_TIMESTAMP
+      }
+    ],
+    admin_sessions: [],
+    sudo_requests: [],
     admin_audit_logs: [
       {
         id: "admin_audit_log_demo_registry_unverified",
-        admin_user_id: "admin_user_demo",
+        admin_user_id: DEMO_IDS.adminUser,
         workspace_id: null,
         account_id: null,
         target_type: "model_registry",

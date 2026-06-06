@@ -1,4 +1,5 @@
 import { css } from "@emotion/css";
+import { useEffect, useState } from "react";
 import { getAdminGateCopy, getAdminGateStateFromSearch } from "../adminGate";
 import { normalizeApiUrl } from "../apiViewState";
 import type { AdminGateState } from "../viewTypes";
@@ -10,11 +11,66 @@ import AdminEvalJobsScreen from "./AdminEvalJobsScreen";
 import AdminModelRegistryScreen from "./AdminModelRegistryScreen";
 import AdminOverviewScreen from "./AdminOverviewScreen";
 import AdminReportsVaultScreen from "./AdminReportsVaultScreen";
+import {
+  AdminApiError,
+  clearAdminSessionToken,
+  fetchAdminMe,
+  getStoredAdminSessionToken,
+  loginAdmin,
+  verifyAdminMfa
+} from "./adminApi";
 
 function AdminRouteTree() {
-  const gateState = getAdminGateStateFromSearch(window.location.search);
   const apiBaseUrl = normalizeApiUrl(import.meta.env.VITE_API_URL);
   const route = getAdminRoute(window.location.pathname);
+  const [gateState, setGateState] = useState<AdminGateState>(() =>
+    apiBaseUrl ? "checking" : getAdminGateStateFromSearch(window.location.search)
+  );
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!apiBaseUrl) {
+      setGateState(getAdminGateStateFromSearch(window.location.search));
+      return;
+    }
+
+    void refreshAdminSession(apiBaseUrl, setGateState, setAuthError);
+  }, [apiBaseUrl]);
+
+  async function handleLogin(input: { email: string; password: string }) {
+    if (!apiBaseUrl) {
+      setAuthError("Admin API URL is not configured.");
+      return;
+    }
+
+    setAuthError(null);
+
+    try {
+      await loginAdmin(apiBaseUrl, input);
+      setGateState("mfa-required");
+    } catch {
+      clearAdminSessionToken();
+      setAuthError("Invalid admin credentials.");
+      setGateState("not-signed-in");
+    }
+  }
+
+  async function handleMfa(code: string) {
+    if (!apiBaseUrl) {
+      setAuthError("Admin API URL is not configured.");
+      return;
+    }
+
+    setAuthError(null);
+
+    try {
+      await verifyAdminMfa(apiBaseUrl, code);
+      await refreshAdminSession(apiBaseUrl, setGateState, setAuthError);
+    } catch {
+      setAuthError("Invalid MFA code.");
+      setGateState("mfa-required");
+    }
+  }
 
   return (
     <main className={rootStyle}>
@@ -27,7 +83,12 @@ function AdminRouteTree() {
         {gateState === "authorized" ? (
           renderAuthorizedAdminRoute(route, apiBaseUrl)
         ) : (
-          <AdminGateStateView state={gateState} />
+          <AdminGateStateView
+            state={gateState}
+            error={authError}
+            onLogin={handleLogin}
+            onMfa={handleMfa}
+          />
         )}
       </section>
     </main>
@@ -63,36 +124,49 @@ function renderAuthorizedAdminRoute(
 function AdminInternalNav({ activeRoute }: { activeRoute: AdminRoute["kind"] }) {
   return (
     <nav className={navStyle} aria-label="Internal admin navigation">
-      <a className={activeRoute === "overview" ? activeNavLinkStyle : navLinkStyle} href="/__admin/overview?state=authorized">
+      <a className={activeRoute === "overview" ? activeNavLinkStyle : navLinkStyle} href="/__admin/overview">
         Overview
       </a>
       <a
         className={activeRoute === "accounts" || activeRoute === "account-detail" ? activeNavLinkStyle : navLinkStyle}
-        href="/__admin/accounts?state=authorized"
+        href="/__admin/accounts"
       >
         Accounts
       </a>
-      <a className={activeRoute === "eval-jobs" ? activeNavLinkStyle : navLinkStyle} href="/__admin/eval-jobs?state=authorized">
+      <a className={activeRoute === "eval-jobs" ? activeNavLinkStyle : navLinkStyle} href="/__admin/eval-jobs">
         Eval jobs
       </a>
-      <a className={activeRoute === "model-registry" ? activeNavLinkStyle : navLinkStyle} href="/__admin/model-registry?state=authorized">
+      <a className={activeRoute === "model-registry" ? activeNavLinkStyle : navLinkStyle} href="/__admin/model-registry">
         Model registry
       </a>
-      <a className={activeRoute === "reports" ? activeNavLinkStyle : navLinkStyle} href="/__admin/reports?state=authorized">
+      <a className={activeRoute === "reports" ? activeNavLinkStyle : navLinkStyle} href="/__admin/reports">
         Reports
       </a>
-      <a className={activeRoute === "billing" ? activeNavLinkStyle : navLinkStyle} href="/__admin/billing?state=authorized">
+      <a className={activeRoute === "billing" ? activeNavLinkStyle : navLinkStyle} href="/__admin/billing">
         Billing
       </a>
-      <a className={activeRoute === "audit-logs" ? activeNavLinkStyle : navLinkStyle} href="/__admin/audit-logs?state=authorized">
+      <a className={activeRoute === "audit-logs" ? activeNavLinkStyle : navLinkStyle} href="/__admin/audit-logs">
         Audit logs
       </a>
     </nav>
   );
 }
 
-function AdminGateStateView({ state }: { state: AdminGateState }) {
+function AdminGateStateView({
+  state,
+  error,
+  onLogin,
+  onMfa
+}: {
+  state: AdminGateState;
+  error: string | null;
+  onLogin: (input: { email: string; password: string }) => void;
+  onMfa: (code: string) => void;
+}) {
   const copy = getAdminGateCopy(state);
+  const [email, setEmail] = useState("ops@acme-ai.example");
+  const [password, setPassword] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
 
   return (
     <div className={gatePanelStyle}>
@@ -101,6 +175,68 @@ function AdminGateStateView({ state }: { state: AdminGateState }) {
         <strong className={gateTitleStyle}>{copy.title}</strong>
       </div>
       <p className={gateBodyStyle}>{copy.body}</p>
+      {error ? <p className={gateErrorStyle}>{error}</p> : null}
+      {state === "not-signed-in" || state === "expired" ? (
+        <form
+          className={authFormStyle}
+          onSubmit={(event) => {
+            event.preventDefault();
+            onLogin({ email, password });
+          }}
+        >
+          <label className={sudoLabelStyle} htmlFor="admin-email">
+            Email
+          </label>
+          <input
+            className={sudoInputStyle}
+            id="admin-email"
+            name="admin-email"
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.currentTarget.value)}
+          />
+          <label className={sudoLabelStyle} htmlFor="admin-password">
+            Password
+          </label>
+          <input
+            className={sudoInputStyle}
+            id="admin-password"
+            name="admin-password"
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.currentTarget.value)}
+          />
+          <button className={sudoButtonStyle} type="submit">
+            Sign in
+          </button>
+        </form>
+      ) : null}
+      {state === "mfa-required" ? (
+        <form
+          className={authFormStyle}
+          onSubmit={(event) => {
+            event.preventDefault();
+            onMfa(mfaCode);
+          }}
+        >
+          <label className={sudoLabelStyle} htmlFor="admin-mfa-code">
+            MFA code
+          </label>
+          <input
+            className={sudoInputStyle}
+            id="admin-mfa-code"
+            inputMode="numeric"
+            maxLength={6}
+            name="admin-mfa-code"
+            type="text"
+            value={mfaCode}
+            onChange={(event) => setMfaCode(event.currentTarget.value)}
+          />
+          <button className={sudoButtonStyle} type="submit">
+            Verify MFA
+          </button>
+        </form>
+      ) : null}
       {state === "sudo-required" ? (
         <form className={sudoFormStyle}>
           <label className={sudoLabelStyle} htmlFor="sudo-reason">
@@ -120,6 +256,47 @@ function AdminGateStateView({ state }: { state: AdminGateState }) {
       ) : null}
     </div>
   );
+}
+
+async function refreshAdminSession(
+  apiBaseUrl: string,
+  setGateState: (state: AdminGateState) => void,
+  setAuthError: (error: string | null) => void
+) {
+  if (!getStoredAdminSessionToken()) {
+    setGateState("not-signed-in");
+    return;
+  }
+
+  try {
+    const session = await fetchAdminMe(apiBaseUrl);
+    if (!session.authenticated) {
+      setGateState("not-signed-in");
+    } else if (!session.mfa_verified) {
+      setGateState("mfa-required");
+    } else if (!session.role) {
+      setGateState("missing-role");
+    } else if (!session.action_scopes.includes("read_metadata")) {
+      setGateState("missing-scope");
+    } else {
+      setGateState("authorized");
+    }
+    setAuthError(null);
+  } catch (error) {
+    if (error instanceof AdminApiError && error.status === 401) {
+      clearAdminSessionToken();
+      setGateState("expired");
+      return;
+    }
+
+    if (error instanceof AdminApiError && error.status === 403) {
+      setGateState("not-admin");
+      return;
+    }
+
+    setAuthError("Admin API is unavailable.");
+    setGateState("not-signed-in");
+  }
 }
 
 type AdminRoute =
@@ -311,6 +488,24 @@ const gateBodyStyle = css({
   margin: "16px 0 0",
   color: "#c7d6ce",
   lineHeight: 1.6
+});
+
+const gateErrorStyle = css({
+  maxWidth: "680px",
+  margin: "14px 0 0",
+  color: "#ffd2c7",
+  lineHeight: 1.5,
+  fontWeight: 700
+});
+
+const authFormStyle = css({
+  display: "grid",
+  gridTemplateColumns: "minmax(220px, 1fr) minmax(220px, 1fr) auto",
+  gap: "10px",
+  marginTop: "20px",
+  "@media (max-width: 760px)": {
+    gridTemplateColumns: "1fr"
+  }
 });
 
 const sudoFormStyle = css({

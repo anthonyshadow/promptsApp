@@ -8,8 +8,12 @@ export type ApiState =
   | { status: "offline"; message: string };
 
 export type AdminGateState =
+  | "checking"
   | "not-signed-in"
+  | "expired"
   | "not-admin"
+  | "missing-role"
+  | "missing-scope"
   | "mfa-required"
   | "authorized"
   | "sudo-required";

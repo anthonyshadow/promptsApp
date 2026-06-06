@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { createDemoRepositorySeed } from "../seed";
 import type { PromptOptsRepository, RepositorySeed } from "../types";
 import { createPostgresRepository } from "./repository";
@@ -114,6 +115,10 @@ export async function seedRepository(
   await upsertMany(repository.free_audits, seed.free_audits);
   await upsertMany(repository.crm_notes, seed.crm_notes);
   await upsertMany(repository.tasks, seed.tasks);
+  await upsertMany(repository.admin_roles, seed.admin_roles);
+  await upsertMany(repository.admin_users, seed.admin_users);
+  await upsertMany(repository.admin_sessions, seed.admin_sessions);
+  await upsertMany(repository.sudo_requests, seed.sudo_requests);
   await upsertAuditLogs(repository, seed.admin_audit_logs);
   await upsertMany(repository.plans, seed.plans);
   await upsertMany(repository.entitlements, seed.entitlements);
@@ -156,6 +161,11 @@ async function upsertAuditLogs(
 }
 
 async function seedSystemAdminRows(databaseUrl: string): Promise<void> {
+  const passwordHash = `sha256:${createHash("sha256")
+    .update(process.env.PROMPTOPTS_ADMIN_DEV_PASSWORD ?? "promptopts-admin-dev")
+    .digest("hex")}`;
+  const mfaSecret = process.env.PROMPTOPTS_ADMIN_DEV_MFA_SECRET ?? "JBSWY3DPEHPK3PXP";
+
   await runPsql(
     `
       INSERT INTO admin_roles (id, name, scopes, is_system)
@@ -164,18 +174,31 @@ async function seedSystemAdminRows(databaseUrl: string): Promise<void> {
       ON CONFLICT (id) DO UPDATE
       SET scopes = EXCLUDED.scopes;
 
-      INSERT INTO admin_users (id, user_id, email, display_name, role_ids, status)
+      INSERT INTO admin_users (
+        id,
+        user_id,
+        email,
+        display_name,
+        role_ids,
+        status,
+        password_hash,
+        mfa_secret
+      )
       VALUES (
         'admin_user_demo',
         NULL,
         'ops@acme-ai.example',
         'Acme Ops Admin',
         '["admin_role_owner_demo"]'::jsonb,
-        'active'
+        'active',
+        ${sqlTextLiteral(passwordHash)},
+        ${sqlTextLiteral(mfaSecret)}
       )
       ON CONFLICT (id) DO UPDATE
       SET role_ids = EXCLUDED.role_ids,
           status = EXCLUDED.status,
+          password_hash = EXCLUDED.password_hash,
+          mfa_secret = EXCLUDED.mfa_secret,
           updated_at = now();
     `,
     { databaseUrl }

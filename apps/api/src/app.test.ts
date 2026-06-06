@@ -1,11 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import {
   DEMO_IDS,
+  type AdminActionScope,
+  type AdminRoleRecord,
+  type AdminSessionRecord,
+  type AdminUserRecord,
+  type RepositorySeed,
+  type SudoRequest,
   createDemoRepositorySeed,
   createMemoryRepository,
   healthResponseSchema
 } from "@promptopts/shared";
-import { createMockAdminHeaders } from "@promptopts/admin-core";
+import { createTotpCode, hashAdminSessionToken } from "@promptopts/admin-core";
 import { createApp } from "./app";
 import {
   adminEvalRunDetailResponseSchema,
@@ -21,10 +27,164 @@ import {
   reportExportActionResponseSchema
 } from "./contracts";
 
+const ADMIN_TEST_TOKENS = {
+  owner: "admin_test_token_owner",
+  ownerNoMfa: "admin_test_token_owner_no_mfa",
+  ownerSudo: "admin_test_token_owner_sudo",
+  support: "admin_test_token_support",
+  supportSudo: "admin_test_token_support_sudo",
+  readOnly: "admin_test_token_read_only",
+  missingScope: "admin_test_token_missing_scope"
+} as const;
+
+type AdminRequestInput = {
+  role?: "owner" | "ops" | "support" | "finance" | "read_only";
+  mfa_verified?: boolean;
+  sudo_grant?: { reason_code?: string } | null;
+  missingScope?: boolean;
+};
+
 function createTestApp() {
   return createApp({
-    repository: createMemoryRepository(createDemoRepositorySeed())
+    repository: createAdminTestRepository()
   });
+}
+
+function createAdminTestRepository() {
+  return createMemoryRepository(createAdminTestSeed());
+}
+
+function createAdminTestSeed(): Required<RepositorySeed> {
+  const seed = createDemoRepositorySeed();
+  const timestamp = "2026-06-06T12:00:00.000Z";
+  const expiresAt = "2030-01-01T00:00:00.000Z";
+  const role = (name: AdminRoleRecord["name"], scopes: AdminActionScope[]): AdminRoleRecord => ({
+    id: `admin_role_test_${name}_${scopes.length}`,
+    name,
+    scopes,
+    is_system: true,
+    created_at: timestamp
+  });
+  const ownerRole = role("owner", [
+    "read_metadata",
+    "reveal_prompt",
+    "reveal_report",
+    "manage_workspace",
+    "manage_model_registry",
+    "retry_eval",
+    "delete_report",
+    "issue_billing_credit",
+    "impersonate_user",
+    "revoke_user",
+    "break_glass"
+  ]);
+  const ownerNoScopeRole = role("owner", []);
+  const supportRole = role("support", ["read_metadata", "retry_eval", "revoke_user"]);
+  const readOnlyRole = role("read_only", ["read_metadata"]);
+  const adminUser = (
+    id: string,
+    roleIds: string[],
+    email: string
+  ): AdminUserRecord => ({
+    id,
+    user_id: null,
+    email,
+    display_name: id,
+    role_ids: roleIds,
+    status: "active",
+    password_hash: "sha256:3049b742957bf075de0f9cb0921707659065972bef873d86131f57f61d9a796e",
+    mfa_secret: "JBSWY3DPEHPK3PXP",
+    created_at: timestamp,
+    updated_at: timestamp
+  });
+  const session = (
+    id: string,
+    adminUserId: string,
+    token: string,
+    mfaVerified = true
+  ): AdminSessionRecord => ({
+    id,
+    admin_user_id: adminUserId,
+    session_hash: hashAdminSessionToken(token),
+    mfa_verified_at: mfaVerified ? timestamp : null,
+    revoked_at: null,
+    expires_at: expiresAt,
+    ip_address: "127.0.0.1",
+    user_agent: "PromptOpts admin route test",
+    created_at: timestamp
+  });
+  const sudo = (
+    id: string,
+    adminUserId: string,
+    actionScope: AdminActionScope
+  ): SudoRequest => ({
+    id,
+    admin_user_id: adminUserId,
+    action_scope: actionScope,
+    reason_code: "route_test_sudo",
+    status: "approved",
+    approved_by_admin_user_id: adminUserId,
+    expires_at: expiresAt,
+    created_at: timestamp
+  });
+
+  return {
+    ...seed,
+    admin_roles: [
+      ...seed.admin_roles,
+      ownerRole,
+      ownerNoScopeRole,
+      supportRole,
+      readOnlyRole
+    ],
+    admin_users: [
+      ...seed.admin_users,
+      adminUser("admin_user_test_owner", [ownerRole.id], "owner.admin@test.promptopts"),
+      adminUser("admin_user_test_owner_sudo", [ownerRole.id], "owner.sudo@test.promptopts"),
+      adminUser("admin_user_test_support", [supportRole.id], "support.admin@test.promptopts"),
+      adminUser("admin_user_test_support_sudo", [supportRole.id], "support.sudo@test.promptopts"),
+      adminUser("admin_user_test_read_only", [readOnlyRole.id], "readonly.admin@test.promptopts"),
+      adminUser("admin_user_test_missing_scope", [ownerNoScopeRole.id], "missing.scope@test.promptopts")
+    ],
+    admin_sessions: [
+      ...seed.admin_sessions,
+      session("admin_session_test_owner", "admin_user_test_owner", ADMIN_TEST_TOKENS.owner),
+      session(
+        "admin_session_test_owner_no_mfa",
+        "admin_user_test_owner",
+        ADMIN_TEST_TOKENS.ownerNoMfa,
+        false
+      ),
+      session(
+        "admin_session_test_owner_sudo",
+        "admin_user_test_owner_sudo",
+        ADMIN_TEST_TOKENS.ownerSudo
+      ),
+      session("admin_session_test_support", "admin_user_test_support", ADMIN_TEST_TOKENS.support),
+      session(
+        "admin_session_test_support_sudo",
+        "admin_user_test_support_sudo",
+        ADMIN_TEST_TOKENS.supportSudo
+      ),
+      session("admin_session_test_read_only", "admin_user_test_read_only", ADMIN_TEST_TOKENS.readOnly),
+      session(
+        "admin_session_test_missing_scope",
+        "admin_user_test_missing_scope",
+        ADMIN_TEST_TOKENS.missingScope
+      )
+    ],
+    sudo_requests: [
+      ...seed.sudo_requests,
+      sudo("sudo_request_test_reveal_prompt", "admin_user_test_owner_sudo", "reveal_prompt"),
+      sudo("sudo_request_test_reveal_report", "admin_user_test_owner_sudo", "reveal_report"),
+      sudo("sudo_request_test_delete_report", "admin_user_test_owner_sudo", "delete_report"),
+      sudo("sudo_request_test_billing_credit", "admin_user_test_owner_sudo", "issue_billing_credit"),
+      sudo("sudo_request_test_model_registry", "admin_user_test_owner_sudo", "manage_model_registry"),
+      sudo("sudo_request_test_impersonate", "admin_user_test_owner_sudo", "impersonate_user"),
+      sudo("sudo_request_test_break_glass", "admin_user_test_owner_sudo", "break_glass"),
+      sudo("sudo_request_test_support_credit", "admin_user_test_support_sudo", "issue_billing_credit")
+    ]
+  };
 }
 
 function jsonRequest(body: unknown): RequestInit {
@@ -44,20 +204,22 @@ function patchJsonRequest(body: unknown): RequestInit {
   };
 }
 
-function adminGetRequest(input: Parameters<typeof createMockAdminHeaders>[0] = {}): RequestInit {
+function adminGetRequest(input: AdminRequestInput = {}): RequestInit {
   return {
-    headers: createMockAdminHeaders(input)
+    headers: {
+      authorization: `Bearer ${adminTokenFor(input)}`
+    }
   };
 }
 
 function adminJsonRequest(
   body: unknown,
-  input: Parameters<typeof createMockAdminHeaders>[0] = {}
+  input: AdminRequestInput = {}
 ): RequestInit {
   return {
     method: "POST",
     headers: {
-      ...createMockAdminHeaders(input),
+      authorization: `Bearer ${adminTokenFor(input)}`,
       "content-type": "application/json"
     },
     body: JSON.stringify(body)
@@ -66,12 +228,36 @@ function adminJsonRequest(
 
 function adminPatchJsonRequest(
   body: unknown,
-  input: Parameters<typeof createMockAdminHeaders>[0] = {}
+  input: AdminRequestInput = {}
 ): RequestInit {
   return {
     ...adminJsonRequest(body, input),
     method: "PATCH"
   };
+}
+
+function adminTokenFor(input: AdminRequestInput): string {
+  if (input.missingScope) {
+    return ADMIN_TEST_TOKENS.missingScope;
+  }
+
+  if (input.mfa_verified === false) {
+    return ADMIN_TEST_TOKENS.ownerNoMfa;
+  }
+
+  if (input.sudo_grant) {
+    return input.role === "support" ? ADMIN_TEST_TOKENS.supportSudo : ADMIN_TEST_TOKENS.ownerSudo;
+  }
+
+  if (input.role === "support") {
+    return ADMIN_TEST_TOKENS.support;
+  }
+
+  if (input.role === "read_only") {
+    return ADMIN_TEST_TOKENS.readOnly;
+  }
+
+  return ADMIN_TEST_TOKENS.owner;
 }
 
 async function expectOkJson(response: Response) {
@@ -147,7 +333,7 @@ describe("public API routes", () => {
   });
 
   test("POST /prompts persists project, prompt, and raw prompt version records", async () => {
-    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const repository = createAdminTestRepository();
     const app = createApp({ repository });
     const beforeProjects = await repository.projects.list();
     const beforePrompts = await repository.prompts.list();
@@ -182,7 +368,7 @@ describe("public API routes", () => {
   });
 
   test("POST /audits runs prompt-core audit and persists an analysis for saved prompts", async () => {
-    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const repository = createAdminTestRepository();
     const app = createApp({ repository });
     const promptResponse = await expectOkJson(
       await app.request(
@@ -239,7 +425,7 @@ describe("public API routes", () => {
   });
 
   test("POST /audits captures free audits with redacted output and CRM signals", async () => {
-    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const repository = createAdminTestRepository();
     const app = createApp({ repository });
     const beforeFreeAudits = await repository.free_audits.list();
     const beforeAccounts = await repository.accounts.list();
@@ -313,7 +499,7 @@ describe("public API routes", () => {
   });
 
   test("POST /audits stores free audit records without CRM mapping when no lead exists", async () => {
-    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const repository = createAdminTestRepository();
     const app = createApp({ repository });
     const beforeAccounts = await repository.accounts.list();
 
@@ -350,7 +536,7 @@ describe("public API routes", () => {
   });
 
   test("GET and POST /projects/:id/quality-contract support auto-draft and persistence", async () => {
-    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const repository = createAdminTestRepository();
     const app = createApp({ repository });
     const promptResponse = await expectOkJson(
       await app.request(
@@ -397,7 +583,7 @@ describe("public API routes", () => {
   });
 
   test("POST /prompts/:id/optimize generates persisted candidate risk profiles", async () => {
-    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const repository = createAdminTestRepository();
     const app = createApp({ repository });
     const beforeCandidates = await repository.optimization_candidates.list();
 
@@ -439,7 +625,7 @@ describe("public API routes", () => {
   });
 
   test("test case creation and update keep production recommendation blocked until eval proof", async () => {
-    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const repository = createAdminTestRepository();
     const app = createApp({ repository });
     const beforeCases = await repository.test_cases.list();
 
@@ -484,7 +670,7 @@ describe("public API routes", () => {
   });
 
   test("POST and GET /eval-runs execute the mocked eval matrix with failures and retry hints", async () => {
-    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const repository = createAdminTestRepository();
     const app = createApp({ repository });
     const beforeResults = await repository.eval_results.list();
 
@@ -551,7 +737,7 @@ describe("public API routes", () => {
   });
 
   test("public eval and export routes enforce billing entitlements", async () => {
-    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const repository = createAdminTestRepository();
     const app = createApp({ repository });
     const entitlements = await repository.entitlements.list();
     const hostedEvalEntitlement = entitlements.find(
@@ -593,7 +779,7 @@ describe("public API routes", () => {
   });
 
   test("POST /reports includes no-test blocker when quality contract has no cases", async () => {
-    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const repository = createAdminTestRepository();
     const app = createApp({ repository });
     const promptResponse = await expectOkJson(
       await app.request(
@@ -767,8 +953,78 @@ describe("public API routes", () => {
 });
 
 describe("admin API routes", () => {
+  test("issues stored admin sessions and rotates them after MFA", async () => {
+    const repository = createAdminTestRepository();
+    const app = createApp({ repository });
+
+    const login = await expectOkJson(
+      await app.request(
+        "/admin-api/auth/login",
+        jsonRequest({
+          email: "ops@acme-ai.example",
+          password: "promptopts-admin-dev"
+        })
+      )
+    );
+    expect(login.session.mfa_required).toBe(true);
+    expect(login.session.mfa_verified).toBe(false);
+    expect(login.token).toMatch(/^pa_/);
+
+    const preMfaOverview = await app.request("/admin-api/overview", {
+      headers: {
+        authorization: `Bearer ${login.token}`
+      }
+    });
+    expect(preMfaOverview.status).toBe(403);
+
+    const mfa = await expectOkJson(
+      await app.request("/admin-api/auth/mfa/verify", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${login.token}`,
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          code: createTotpCode("JBSWY3DPEHPK3PXP")
+        })
+      })
+    );
+    expect(mfa.session.mfa_required).toBe(false);
+    expect(mfa.session.mfa_verified).toBe(true);
+    expect(mfa.token).not.toBe(login.token);
+
+    const overview = await app.request("/admin-api/overview", {
+      headers: {
+        authorization: `Bearer ${mfa.token}`
+      }
+    });
+    expect(overview.status).toBe(200);
+
+    const revokedOldSession = await app.request("/admin-api/auth/me", {
+      headers: {
+        authorization: `Bearer ${login.token}`
+      }
+    });
+    expect(revokedOldSession.status).toBe(401);
+  });
+
+  test("mock admin headers do not bypass stored session auth", async () => {
+    const app = createTestApp();
+    const response = await app.request("/admin-api/overview", {
+      headers: {
+        "x-admin-session-id": "admin_session_mock",
+        "x-admin-user-id": "admin_user_mock",
+        "x-admin-role": "owner",
+        "x-admin-mfa": "true",
+        "x-admin-action-scopes": "read_metadata,manage_workspace"
+      }
+    });
+
+    expect(response.status).toBe(401);
+  });
+
   test("GET /admin-api/overview returns redacted command-center metadata and writes audit", async () => {
-    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const repository = createAdminTestRepository();
     const app = createApp({ repository });
     const before = await repository.admin_audit_logs.list();
     const overview = adminOverviewResponseSchema.parse(
@@ -1153,6 +1409,12 @@ describe("admin API routes", () => {
     );
     expect(readOnlyGet.status).toBe(200);
 
+    const missingScope = await app.request(
+      "/admin-api/overview",
+      adminGetRequest({ missingScope: true })
+    );
+    expect(missingScope.status).toBe(403);
+
     const readOnlyMutation = await app.request(
       "/admin-api/accounts",
       adminJsonRequest(
@@ -1211,7 +1473,7 @@ describe("admin API routes", () => {
   });
 
   test("writes audit logs for mutations and sensitive reads", async () => {
-    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const repository = createAdminTestRepository();
     const app = createApp({ repository });
     const before = await repository.admin_audit_logs.list();
 
@@ -1227,7 +1489,7 @@ describe("admin API routes", () => {
   });
 
   test("audits Account 360 sensitive reads and CRM mutations", async () => {
-    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const repository = createAdminTestRepository();
     const app = createApp({ repository });
     const before = await repository.admin_audit_logs.list();
 
@@ -1251,7 +1513,7 @@ describe("admin API routes", () => {
   });
 
   test("returns sanitized eval job detail and audits retry/cancel actions", async () => {
-    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const repository = createAdminTestRepository();
     const app = createApp({ repository });
     const timestamp = "2026-01-16T12:00:00.000Z";
     await repository.eval_runs.update(DEMO_IDS.evalRun, {
@@ -1309,7 +1571,7 @@ describe("admin API routes", () => {
   });
 
   test("audits reports vault and billing mutations plus raw report sensitive reads", async () => {
-    const repository = createMemoryRepository(createDemoRepositorySeed());
+    const repository = createAdminTestRepository();
     const app = createApp({ repository });
     const before = await repository.admin_audit_logs.list();
 

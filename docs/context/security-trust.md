@@ -18,6 +18,7 @@ All three PDFs state that users will paste production prompts, customer examples
 - Prompt deletion and report deletion are available from day one.
 - Admin CRM is internal only and redacted by default.
 - Admin roles include owner, ops, support, finance, and read-only.
+- Admin API authorization uses persisted admin users, roles, sessions, and MFA state. Mock admin headers are not accepted as authorization.
 - Dangerous admin actions require time-boxed sudo with reason code.
 
 ## Non-Negotiables
@@ -41,6 +42,14 @@ Admin middleware stack:
 4. `requireActionScope`
 5. `requireSudo` for dangerous actions
 6. `writeAdminAuditEvent`
+
+Admin session implementation:
+
+- `/admin-api/auth/login` creates a short pre-MFA persisted session from admin credentials.
+- `/admin-api/auth/mfa/verify` verifies TOTP and rotates the session token into an MFA-verified session.
+- Admin requests use a bearer session token or the admin session cookie; `x-admin-*` mock headers do not bypass middleware.
+- `/admin-api/auth/logout` revokes the current stored admin session.
+- Local development seeds one owner admin only; production must provision admins deliberately.
 
 Trust UX states to build:
 

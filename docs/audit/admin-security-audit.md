@@ -19,6 +19,8 @@ Audit `/__admin/*` and `/admin-api/*` against the internal-only trust model.
 
 - Admin API is mounted only under `/admin-api`.
 - Admin middleware order is implemented as session -> MFA -> role -> action scope -> sudo -> audit.
+- Admin sessions are persisted; `/admin-api/auth/login` creates pre-MFA sessions and `/admin-api/auth/mfa/verify` rotates MFA-verified sessions.
+- Mock `x-admin-*` headers are rejected and covered by tests.
 - Route policies in `admin-core` are the server-side source of truth for sensitive reads and dangerous actions.
 - Public navigation does not link to `/__admin/*`.
 
@@ -41,16 +43,15 @@ Audit `/__admin/*` and `/admin-api/*` against the internal-only trust model.
 
 ## Known Gaps
 
-- Auth, MFA, sudo, and action scopes are mock-header based.
-- No real admin user/session persistence is wired to the API runtime.
+- Full sudo request/approval lifecycle is not complete; dangerous routes currently read durable approved `sudo_requests`.
 - Report deletion marks memory-backed records and artifacts; object storage cleanup is mocked.
 - Billing and provider-key workflows do not yet use production services.
 - Audit-log search UI is not a rich operator surface yet.
 
 ## Critical Launch Blockers
 
-- Replace mock admin headers with real session/MFA/sudo storage before private beta.
-- Add durable Postgres repository implementation for admin audit logs before handling real customer data.
+- Complete real sudo request lifecycle before private beta.
+- Keep deployed environments on durable Postgres before handling real customer data.
 - Add object storage deletion jobs before claiming deletion is complete.
 
 ## Fixes Completed In This Pass
@@ -58,4 +59,4 @@ Audit `/__admin/*` and `/admin-api/*` against the internal-only trust model.
 - Hardened admin navigation and data table overflow on small screens.
 - Added the dedicated `/__admin/audit-logs` React surface.
 - Added comments documenting security-critical route and decision boundaries in core packages.
-- Documented the mock/production boundary explicitly.
+- Replaced mock admin header authorization with stored session/MFA/RBAC enforcement.

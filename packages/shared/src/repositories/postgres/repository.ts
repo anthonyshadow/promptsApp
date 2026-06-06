@@ -2,6 +2,9 @@ import type { ZodObject, ZodRawShape } from "zod";
 import {
   accountSchema,
   adminAuditLogSchema,
+  adminRoleRecordSchema,
+  adminSessionRecordSchema,
+  adminUserRecordSchema,
   billingEventSchema,
   contactSchema,
   creditSchema,
@@ -31,6 +34,9 @@ import {
   workspaceSchema,
   type Account,
   type AdminAuditLog,
+  type AdminRoleRecord,
+  type AdminSessionRecord,
+  type AdminUserRecord,
   type BillingEvent,
   type Contact,
   type Credit,
@@ -57,7 +63,9 @@ import {
   type TestCase,
   type UsageLedgerEntry,
   type User,
-  type Workspace
+  type Workspace,
+  sudoRequestSchema,
+  type SudoRequest
 } from "../../schemas";
 import type {
   AppendOnlyRepository,
@@ -385,7 +393,11 @@ const configs = {
   billing_events: { tableName: "billing_events", schema: billingEventSchema },
   invoices: { tableName: "invoices", schema: invoiceSchema },
   credits: { tableName: "credits", schema: creditSchema },
-  feature_flags: { tableName: "feature_flags", schema: featureFlagSchema }
+  feature_flags: { tableName: "feature_flags", schema: featureFlagSchema },
+  admin_roles: { tableName: "admin_roles", schema: adminRoleRecordSchema },
+  admin_users: { tableName: "admin_users", schema: adminUserRecordSchema },
+  admin_sessions: { tableName: "admin_sessions", schema: adminSessionRecordSchema },
+  sudo_requests: { tableName: "sudo_requests", schema: sudoRequestSchema }
 } satisfies Record<string, CollectionConfig<IdentifiedRecord>>;
 
 export function createPostgresRepository(options: PostgresRepositoryOptions = {}): PromptOptsRepository {
@@ -465,6 +477,22 @@ export function createPostgresRepository(options: PostgresRepositoryOptions = {}
     credits: new PostgresCrudRepository<Credit>(configs.credits, executorOptions),
     feature_flags: new PostgresCrudRepository<FeatureFlag>(
       configs.feature_flags,
+      executorOptions
+    ),
+    admin_roles: new PostgresCrudRepository<AdminRoleRecord>(
+      configs.admin_roles,
+      executorOptions
+    ),
+    admin_users: new PostgresCrudRepository<AdminUserRecord>(
+      configs.admin_users,
+      executorOptions
+    ),
+    admin_sessions: new PostgresCrudRepository<AdminSessionRecord>(
+      configs.admin_sessions,
+      executorOptions
+    ),
+    sudo_requests: new PostgresCrudRepository<SudoRequest>(
+      configs.sudo_requests,
       executorOptions
     )
   };

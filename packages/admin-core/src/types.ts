@@ -5,6 +5,7 @@ export type AdminSudoGrant = {
   request_id: string;
   reason_code: string;
   expires_at: string;
+  action_scope: AdminActionScope;
 };
 
 export type AdminSession = {
@@ -12,6 +13,8 @@ export type AdminSession = {
   admin_user_id: string;
   role: AdminRole;
   mfa_verified: boolean;
+  mfa_verified_at: string | null;
+  expires_at: string;
   action_scopes: AdminActionScope[];
   sudo_grant: AdminSudoGrant | null;
   ip_address: string;

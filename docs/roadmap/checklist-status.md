@@ -23,7 +23,7 @@ Provide the update-safe status ledger for `docs/roadmap/next-steps-checklist.md`
 
 | Item | Priority | Status | Evidence | Remaining work |
 | --- | --- | --- | --- | --- |
-| Replace mock auth/MFA/sudo headers with real session storage. | P0 | not_started | Admin middleware exists, but README/audits state auth/MFA/sudo are mock headers. | Implement durable session/MFA/sudo storage and remove mock-header dependency. |
+| Replace mock auth/MFA/sudo headers with real session storage. | P0 | complete | `/admin-api/auth/login` creates persisted pre-MFA admin sessions; `/admin-api/auth/mfa/verify` validates TOTP and rotates sessions; middleware resolves bearer/cookie sessions from `admin_sessions`, derives RBAC/action scopes from `admin_users`/`admin_roles`, checks sudo from durable `sudo_requests`, rejects mock `x-admin-*` headers, and tests cover unauthenticated/non-MFA/missing-scope/missing-sudo paths. | Full sudo request/approval lifecycle remains tracked separately. |
 | Implement Postgres repository adapter and migration runner. | P0 | complete | Adapter, migration runner, seed/reset commands, missing ops tables, prompt deletion state, and memory/Postgres contract tests exist. Local Postgres role/database were created, migrations applied, seed completed, and live Postgres contract tests passed. | Future production hardening can replace the `psql` execution layer with a pooled client under the same repository interface. |
 | Encrypt provider keys and keep them non-viewable. | P0 | in_progress | Provider keys are modeled as ciphertext/fingerprint metadata only. | Implement runtime encryption, key lifecycle, adapter lookup, and audit events. |
 | Wire object storage artifact lifecycle and deletion jobs. | P0 | in_progress | Storage abstraction, MinIO service, and memory deletion states exist. | Implement object adapter, deletion worker, retention policy, checksums, and retry evidence. |
@@ -58,7 +58,7 @@ Provide the update-safe status ledger for `docs/roadmap/next-steps-checklist.md`
 
 | Item | Priority | Status | Evidence | Remaining work |
 | --- | --- | --- | --- | --- |
-| Add real sudo request lifecycle. | P0 | in_progress | Sudo route policies and mock grants exist. | Add durable request creation, expiry, approval/revocation, reason binding, and audit trail. |
+| Add real sudo request lifecycle. | P0 | in_progress | Dangerous routes now read durable approved `sudo_requests`; mock sudo headers no longer work. | Add request creation, expiry transitions, approval/denial/revocation UI, reason binding, and audit trail for the lifecycle itself. |
 | Add audit-log review/search UI. | P1 | in_progress | `/__admin/audit-logs` shows redacted append-only metadata. | Add filters by actor, action scope, target, reason, and time. |
 | Implement raw reveal encrypted payload access only where policy allows. | P1 | in_progress | Raw reveal routes are policy-gated placeholders requiring sudo. | Add encrypted payload retrieval, support-role redaction enforcement, and durable reveal audits. |
 
@@ -90,6 +90,7 @@ Provide the update-safe status ledger for `docs/roadmap/next-steps-checklist.md`
 
 - Report copy review for stale/demo savings caveats.
 - Free audit conversion mapping to account/contact/opportunity with CTA signal.
+- Real admin auth/session/MFA with stored sessions and mock-header rejection.
 
 ## Blocked
 
@@ -98,13 +99,13 @@ Provide the update-safe status ledger for `docs/roadmap/next-steps-checklist.md`
 
 ## Validation Results
 
-- `set -a; source .env; set +a; env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run db:migrate`: passed against local Postgres; applied 2 migrations, skipped 0.
+- `set -a; source .env; set +a; env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run db:migrate`: passed against local Postgres; latest idempotency run applied 0 migrations and skipped 3 already-applied migrations.
 - `set -a; source .env; set +a; env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run db:seed`: passed; demo seed completed.
-- `set -a; source .env; set +a; env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun test`: passed, 122 tests across 22 files. The Postgres repository contract branch executed against local Postgres.
+- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun test`: passed with local Postgres integration, 124 tests across 22 files. The Postgres repository contract branch executed against local Postgres.
 - `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run typecheck`: passed.
 - `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run lint`: passed; current script delegates to `bun run typecheck`.
 - `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run build`: passed for packages, API, workers, and web.
 
 ## Recommended Next Prompt
 
-Move to Prompt 2 from `implementation-sequence.md`: real admin auth/session/MFA.
+Move to Prompt 3 from `implementation-sequence.md`: real sudo request lifecycle.

@@ -64,6 +64,57 @@ export const errorResponseSchema = z
   .strict();
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;
 
+export const adminAuthLoginRequestSchema = z
+  .object({
+    email: z.string().email(),
+    password: nonEmptyStringSchema
+  })
+  .strict();
+export type AdminAuthLoginRequest = z.infer<typeof adminAuthLoginRequestSchema>;
+
+export const adminAuthMfaRequestSchema = z
+  .object({
+    code: z.string().regex(/^\d{6}$/)
+  })
+  .strict();
+export type AdminAuthMfaRequest = z.infer<typeof adminAuthMfaRequestSchema>;
+
+export const adminAuthSessionResponseSchema = z
+  .object({
+    token: nonEmptyStringSchema,
+    session: z
+      .object({
+        id: idSchema,
+        admin_user_id: idSchema,
+        role: z.enum(["owner", "ops", "support", "finance", "read_only"]).nullable(),
+        mfa_required: z.boolean(),
+        mfa_verified: z.boolean(),
+        expires_at: isoDateTimeSchema
+      })
+      .strict()
+  })
+  .strict();
+export type AdminAuthSessionResponse = z.infer<typeof adminAuthSessionResponseSchema>;
+
+export const adminAuthMeResponseSchema = z
+  .object({
+    authenticated: z.boolean(),
+    admin_user_id: idSchema.nullable(),
+    role: z.enum(["owner", "ops", "support", "finance", "read_only"]).nullable(),
+    mfa_verified: z.boolean(),
+    action_scopes: z.array(adminActionScopeSchema),
+    expires_at: isoDateTimeSchema.nullable()
+  })
+  .strict();
+export type AdminAuthMeResponse = z.infer<typeof adminAuthMeResponseSchema>;
+
+export const adminAuthLogoutResponseSchema = z
+  .object({
+    signed_out: z.boolean()
+  })
+  .strict();
+export type AdminAuthLogoutResponse = z.infer<typeof adminAuthLogoutResponseSchema>;
+
 export const modelsResponseSchema = z
   .object({
     models: z.array(modelRegistryRecordSchema),
@@ -384,7 +435,7 @@ export const adminOverviewResponseSchema = z
         queue: z.enum(["ok", "mocked", "degraded"]),
         storage: z.enum(["ok", "mocked", "degraded"]),
         repository: z.enum(["memory", "postgres"]),
-        admin_auth: z.literal("mocked")
+        admin_auth: z.enum(["session", "mocked"])
       })
       .strict(),
     risk_queue: z.array(

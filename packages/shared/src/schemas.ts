@@ -125,6 +125,21 @@ export const adminActionScopeSchema = z.enum([
 ]);
 export type AdminActionScope = z.infer<typeof adminActionScopeSchema>;
 
+export const adminRoleNameSchema = z.enum(["owner", "ops", "support", "finance", "read_only"]);
+export type AdminRoleName = z.infer<typeof adminRoleNameSchema>;
+
+export const adminUserStatusSchema = z.enum(["active", "disabled"]);
+export type AdminUserStatus = z.infer<typeof adminUserStatusSchema>;
+
+export const sudoRequestStatusSchema = z.enum([
+  "requested",
+  "approved",
+  "denied",
+  "expired",
+  "used"
+]);
+export type SudoRequestStatus = z.infer<typeof sudoRequestStatusSchema>;
+
 export const redactionStateSchema = z.enum(["redacted", "revealed", "not_sensitive"]);
 export type RedactionState = z.infer<typeof redactionStateSchema>;
 
@@ -195,6 +210,62 @@ export const userSchema = z
   })
   .strict();
 export type User = z.infer<typeof userSchema>;
+
+export const adminRoleRecordSchema = z
+  .object({
+    id: idSchema,
+    name: adminRoleNameSchema,
+    scopes: z.array(adminActionScopeSchema),
+    is_system: z.boolean(),
+    created_at: isoDateTimeSchema
+  })
+  .strict();
+export type AdminRoleRecord = z.infer<typeof adminRoleRecordSchema>;
+
+export const adminUserRecordSchema = z
+  .object({
+    id: idSchema,
+    user_id: idSchema.nullable(),
+    email: z.string().email(),
+    display_name: z.string().min(1),
+    role_ids: z.array(idSchema),
+    status: adminUserStatusSchema,
+    password_hash: z.string().min(1),
+    mfa_secret: z.string().min(1),
+    created_at: isoDateTimeSchema,
+    updated_at: isoDateTimeSchema
+  })
+  .strict();
+export type AdminUserRecord = z.infer<typeof adminUserRecordSchema>;
+
+export const adminSessionRecordSchema = z
+  .object({
+    id: idSchema,
+    admin_user_id: idSchema,
+    session_hash: z.string().min(1),
+    mfa_verified_at: isoDateTimeSchema.nullable(),
+    revoked_at: isoDateTimeSchema.nullable(),
+    expires_at: isoDateTimeSchema,
+    ip_address: z.string().min(1),
+    user_agent: z.string().min(1),
+    created_at: isoDateTimeSchema
+  })
+  .strict();
+export type AdminSessionRecord = z.infer<typeof adminSessionRecordSchema>;
+
+export const sudoRequestSchema = z
+  .object({
+    id: idSchema,
+    admin_user_id: idSchema,
+    action_scope: adminActionScopeSchema,
+    reason_code: z.string().min(1),
+    status: sudoRequestStatusSchema,
+    approved_by_admin_user_id: idSchema.nullable(),
+    expires_at: isoDateTimeSchema,
+    created_at: isoDateTimeSchema
+  })
+  .strict();
+export type SudoRequest = z.infer<typeof sudoRequestSchema>;
 
 export const workspaceSchema = z
   .object({

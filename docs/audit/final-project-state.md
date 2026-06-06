@@ -4,7 +4,7 @@
 
 Demo-ready with caveats.
 
-PromptOpts now presents a coherent, founder-demoable MVP loop using deterministic/mocked infrastructure. It is not private-beta or production-ready until real auth, durable persistence, live provider adapters, queue/storage/billing infrastructure, and verified model registry metadata are in place.
+PromptOpts now presents a coherent, founder-demoable MVP loop using deterministic/mocked infrastructure. It is not private-beta or production-ready until real sudo lifecycle, provider-key encryption, live provider adapters, queue/storage/billing infrastructure, and verified model registry metadata are in place.
 
 ## Current State By Subsystem
 
@@ -20,16 +20,16 @@ PromptOpts now presents a coherent, founder-demoable MVP loop using deterministi
 | Report/export | Yellow | Decision rules, Markdown/JSON/PDF stub, redacted package, snapshots. | PDF rendering and object storage. | Export deletion is memory-only. |
 | Workspace dashboard | Green | Project/value rollup and recent project table. | Savings are unverified/demo. | Keep scope narrow. |
 | Admin CRM | Green | Pipeline, Account 360, notes/tasks, redacted previews. | Durable CRM persistence. | Must not become a public CRM/sales suite. |
-| Admin ops | Green | Overview, eval jobs, model registry, reports vault, billing. | Queue/storage/billing/auth. | Mock auth must not reach beta. |
-| Security/trust | Yellow | Middleware chain, scopes, sudo policies, redaction, audit logs. | Sessions/MFA/sudo are mock headers. | Real auth is a P0. |
+| Admin ops | Green | Overview, eval jobs, model registry, reports vault, billing. | Queue/storage/billing services. | Sudo lifecycle must be completed before beta. |
+| Security/trust | Yellow | Stored admin sessions, MFA rotation, RBAC/action scopes, sudo policies, redaction, audit logs. | Full sudo request/approval lifecycle. | Provider-key encryption and sudo lifecycle are P0. |
 | Billing/entitlements | Yellow | Entitlement checks, usage ledger, invoices, credits, feature flags. | Billing provider and plan enforcement depth. | Credits/limits need real finance controls. |
 | Data/persistence | Yellow | Repository boundary, memory adapter, Postgres schema metadata. | Postgres adapter execution. | Audit logs must be durable before real data. |
 | Tests/build/tooling | Green | 118 tests, typecheck, lint alias, build all pass. | No browser visual suite. | Lint is typecheck-only. |
 
 ## Top 10 Launch Risks
 
-1. Mock auth/MFA/sudo headers are not suitable for real users.
-2. Memory repository loses data and cannot provide durable audit logs.
+1. Full sudo request/approval lifecycle is not complete.
+2. Provider-key encryption and non-viewability are not wired at runtime.
 3. Model registry metadata is synthetic/unverified, blocking exact savings claims.
 4. Live provider adapters are intentionally inert.
 5. Queue/storage/report deletion jobs are mocked.
@@ -41,8 +41,8 @@ PromptOpts now presents a coherent, founder-demoable MVP loop using deterministi
 
 ## Top 10 Highest-Leverage Improvements
 
-1. Real admin/user auth with MFA and sudo.
-2. Postgres repository adapter and migration runner.
+1. Real sudo request lifecycle.
+2. Provider-key encryption and non-viewability.
 3. Verified model registry seed/update workflow.
 4. Live provider adapter execution behind encrypted BYOK.
 5. Durable eval queue and worker leasing.

@@ -204,7 +204,7 @@ function AdminAccountsScreen({ apiBaseUrl }: { apiBaseUrl?: string | undefined }
                     <button className={smallButtonStyle} type="button" onClick={() => void handleAddNote(account.account_id, account.opportunity_id)}>
                       Add note
                     </button>
-                    <a className={openLinkStyle} href={`/__admin/accounts/${account.account_id}?state=authorized`}>
+                    <a className={openLinkStyle} href={`/__admin/accounts/${account.account_id}`}>
                       Open account
                     </a>
                   </div>

@@ -2,6 +2,9 @@ import type { ZodType } from "zod";
 import {
   accountSchema,
   adminAuditLogSchema,
+  adminRoleRecordSchema,
+  adminSessionRecordSchema,
+  adminUserRecordSchema,
   billingEventSchema,
   contactSchema,
   creditSchema,
@@ -31,6 +34,9 @@ import {
   workspaceSchema,
   type Account,
   type AdminAuditLog,
+  type AdminRoleRecord,
+  type AdminSessionRecord,
+  type AdminUserRecord,
   type BillingEvent,
   type Contact,
   type Credit,
@@ -57,7 +63,9 @@ import {
   type TestCase,
   type UsageLedgerEntry,
   type User,
-  type Workspace
+  type Workspace,
+  sudoRequestSchema,
+  type SudoRequest
 } from "../schemas";
 import type {
   AppendOnlyRepository,
@@ -228,6 +236,22 @@ export function createMemoryRepository(seed: RepositorySeed = {}): PromptOptsRep
     feature_flags: new MemoryCrudRepository<FeatureFlag>(
       featureFlagSchema,
       seed.feature_flags
+    ),
+    admin_roles: new MemoryCrudRepository<AdminRoleRecord>(
+      adminRoleRecordSchema,
+      seed.admin_roles
+    ),
+    admin_users: new MemoryCrudRepository<AdminUserRecord>(
+      adminUserRecordSchema,
+      seed.admin_users
+    ),
+    admin_sessions: new MemoryCrudRepository<AdminSessionRecord>(
+      adminSessionRecordSchema,
+      seed.admin_sessions
+    ),
+    sudo_requests: new MemoryCrudRepository<SudoRequest>(
+      sudoRequestSchema,
+      seed.sudo_requests
     )
   };
 }

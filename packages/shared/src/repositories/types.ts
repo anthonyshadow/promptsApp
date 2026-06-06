@@ -1,6 +1,9 @@
 import type {
   Account,
   AdminAuditLog,
+  AdminRoleRecord,
+  AdminSessionRecord,
+  AdminUserRecord,
   BillingEvent,
   Contact,
   Credit,
@@ -27,7 +30,8 @@ import type {
   TestCase,
   UsageLedgerEntry,
   User,
-  Workspace
+  Workspace,
+  SudoRequest
 } from "../schemas";
 
 export type IdentifiedRecord = {
@@ -77,6 +81,10 @@ export type RepositoryCollections = {
   invoices: Invoice;
   credits: Credit;
   feature_flags: FeatureFlag;
+  admin_roles: AdminRoleRecord;
+  admin_users: AdminUserRecord;
+  admin_sessions: AdminSessionRecord;
+  sudo_requests: SudoRequest;
 };
 
 export type RepositorySeed = {
@@ -118,4 +126,8 @@ export interface PromptOptsRepository {
   invoices: CrudRepository<Invoice>;
   credits: CrudRepository<Credit>;
   feature_flags: CrudRepository<FeatureFlag>;
+  admin_roles: CrudRepository<AdminRoleRecord>;
+  admin_users: CrudRepository<AdminUserRecord>;
+  admin_sessions: CrudRepository<AdminSessionRecord>;
+  sudo_requests: CrudRepository<SudoRequest>;
 }

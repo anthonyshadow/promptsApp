@@ -37,7 +37,7 @@ Admin UI is internal only and lives under `/__admin/*`. It is not linked from pu
 - `/__admin/billing`
 - `/__admin/audit-logs`
 
-Admin API lives under `/admin-api/*` and runs through placeholder admin middleware for session, MFA, RBAC, action scopes, sudo policies, redaction, and append-only audit logs.
+Admin API lives under `/admin-api/*` and runs through stored session, MFA, RBAC, action-scope, sudo-policy, redaction, and append-only audit-log middleware. Mock admin headers are not accepted as authorization.
 
 ## API Overview
 
@@ -109,6 +109,16 @@ bun run dev:api
 
 `bun run db:rollback` is intentionally unsupported for MVP migrations. `bun run db:reset` is local-dev only and requires `PROMPTOPTS_CONFIRM_DB_RESET=local-dev`.
 
+### Local Admin Setup
+
+`bun run db:seed` creates one local owner admin for development:
+
+- Email: `ops@acme-ai.example`
+- Password: `promptopts-admin-dev`
+- MFA secret: `JBSWY3DPEHPK3PXP`
+
+The admin UI at `/__admin/*` performs `/admin-api/auth/login`, `/admin-api/auth/mfa/verify`, and then uses the returned bearer session token. Sessions are persisted, expire, revoke on logout, and rotate after MFA. Generate a current six-digit TOTP code from the MFA secret; production deployments must provision admins and secrets deliberately.
+
 ## Environment Variables
 
 `.env.example` contains placeholders for:
@@ -122,6 +132,9 @@ bun run dev:api
 - `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`
 - `ENCRYPTION_KEY`
 - `SESSION_SECRET`
+- `PROMPTOPTS_ADMIN_DEV_EMAIL`
+- `PROMPTOPTS_ADMIN_DEV_PASSWORD`
+- `PROMPTOPTS_ADMIN_DEV_MFA_SECRET`
 
 Provider keys are placeholders only. The live adapters intentionally do not call providers until key storage, request logging, rate limits, and redaction policies are production-safe.
 
@@ -148,12 +161,13 @@ bun run build
 - Postgres migration runner, seed command, and repository adapter behind the shared interface.
 - Deterministic prompt parsing, sensitive-content warnings, cost estimation, model-fit labels, candidate generation, model shortlist, quality checks, eval scoring, recommendation decisions, and export package generation.
 - Memory-backed local demo and test persistence.
-- Admin route policies, redaction helpers, mock middleware, sudo requirements, and append-only audit-log behavior.
+- Admin route policies, persisted admin sessions, MFA verification/rotation, RBAC/action scopes, redaction helpers, sudo requirements, and append-only audit-log behavior.
 - Unit/integration tests across web, API, packages, workers, repository, storage, and schema metadata.
 
 ## What Is Mocked
 
-- User auth, admin sessions, MFA, sudo, and action scopes.
+- Public user auth and product-user session revocation.
+- Full sudo request/approval lifecycle beyond durable approved sudo rows for protected actions.
 - Live provider calls.
 - Production-grade Postgres pooling; the current adapter uses the local `psql` CLI execution layer.
 - Redis/queue execution.
@@ -167,7 +181,7 @@ bun run build
 
 Prompts, reports, provider payloads, and provider keys are private by default. Admin views are redacted by default. Hidden routes are not treated as security. Dangerous actions require reason codes and sudo policies. Every admin mutation and sensitive read should write append-only `admin_audit_logs`.
 
-Provider keys are modeled as encrypted/opaque and are never viewable after storage. Production use requires real auth, durable audit logs, encrypted key storage, object storage deletion, and rate-limit/error logging policies.
+Provider keys are modeled as encrypted/opaque and are never viewable after storage. Production use requires encrypted key storage, object storage deletion, rate-limit/error logging policies, and deliberate production admin provisioning.
 
 ## Model Registry Policy
 
@@ -180,7 +194,7 @@ Audit is a preflight, not a switch recommendation. The original prompt and curre
 ## Known Limitations
 
 - Demo-ready does not mean private-beta ready.
-- Real customer data should wait until durable auth, persistence, encryption, deletion, provider, and billing controls are in place.
+- Real customer data should wait until encrypted provider keys, deletion jobs, live provider controls, rate limits, and billing controls are in place.
 - Browser-level responsive screenshots are recommended before external demos.
 - API route modules and schema files are intentionally stable but broad; split by domain before adding much more behavior.
 
@@ -188,7 +202,7 @@ Audit is a preflight, not a switch recommendation. The original prompt and curre
 
 Current local MVP status is green for the mocked demo loop: provider selection, prompt paste, audit, model-fit label, candidate generation, model shortlist, test cases, eval matrix, recommendation report, export, hidden admin UI, guarded admin API, Account 360 redaction, eval job control, model registry admin, reports vault, billing admin, audit-log viewer, entitlements, and append-only audit-log tests.
 
-Remaining launch blockers are real auth/MFA/sudo, verified model registry, live provider adapters, durable queue/object storage deletion, and production billing integration.
+Remaining launch blockers are real sudo lifecycle, provider-key encryption, verified model registry, live provider adapters, durable queue/object storage deletion, and production billing integration.
 
 ## Audit And Roadmap
 

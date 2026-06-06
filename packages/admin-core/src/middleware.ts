@@ -1,12 +1,7 @@
 import type { Context, MiddlewareHandler } from "hono";
 import type { AdminAuditLog } from "@promptopts/shared";
-import {
-  canUseActionScope,
-  isAdminActionScope,
-  isAdminRole,
-  roleActionScopes,
-  type AdminActionScope
-} from "./scopes";
+import { findActiveSudoGrant, resolveAdminSession, ADMIN_SESSION_COOKIE_NAME } from "./auth";
+import { canUseActionScope, isAdminRole, type AdminActionScope } from "./scopes";
 import { resolveAdminRoutePolicy } from "./policies";
 import type {
   AdminActionContext,
@@ -16,7 +11,11 @@ import type {
 } from "./types";
 
 export const requireSession: MiddlewareHandler<AdminSecurityHonoEnv> = async (c, next) => {
-  const session = readAdminSession(c);
+  const session = await resolveAdminSession(
+    c.var.repository,
+    readAdminSessionToken(c),
+    readRequestMetadata(c)
+  );
 
   if (!session) {
     return adminSecurityError(c, 401, "session_required", "Admin session required");
@@ -68,7 +67,11 @@ export function requireSudo(action?: AdminActionScope): MiddlewareHandler<AdminS
       return adminSecurityError(c, 403, "action_scope_required", "Admin action scope required");
     }
 
-    const sudoGrant = c.var.adminSession.sudo_grant;
+    const sudoGrant = await findActiveSudoGrant(
+      c.var.repository,
+      c.var.adminSession.admin_user_id,
+      requiredAction
+    );
     if (!sudoGrant || Date.parse(sudoGrant.expires_at) <= Date.now()) {
       return adminSecurityError(c, 403, "sudo_required", "Sudo authorization required");
     }
@@ -132,55 +135,29 @@ export function writeAdminAuditEvent(
   };
 }
 
-function readAdminSession(c: Context<AdminSecurityHonoEnv>): AdminSession | undefined {
-  const adminUserId = c.req.header("x-admin-user-id");
-  const sessionId = c.req.header("x-admin-session-id");
-  const role = c.req.header("x-admin-role");
-
-  if (!adminUserId || !sessionId || !isAdminRole(role)) {
-    return undefined;
+function readAdminSessionToken(c: Context<AdminSecurityHonoEnv>): string | undefined {
+  const authorization = c.req.header("authorization");
+  if (authorization?.toLowerCase().startsWith("bearer ")) {
+    return authorization.slice("bearer ".length).trim();
   }
 
-  return {
-    session_id: sessionId,
-    admin_user_id: adminUserId,
-    role,
-    mfa_verified: c.req.header("x-admin-mfa") === "true",
-    action_scopes: parseActionScopes(c.req.header("x-admin-action-scopes")) ?? roleActionScopes[role],
-    sudo_grant: readSudoGrant(c),
-    ip_address: c.req.header("x-admin-ip-address") ?? "127.0.0.1",
-    user_agent: c.req.header("x-admin-user-agent") ?? c.req.header("user-agent") ?? "unknown",
-    is_mock: true
-  };
+  const cookies = c.req.header("cookie") ?? "";
+  const sessionCookie = cookies
+    .split(";")
+    .map((cookie) => cookie.trim())
+    .find((cookie) => cookie.startsWith(`${ADMIN_SESSION_COOKIE_NAME}=`));
+
+  return sessionCookie ? decodeURIComponent(sessionCookie.split("=").slice(1).join("=")) : undefined;
 }
 
-function readSudoGrant(c: Context<AdminSecurityHonoEnv>): AdminSession["sudo_grant"] {
-  const requestId = c.req.header("x-admin-sudo-request-id");
-  const reasonCode = c.req.header("x-admin-sudo-reason-code");
-  const expiresAt = c.req.header("x-admin-sudo-expires-at");
-
-  if (!requestId || !reasonCode || !expiresAt) {
-    return null;
-  }
-
+function readRequestMetadata(c: Context<AdminSecurityHonoEnv>) {
   return {
-    request_id: requestId,
-    reason_code: reasonCode,
-    expires_at: expiresAt
+    ipAddress:
+      c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ??
+      c.req.header("cf-connecting-ip") ??
+      "127.0.0.1",
+    userAgent: c.req.header("user-agent") ?? "unknown"
   };
-}
-
-function parseActionScopes(value: string | undefined): AdminActionScope[] | undefined {
-  if (!value) {
-    return undefined;
-  }
-
-  const scopes = value
-    .split(",")
-    .map((scope) => scope.trim())
-    .filter((scope): scope is AdminActionScope => isAdminActionScope(scope));
-
-  return scopes.length > 0 ? scopes : undefined;
 }
 
 function createAdminActionContext(

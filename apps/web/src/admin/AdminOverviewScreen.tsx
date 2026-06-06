@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { css } from "@emotion/css";
 import type { AdminOverviewResponse } from "@promptopts/api";
-import { createLocalMockAdminHeaders } from "./adminApi";
+import { fetchAdminJson } from "./adminApi";
 
 function AdminOverviewScreen({ apiBaseUrl }: { apiBaseUrl?: string | undefined }) {
   const [overviewState, setOverviewState] = useState<{
@@ -31,15 +31,9 @@ function AdminOverviewScreen({ apiBaseUrl }: { apiBaseUrl?: string | undefined }
       }
 
       try {
-        const response = await fetch(`${apiBaseUrl}/admin-api/overview`, {
-          headers: createLocalMockAdminHeaders()
-        });
-
-        if (!response.ok) {
-          throw new Error(`Admin overview returned ${response.status}`);
-        }
-
-        const overview = (await response.json()) as AdminOverviewResponse;
+        const overview = await fetchAdminJson<AdminOverviewResponse>(
+          `${apiBaseUrl}/admin-api/overview`
+        );
 
         if (!isMounted) {
           return;
