@@ -50,6 +50,9 @@ export const demoWorkspace: Workspace = {
   id: DEMO_IDS.workspace,
   name: "Acme AI",
   slug: "acme-ai",
+  prompts_private_by_default: true,
+  data_use_policy: "no_training",
+  provider_call_sensitive_data_policy: "require_confirmation",
   is_mock: true,
   created_at: demoCreatedAt,
   updated_at: demoCreatedAt

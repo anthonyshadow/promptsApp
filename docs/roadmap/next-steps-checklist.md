@@ -19,7 +19,7 @@
 
 - [ ] P1 infra L: Add billing provider integration and webhook handling. Why it matters: credits, invoices, plans, and entitlements must reflect real events. Acceptance: plan changes and credits reconcile with external billing state.
 - [x] P1 backend M: Add retention/deletion policy implementation. Status: complete for MVP - default retention rules are repo-native, report deletion tombstones scoped metadata while deleting object content, admin audit logs remain append-only, and partial failures are observable/retryable. Why it matters: prompt/report deletion is a trust promise. Acceptance: scoped data deletion is durable, audited, and observable.
-- [ ] P1 security L: Add rate limits, request logging policy, and data-use controls. Why it matters: provider calls and prompt ingestion need abuse and privacy controls. Acceptance: limits and logs redact sensitive payloads.
+- [x] P1 security L: Add rate limits, request logging policy, and data-use controls. Status: complete for MVP - API request IDs, body-free structured logs, Redis-capable/in-memory rate limits, sensitive-field redaction, private/no-training workspace defaults, and eval/provider-call confirmation/blocking for sensitive prompt/test-case content are wired and tested. Why it matters: provider calls and prompt ingestion need abuse and privacy controls. Acceptance: limits and logs redact sensitive payloads.
 
 ## D. Product Polish
 

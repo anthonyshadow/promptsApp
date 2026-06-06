@@ -608,6 +608,57 @@ describe("public API routes", () => {
     expect(exportResponse.export_package.eval_snapshot.result_count).toBe(2);
   });
 
+  test("POST /eval-runs requires acknowledgement or blocks when provider-call inputs are sensitive", async () => {
+    const repository = createAdminTestRepository();
+    const app = createApp({ repository });
+    const request = {
+      project_id: DEMO_IDS.project,
+      quality_contract_id: DEMO_IDS.qualityContract,
+      baseline_prompt_version_id: DEMO_IDS.promptVersion,
+      candidate_ids: ["candidate_support_classifier_balanced"],
+      model_registry_record_ids: ["model_registry_openai_demo_balanced"],
+      test_case_ids: ["test_case_support_classifier_billing"],
+      pass_threshold: 0.95
+    };
+
+    await repository.prompt_versions.update(DEMO_IDS.promptVersion, {
+      prompt_text: "Classify the message from buyer@example.com and return JSON."
+    });
+    const needsConfirmation = await app.request("/eval-runs", jsonRequest(request));
+    const confirmationBody = await needsConfirmation.json();
+
+    expect(needsConfirmation.status).toBe(403);
+    expect(confirmationBody.error.code).toBe("provider_call_confirmation_required");
+    expect(JSON.stringify(confirmationBody)).not.toContain("buyer@example.com");
+
+    const acknowledged = await expectOkJson(
+      await app.request(
+        "/eval-runs",
+        jsonRequest({
+          ...request,
+          provider_call_acknowledged: true
+        })
+      )
+    );
+    expect(acknowledged.status).toBe("complete");
+
+    await repository.prompt_versions.update(DEMO_IDS.promptVersion, {
+      prompt_text: "Classify the message. Secret key sk-test-secret-value-12345678901234567890."
+    });
+    const blockedSecret = await app.request(
+      "/eval-runs",
+      jsonRequest({
+        ...request,
+        provider_call_acknowledged: true
+      })
+    );
+    const blockedBody = await blockedSecret.json();
+
+    expect(blockedSecret.status).toBe(403);
+    expect(blockedBody.error.code).toBe("provider_call_blocked_sensitive_content");
+    expect(JSON.stringify(blockedBody)).not.toContain("sk-test-secret-value");
+  });
+
   test("public eval and export routes enforce billing entitlements", async () => {
     const repository = createAdminTestRepository();
     const app = createApp({ repository });

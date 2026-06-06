@@ -221,7 +221,8 @@ export const evalRunCreateRequestSchema = evalRunSchema
     pass_threshold: true
   })
   .extend({
-    test_case_ids: z.array(idSchema).min(1).optional()
+    test_case_ids: z.array(idSchema).min(1).optional(),
+    provider_call_acknowledged: z.boolean().optional()
   })
   .strict();
 export type EvalRunCreateRequest = z.infer<typeof evalRunCreateRequestSchema>;

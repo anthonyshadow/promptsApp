@@ -18,8 +18,8 @@ Production readiness depends on closing private-beta blockers first, then provin
 | Production admin trust | in_progress | Prompts 2-3 | Session, MFA, RBAC, action scopes, sudo lifecycle, and audit events are enforced without mock headers; break-glass remains a placeholder flow behind sudo policy. |
 | Provider-key trust | in_progress | Prompt 4 | BYOK keys are encrypted, non-viewable, rotatable/revocable, audited, and backed by production KMS-managed key material. |
 | Deletion and retention | complete | Prompt 5 | Report deletion removes or tombstones scoped data and object artifacts with retryable evidence; prompt deletion policy remains documented for future user deletion routes. |
-| Verified model registry | in_progress | Prompt 6 | Active recommendations use fresh/approved registry metadata; stale/demo rows cannot produce exact savings claims. |
-| Privacy and abuse controls | not_started | Prompt 7 | Rate limits, redacted request logs, provider-call data-use controls, and sensitive payload policies are active. |
+| Verified model registry | complete | Prompt 6 | Active recommendations use fresh/approved registry metadata; stale/demo rows cannot produce exact savings claims. |
+| Privacy and abuse controls | complete | Prompt 7 | Rate limits, redacted request logs, provider-call data-use controls, and sensitive payload policies are active. |
 | Durable eval operations | not_started | Prompts 8-11 | Queue, live adapters, usage capture, retry diagnostics, and provider incident reporting are durable. |
 | Report/export operations | complete | Prompt 12 | Artifacts have storage status, checksums, redacted share packages, deletion state, attempts, and retry status. |
 | Browser QA | not_started | Prompt 13 | Public/admin route smoke tests cover desktop, tablet, and mobile review breakpoints. |
@@ -28,7 +28,7 @@ Production readiness depends on closing private-beta blockers first, then provin
 
 ## Production-Incomplete Areas
 
-- Live providers are placeholders until KMS-backed key material, logging, rate limits, and queue safety land.
+- Live providers are placeholders until KMS-backed key material, calibrated provider quotas, and queue safety land.
 - PDF rendering is a stub.
 - Billing provider events are not wired.
 - Production S3/MinIO lifecycle policy and object-store credentials are not configured.

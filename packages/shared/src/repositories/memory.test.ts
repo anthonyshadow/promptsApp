@@ -17,6 +17,9 @@ describe("memory repository", () => {
       id: "workspace_test",
       name: "Test Workspace",
       slug: "test-workspace",
+      prompts_private_by_default: true,
+      data_use_policy: "no_training",
+      provider_call_sensitive_data_policy: "require_confirmation",
       is_mock: true,
       created_at: createdAt,
       updated_at: createdAt

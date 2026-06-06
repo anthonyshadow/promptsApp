@@ -27,6 +27,9 @@ async function exerciseRepositoryContract(repository: PromptOptsRepository) {
     id: uniqueId("workspace_contract"),
     name: "Contract Workspace",
     slug: uniqueId("contract-workspace"),
+    prompts_private_by_default: true,
+    data_use_policy: "no_training",
+    provider_call_sensitive_data_policy: "require_confirmation",
     is_mock: true,
     created_at: createdAt,
     updated_at: createdAt
@@ -56,6 +59,9 @@ async function exerciseProviderConnectionContract(repository: PromptOptsReposito
     id: uniqueId("workspace_provider_connection"),
     name: "Provider Connection Workspace",
     slug: uniqueId("provider-connection-workspace"),
+    prompts_private_by_default: true,
+    data_use_policy: "no_training",
+    provider_call_sensitive_data_policy: "require_confirmation",
     is_mock: true,
     created_at: createdAt,
     updated_at: createdAt

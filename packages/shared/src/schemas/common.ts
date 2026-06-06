@@ -12,6 +12,17 @@ export type Provider = z.infer<typeof providerSchema>;
 export const providerConnectionStatusSchema = z.enum(["active", "revoked", "error"]);
 export type ProviderConnectionStatus = z.infer<typeof providerConnectionStatusSchema>;
 
+export const workspaceDataUsePolicySchema = z.enum(["no_training", "training_opt_in"]);
+export type WorkspaceDataUsePolicy = z.infer<typeof workspaceDataUsePolicySchema>;
+
+export const providerCallSensitiveDataPolicySchema = z.enum([
+  "require_confirmation",
+  "block"
+]);
+export type ProviderCallSensitiveDataPolicy = z.infer<
+  typeof providerCallSensitiveDataPolicySchema
+>;
+
 export const taskTypeSchema = z.enum([
   "support",
   "summarization",

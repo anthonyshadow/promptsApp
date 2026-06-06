@@ -74,6 +74,7 @@ function EvalRunScreen({
   const [testCases, setTestCases] = useState<TestCase[]>(demoTestCases);
   const [qualityContractId, setQualityContractId] = useState(demoQualityContract.id);
   const [reportState, setReportState] = useState<"idle" | "creating" | "error">("idle");
+  const [providerCallAcknowledged, setProviderCallAcknowledged] = useState(false);
   const selectedTestCaseIds = appState.selectedTestCaseIds.length > 0
     ? appState.selectedTestCaseIds
     : testCases.map((testCase) => testCase.id);
@@ -218,7 +219,8 @@ function EvalRunScreen({
         candidate_ids: appState.selectedCandidateIds,
         model_registry_record_ids: appState.selectedModelIds,
         test_case_ids: selectedTestCaseIds,
-        pass_threshold: appState.passThreshold
+        pass_threshold: appState.passThreshold,
+        provider_call_acknowledged: providerCallAcknowledged
       });
 
       updateAppState({ activeEvalRunId: evalRun.id });
@@ -324,6 +326,15 @@ function EvalRunScreen({
           <Field label="Queue/cache state">
             <input className={fieldControlStyle} readOnly value={formatEvalStatus(detail.eval_run.status)} />
           </Field>
+          <label className={providerAckStyle}>
+            <input
+              checked={providerCallAcknowledged}
+              className={checkboxStyle}
+              type="checkbox"
+              onChange={(event) => setProviderCallAcknowledged(event.target.checked)}
+            />
+            Confirm provider-call consent for selected prompts and test cases if sensitive content is detected.
+          </label>
           <button
             className={primaryButtonStyle}
             disabled={!canStartEval}
@@ -469,6 +480,15 @@ const emptyTextStyle = css({
   margin: "12px 0 0",
   color: "#69726b",
   lineHeight: 1.5
+});
+
+const providerAckStyle = css({
+  display: "flex",
+  alignItems: "flex-start",
+  gap: "8px",
+  color: "#4c5650",
+  fontSize: "0.86rem",
+  lineHeight: 1.45
 });
 
 const frontierPanelStyle = css({

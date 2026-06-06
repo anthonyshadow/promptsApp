@@ -44,7 +44,7 @@ Provide the update-safe status ledger for `docs/roadmap/next-steps-checklist.md`
 | --- | --- | --- | --- | --- |
 | Add billing provider integration and webhook handling. | P1 | blocked | Billing admin, invoices, credits, entitlements, and usage ledger exist locally. | Select billing provider and beta packaging terms, then wire webhooks/reconciliation. |
 | Add retention/deletion policy implementation. | P1 | complete | `DEFAULT_RETENTION_POLICY` documents delete-vs-retain behavior; report deletion tombstones scoped metadata, preserves audit/billing metadata, deletes artifact content, and keeps retry evidence. | Customer-specific retention controls remain excluded from MVP. |
-| Add rate limits, request logging policy, and data-use controls. | P1 | not_started | Security docs define data-use posture. | Implement redacted logs, route limits, provider-call limits, and opt-in data-use controls. |
+| Add rate limits, request logging policy, and data-use controls. | P1 | complete | API request IDs, structured body-free logs, Redis-capable/in-memory rate limiting, sensitive-field redaction, workspace private/no-training defaults, and eval/provider-call acknowledgement or blocking for sensitive content are wired and tested. | Calibrate exact provider quotas and abuse heuristics once live adapters and durable queue execution land. |
 
 ### D. Product Polish
 
@@ -94,6 +94,7 @@ Provide the update-safe status ledger for `docs/roadmap/next-steps-checklist.md`
 - Real sudo lifecycle with MFA recheck, reason code, expiry, revocation, wrong-action rejection, and audit events.
 - Provider-key encryption and non-viewability with metadata-only lifecycle routes and audited key actions.
 - Verified model registry official-doc rows and freshness review workflow.
+- Rate limits, body-free request logging, sensitive-field log redaction, and data-use controls for private/no-training prompts and provider-call consent.
 
 ## Blocked
 
@@ -102,13 +103,13 @@ Provide the update-safe status ledger for `docs/roadmap/next-steps-checklist.md`
 
 ## Validation Results
 
-- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run db:migrate`: passed against local Postgres; 0 migrations applied and 7 skipped because the test path had already applied the model-registry freshness migration.
-- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run db:seed`: passed; demo seed completed with approved official-doc registry rows and demo placeholders.
-- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun test`: passed with local Postgres integration, 140 tests across 25 files. The Postgres repository contract branch executed against local Postgres.
+- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run db:migrate`: passed against local Postgres; 0 migrations applied and 8 skipped.
+- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run db:seed`: passed; demo seed completed with workspace data-use defaults.
 - `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run typecheck`: passed.
+- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun test`: passed with local Postgres integration, 146 tests across 26 files. The Postgres repository contract branch executed against local Postgres after sandbox escalation.
 - `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run lint`: passed; current script delegates to `bun run typecheck`.
 - `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run build`: passed for packages, API, workers, and web.
 
 ## Recommended Next Prompt
 
-Move to Prompt 7 from `implementation-sequence.md`: rate limits, request logging, and data-use controls.
+Move to Prompt 8 from `implementation-sequence.md`: durable eval queue with retry/rate-limit state.

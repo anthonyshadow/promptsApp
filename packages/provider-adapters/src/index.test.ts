@@ -88,6 +88,9 @@ describe("provider adapters", () => {
           id: "workspace_adapter_key",
           name: "Adapter Key Workspace",
           slug: "adapter-key",
+          prompts_private_by_default: true,
+          data_use_policy: "no_training",
+          provider_call_sensitive_data_policy: "require_confirmation",
           is_mock: true,
           created_at: "2026-06-06T12:00:00.000Z",
           updated_at: "2026-06-06T12:00:00.000Z"

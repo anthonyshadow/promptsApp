@@ -12,20 +12,34 @@ import { createAdminApiRoutes } from "./adminRoutes";
 import {
   injectReportArtifactStorage,
   injectRepository,
+  injectSecurityControls,
   type ApiEnv,
   type AppDependencies
 } from "./context";
 import { createPublicApiRoutes } from "./publicRoutes";
+import {
+  createConsoleRequestLogger,
+  createRateLimitMiddleware,
+  createRateLimitStoreFromEnv,
+  createRequestIdMiddleware,
+  createSafeRequestLoggerMiddleware
+} from "./securityControls";
 
 export function createApp(dependencies: AppDependencies = {}) {
   const repository = dependencies.repository ?? createRuntimeRepository();
   const reportArtifactStorage =
     dependencies.reportArtifactStorage ?? createRuntimeReportArtifactStorage(Boolean(dependencies.repository));
+  const rateLimitStore = dependencies.rateLimitStore ?? createRateLimitStoreFromEnv();
+  const requestLogger = dependencies.requestLogger ?? createConsoleRequestLogger();
 
   return new Hono<ApiEnv>()
     .use("*", cors())
+    .use("*", createRequestIdMiddleware())
     .use("*", injectRepository(repository))
     .use("*", injectReportArtifactStorage(reportArtifactStorage))
+    .use("*", injectSecurityControls({ rateLimitStore, requestLogger }))
+    .use("*", createSafeRequestLoggerMiddleware())
+    .use("*", createRateLimitMiddleware(dependencies.rateLimitPolicies))
     .route("/", createPublicApiRoutes())
     .route("/admin-api", createAdminApiRoutes());
 }

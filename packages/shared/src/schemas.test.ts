@@ -128,6 +128,11 @@ describe("shared domain schemas", () => {
     const seed = createDemoRepositorySeed();
 
     expect(seed.workspaces[0]?.name).toBe("Acme AI");
+    expect(seed.workspaces[0]).toMatchObject({
+      prompts_private_by_default: true,
+      data_use_policy: "no_training",
+      provider_call_sensitive_data_policy: "require_confirmation"
+    });
     expect(seed.projects[0]?.name).toBe("Support classifier");
     expect(seed.accounts[0]?.stage).toBe("new_audit");
     expect(seed.plans[0]?.name).toBe("Demo Growth");

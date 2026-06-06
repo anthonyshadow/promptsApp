@@ -131,6 +131,12 @@ Set `PROMPTOPTS_SECRET_ENCRYPTION_KEY` for local encrypted storage before saving
 
 Report Markdown, JSON, PDF-stub, and redacted share artifacts are written through the shared storage abstraction. Local API runtime uses `PROMPTOPTS_REPORT_STORAGE_DIR` with the filesystem adapter unless `PROMPTOPTS_REPORT_STORAGE_DRIVER=memory` is set. Admin report deletion creates a durable deletion request, deletes object content, marks report/artifact records, keeps checksum/size tombstones, and writes lifecycle audit events. Partial object deletion failures stay retryable and visible in `/__admin/reports`.
 
+### Rate Limits, Logging, And Data Use
+
+The API assigns `x-request-id`, writes structured body-free request logs, and rate-limits prompt ingestion, audits, eval creation, report generation/export, admin login/MFA, provider-key lifecycle routes, and dangerous admin actions. `REDIS_URL` enables the Redis-backed limiter; local dev/test falls back to an in-memory limiter and production without Redis fails closed.
+
+Workspace prompts are private by default with `data_use_policy=no_training`. Eval/provider-call creation scans baseline prompts, selected candidates, and selected test cases before provider execution. Hard secrets are blocked; PII/proprietary findings require explicit acknowledgement. Logs redact sensitive fields and never store raw prompts, provider keys, raw reports, or raw eval test-case payloads.
+
 ## Environment Variables
 
 `.env.example` contains placeholders for:
@@ -144,13 +150,14 @@ Report Markdown, JSON, PDF-stub, and redacted share artifacts are written throug
 - `PROMPTOPTS_REPORT_STORAGE_DRIVER`
 - `PROMPTOPTS_REPORT_STORAGE_DIR`
 - `PROMPTOPTS_SECRET_ENCRYPTION_KEY`
+- `PROMPTOPTS_REQUEST_LOGS`
 - `ENCRYPTION_KEY`
 - `SESSION_SECRET`
 - `PROMPTOPTS_ADMIN_DEV_EMAIL`
 - `PROMPTOPTS_ADMIN_DEV_PASSWORD`
 - `PROMPTOPTS_ADMIN_DEV_MFA_SECRET`
 
-Provider keys are submitted through BYOK routes, encrypted at rest, and never viewable after save. The live adapters intentionally do not call providers until request logging, rate limits, and redaction policies are production-safe.
+Provider keys are submitted through BYOK routes, encrypted at rest, and never viewable after save.
 
 ## Commands
 
@@ -178,6 +185,7 @@ bun run build
 - Admin route policies, persisted admin sessions, MFA verification/rotation, RBAC/action scopes, redaction helpers, real sudo lifecycle, and append-only audit-log behavior.
 - Storage abstraction with local filesystem report artifacts, checksum/size metadata, deletion requests, retryable deletion failures, and report-vault evidence.
 - Verified model registry seed rows, 30-day freshness classification, admin review queue, pending diff proposals, approve/reject workflow, and exact-savings blocking for stale/demo/unapproved metadata.
+- Request ID middleware, Redis-capable/in-memory rate limiting, body-free structured request logs, sensitive-field log redaction, private/no-training workspace defaults, and provider-call confirmation/blocking for sensitive prompt/test-case content.
 - Unit/integration tests across web, API, packages, workers, repository, storage, and schema metadata.
 
 ## What Is Mocked
@@ -185,7 +193,7 @@ bun run build
 - Public user auth and product-user session revocation.
 - Live provider calls.
 - Production-grade Postgres pooling; the current adapter uses the local `psql` CLI execution layer.
-- Redis/queue execution.
+- Durable Redis queue execution; Redis-backed API rate limiting exists, while local dev/test can use the in-memory fallback.
 - S3/MinIO adapter and lifecycle policies; local filesystem storage is wired for dev/test.
 - Billing provider events.
 - Provider spend.
@@ -196,7 +204,7 @@ bun run build
 
 Prompts, reports, provider payloads, and provider keys are private by default. Admin views are redacted by default. Hidden routes are not treated as security. Dangerous actions require MFA recheck, reason codes, time-boxed sudo policies, and append-only audit events. Every admin mutation and sensitive read should write append-only `admin_audit_logs`.
 
-Provider keys are encrypted/opaque and are never viewable after storage. Report artifacts are redacted by default and raw report reveal remains sudo-gated. Production use still requires KMS-backed key material, S3-compatible storage/KMS policies, rate-limit/error logging policies, and deliberate production admin provisioning.
+Provider keys are encrypted/opaque and are never viewable after storage. Report artifacts are redacted by default and raw report reveal remains sudo-gated. Request logs are structured and body-free by default; sensitive metadata helpers redact prompt, provider-key, report, token, and test-case payload fields. Production use still requires KMS-backed key material, S3-compatible storage/KMS policies, live-provider limit calibration, and deliberate production admin provisioning.
 
 ## Model Registry Policy
 
@@ -211,7 +219,7 @@ Audit is a preflight, not a switch recommendation. The original prompt and curre
 ## Known Limitations
 
 - Demo-ready does not mean private-beta ready.
-- Real customer data should wait until KMS-backed provider-key encryption, S3-compatible storage lifecycle policies, live provider controls, rate limits, and billing controls are in place.
+- Real customer data should wait until KMS-backed provider-key encryption, S3-compatible storage lifecycle policies, live provider controls, calibrated provider quotas, and billing controls are in place.
 - Browser-level responsive screenshots are recommended before external demos.
 - API route modules and schema files are intentionally stable but broad; split by domain before adding much more behavior.
 
@@ -219,7 +227,7 @@ Audit is a preflight, not a switch recommendation. The original prompt and curre
 
 Current local MVP status is green for the mocked demo loop: provider selection, prompt paste, audit, model-fit label, candidate generation, model shortlist, test cases, eval matrix, recommendation report, export, hidden admin UI, guarded admin API, Account 360 redaction, eval job control, model registry admin, reports vault, billing admin, audit-log viewer, entitlements, and append-only audit-log tests.
 
-Remaining launch blockers are live provider adapters with rate limits/logging, durable queue, production KMS/S3 lifecycle configuration, and production billing integration.
+Remaining launch blockers are live provider adapters, durable queue, production KMS/S3 lifecycle configuration, and production billing integration.
 
 ## Audit And Roadmap
 

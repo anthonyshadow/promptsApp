@@ -277,6 +277,9 @@ export const workspacePatchRequestSchema = requireAtLeastOneField(
     .object({
       name: nonEmptyStringSchema.optional(),
       slug: nonEmptyStringSchema.optional(),
+      prompts_private_by_default: z.boolean().optional(),
+      data_use_policy: z.enum(["no_training", "training_opt_in"]).optional(),
+      provider_call_sensitive_data_policy: z.enum(["require_confirmation", "block"]).optional(),
       plan_id: idSchema.optional(),
       trial_state: z.enum(["none", "trialing", "expired"]).optional(),
       entitlements: z

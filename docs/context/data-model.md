@@ -71,6 +71,7 @@ The public playbook defines users, workspaces, projects, prompts, evals, candida
 - Admin Account 360 shows metadata and redacted previews by default.
 - Raw prompts, provider keys, and raw reports require explicit reveal scopes and sudo where dangerous.
 - Provider keys are encrypted and never viewable after storage.
+- Workspaces default to private prompts, `no_training` data use, and sensitive-provider-call confirmation.
 - Report and prompt deletion must remove object storage artifacts and write audit events.
 - Model registry data is versioned; pricing or capability edits require source URL and verification metadata.
 

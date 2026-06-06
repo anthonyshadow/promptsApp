@@ -2,12 +2,28 @@ import type { MiddlewareHandler } from "hono";
 import type { z } from "zod";
 import type { AdminSecurityHonoEnv } from "@promptopts/admin-core";
 import type { PromptOptsRepository, ReportArtifactStorage } from "@promptopts/shared";
+import type {
+  RateLimitPolicyOverrides,
+  RateLimitStore,
+  RequestLogger,
+  SafeRequestLogEvent
+} from "./securityControls";
 
-export type ApiEnv = AdminSecurityHonoEnv;
+export type ApiEnv = {
+  Variables: AdminSecurityHonoEnv["Variables"] & {
+    requestId: string;
+    rateLimitPolicy: string | null;
+    rateLimitStore: RateLimitStore;
+    requestLogger: RequestLogger;
+  };
+};
 
 export type AppDependencies = {
   repository?: PromptOptsRepository;
   reportArtifactStorage?: ReportArtifactStorage;
+  rateLimitStore?: RateLimitStore;
+  rateLimitPolicies?: RateLimitPolicyOverrides;
+  requestLogger?: RequestLogger;
 };
 
 export type ValidatedJson<TValue> =
@@ -35,3 +51,17 @@ export const injectReportArtifactStorage =
     c.set("reportArtifactStorage", reportArtifactStorage);
     await next();
   };
+
+export const injectSecurityControls =
+  (input: {
+    rateLimitStore: RateLimitStore;
+    requestLogger: RequestLogger;
+  }): MiddlewareHandler<ApiEnv> =>
+  async (c, next) => {
+    c.set("rateLimitStore", input.rateLimitStore);
+    c.set("requestLogger", input.requestLogger);
+    c.set("rateLimitPolicy", null);
+    await next();
+  };
+
+export type { RateLimitStore, RequestLogger, SafeRequestLogEvent };

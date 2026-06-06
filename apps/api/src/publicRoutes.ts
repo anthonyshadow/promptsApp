@@ -8,6 +8,7 @@ import {
   generateConservativeCandidate,
   generateModelSpecificCandidate,
   generateOutputLiteCandidate,
+  detectSensitiveContent,
   parsePrompt,
   runPromptModelAudit,
   type GeneratedPromptCandidate,
@@ -35,6 +36,7 @@ import {
   type PromptOptsRepository,
   type QualityContract,
   type RecommendationReport,
+  type SensitiveFinding,
   type TestCase,
   type UsageLedgerEntry
 } from "@promptopts/shared";
@@ -48,6 +50,7 @@ import {
   auditResponseSchema,
   errorResponseSchema,
   evalRunCreateRequestSchema,
+  type EvalRunCreateRequest,
   evalRunDetailResponseSchema,
   modelsResponseSchema,
   promptCreateRequestSchema,
@@ -658,6 +661,28 @@ export function createPublicApiRoutes() {
         return notFound(c, "Project not found");
       }
 
+      const privacyDecision = await evaluateProviderCallPrivacy(
+        c.var.repository,
+        body.data,
+        project.workspace_id
+      );
+      if (!privacyDecision.allowed) {
+        return c.json(
+          errorResponseSchema.parse({
+            error: {
+              code: privacyDecision.code,
+              message: privacyDecision.message,
+              details: {
+                data_use_policy: privacyDecision.dataUsePolicy,
+                provider_call_sensitive_data_policy: privacyDecision.providerCallSensitiveDataPolicy,
+                findings: privacyDecision.findings
+              }
+            }
+          }),
+          403
+        );
+      }
+
       const entitlement = await checkWorkspaceEntitlement(
         c.var.repository,
         project.workspace_id,
@@ -864,4 +889,113 @@ export function createPublicApiRoutes() {
         })
       );
     });
+}
+
+async function evaluateProviderCallPrivacy(
+  repository: PromptOptsRepository,
+  request: EvalRunCreateRequest,
+  workspaceId: string
+): Promise<
+  | {
+      allowed: true;
+    }
+  | {
+      allowed: false;
+      code: "provider_call_blocked_sensitive_content" | "provider_call_confirmation_required";
+      message: string;
+      dataUsePolicy: string;
+      providerCallSensitiveDataPolicy: string;
+      findings: SensitiveFinding[];
+    }
+> {
+  const workspace = await repository.workspaces.get(workspaceId);
+  const dataUsePolicy = workspace?.data_use_policy ?? "no_training";
+  const providerCallSensitiveDataPolicy =
+    workspace?.provider_call_sensitive_data_policy ?? "require_confirmation";
+  const findings = dedupeSensitiveFindings(
+    (await collectProviderCallTexts(repository, request)).flatMap((text) =>
+      detectSensitiveContent(text)
+    )
+  );
+
+  if (findings.length === 0) {
+    return { allowed: true };
+  }
+
+  const containsHardSecret = findings.some(
+    (finding) =>
+      ["api_key", "credential", "common_secret"].includes(finding.type) &&
+      ["high", "critical"].includes(finding.severity)
+  );
+
+  if (providerCallSensitiveDataPolicy === "block" || containsHardSecret) {
+    return {
+      allowed: false,
+      code: "provider_call_blocked_sensitive_content",
+      message:
+        "Provider call blocked because prompt, candidate, or test-case content contains secrets or a workspace block policy applies.",
+      dataUsePolicy,
+      providerCallSensitiveDataPolicy,
+      findings
+    };
+  }
+
+  if (!request.provider_call_acknowledged) {
+    return {
+      allowed: false,
+      code: "provider_call_confirmation_required",
+      message:
+        "Provider call requires acknowledgement because prompt, candidate, or test-case content contains PII or proprietary policy signals.",
+      dataUsePolicy,
+      providerCallSensitiveDataPolicy,
+      findings
+    };
+  }
+
+  return { allowed: true };
+}
+
+async function collectProviderCallTexts(
+  repository: PromptOptsRepository,
+  request: EvalRunCreateRequest
+): Promise<string[]> {
+  const [baselineVersion, candidates, testCases] = await Promise.all([
+    repository.prompt_versions.get(request.baseline_prompt_version_id),
+    repository.optimization_candidates.list(),
+    repository.test_cases.list()
+  ]);
+  const selectedCandidateIds = new Set(request.candidate_ids);
+  const selectedTestCaseIds = new Set(request.test_case_ids ?? []);
+  const contractTestCases = testCases.filter((testCase) =>
+    selectedTestCaseIds.size > 0
+      ? selectedTestCaseIds.has(testCase.id)
+      : testCase.quality_contract_id === request.quality_contract_id
+  );
+  const selectedCandidates = candidates.filter((candidate) =>
+    selectedCandidateIds.has(candidate.id)
+  );
+
+  return [
+    baselineVersion?.prompt_text ?? "",
+    ...selectedCandidates.map((candidate) => candidate.candidate_prompt_text),
+    ...contractTestCases.flatMap((testCase) => [
+      JSON.stringify(testCase.input_variables),
+      JSON.stringify(testCase.expected_output)
+    ])
+  ].filter((text) => text.trim().length > 0);
+}
+
+function dedupeSensitiveFindings(findings: SensitiveFinding[]): SensitiveFinding[] {
+  const seen = new Set<string>();
+  const deduped: SensitiveFinding[] = [];
+
+  for (const finding of findings) {
+    const key = `${finding.type}:${finding.reasonCode}:${finding.redactedPreview}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduped.push(finding);
+    }
+  }
+
+  return deduped;
 }

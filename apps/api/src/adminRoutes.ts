@@ -617,6 +617,9 @@ export function createAdminApiRoutes() {
           stripUndefined({
             name: body.data.name,
             slug: body.data.slug,
+            prompts_private_by_default: body.data.prompts_private_by_default,
+            data_use_policy: body.data.data_use_policy,
+            provider_call_sensitive_data_policy: body.data.provider_call_sensitive_data_policy,
             updated_at: nowIso()
           }) as Partial<Omit<Workspace, "id">>
         );

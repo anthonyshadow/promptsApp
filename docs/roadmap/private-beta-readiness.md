@@ -8,7 +8,7 @@ Define the practical bar for inviting real users with real prompts while preserv
 
 Not ready for private beta.
 
-The local MVP is founder-demoable, but private beta must wait for registry verification, rate limits/logging, durable eval queues, live provider adapters, production KMS-backed key material, and production storage lifecycle configuration.
+The local MVP is founder-demoable, but private beta must wait for durable eval queues, live provider adapters, production KMS-backed key material, and production storage lifecycle configuration.
 
 ## Readiness Gates
 
@@ -21,7 +21,8 @@ The local MVP is founder-demoable, but private beta must wait for registry verif
 | Durable persistence | complete | Postgres adapter, migration runner, seed/reset commands, and local Postgres contract tests pass. | Deployment provisioning and backup policy. |
 | Provider keys | complete | Provider connections persist encrypted blobs plus fingerprints only, lifecycle routes return metadata only, no reveal route exists, adapter decrypt-for-use is controlled, and key actions are audited. | Production KMS-backed key material before external customer data. |
 | Live eval proof | in_progress | Mock eval matrix, scoring, frontier, and reports exist. | Durable queue and live provider adapters with usage capture. |
-| Model registry trust | in_progress | Admin diff/approval/stale warnings exist. | Official source verification for active MVP rows. |
+| Model registry trust | complete | Approved official-doc snapshot rows, admin diff/approval/reject workflow, stale warnings, and exact-savings blocking exist. | Re-verify rows before external use and when provider docs change. |
+| Privacy and abuse controls | complete | Request IDs, body-free structured logs, sensitive-field redaction, route rate limits, private/no-training workspace defaults, and provider-call acknowledgement/blocking are wired. | Calibrate provider-specific quotas after live adapters and durable queue land. |
 | Report privacy/deletion | complete | Reports vault, redacted exports, local storage-backed artifacts, durable deletion requests, retryable failures, and retention evidence exist. | Production S3/MinIO lifecycle policy and customer-specific retention controls remain hardening work. |
 | Billing/entitlements | in_progress | Billing admin, entitlement checks, usage ledger, invoices, credits, and feature flags exist locally. | Billing provider/webhooks can wait for paid beta, but plan limits must match beta terms. |
 
@@ -34,6 +35,8 @@ The local MVP is founder-demoable, but private beta must wait for registry verif
 - Live provider evals run for OpenAI, Anthropic, and Gemini only.
 - Eval jobs survive API restarts and show partial/failure state.
 - Model registry rows used for savings claims are verified from official sources.
+- Rate limits and redacted logs protect prompt ingestion and provider-call setup.
+- Provider-call content with PII/proprietary signals requires acknowledgement, and hard secrets are blocked.
 - Report artifacts are stored, exportable, redacted by default, and deletable with audit evidence.
 - Browser smoke tests cover the public and admin routes at target breakpoints.
 

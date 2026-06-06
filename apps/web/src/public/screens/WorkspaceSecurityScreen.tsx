@@ -182,6 +182,21 @@ function WorkspaceSecurityScreen({
 
       <StatusNotice tone={status.tone} title={status.title} body={status.body} />
 
+      <section className={policyPanelStyle} aria-label="Workspace data-use policy">
+        <div>
+          <p className={cardKickerStyle}>Data use</p>
+          <h3 className={panelTitleStyle}>Private prompts by default</h3>
+          <p className={panelTextStyle}>
+            Customer prompts are private, marked no-training, and provider calls require acknowledgement when secret or PII warnings are detected.
+          </p>
+        </div>
+        <div className={policyGridStyle}>
+          <StatusBadge label="Prompt privacy" value="Private" tone="good" />
+          <StatusBadge label="Training use" value="No training" tone="good" />
+          <StatusBadge label="Sensitive provider calls" value="Confirm first" tone="warn" />
+        </div>
+      </section>
+
       <section className={formPanelStyle} aria-label="Connect provider key">
         <div>
           <p className={cardKickerStyle}>BYOK connection</p>
@@ -312,6 +327,29 @@ const formPanelStyle = css({
   borderRadius: "8px",
   background: "#fffef9",
   padding: "22px"
+});
+
+const policyPanelStyle = css({
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1.1fr) minmax(260px, 0.9fr)",
+  gap: "16px",
+  alignItems: "center",
+  border: "1px solid #d7d6ca",
+  borderRadius: "8px",
+  background: "#f7faf1",
+  padding: "20px",
+  "@media (max-width: 760px)": {
+    gridTemplateColumns: "1fr"
+  }
+});
+
+const policyGridStyle = css({
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gap: "8px",
+  "@media (max-width: 620px)": {
+    gridTemplateColumns: "1fr"
+  }
 });
 
 const formGridStyle = css({

@@ -5,6 +5,8 @@ import {
   metadataSchema,
   providerSchema,
   providerConnectionStatusSchema,
+  workspaceDataUsePolicySchema,
+  providerCallSensitiveDataPolicySchema,
   taskTypeSchema,
   prioritySchema,
   auditSourceSchema,
@@ -122,6 +124,9 @@ export const workspaceSchema = z
     id: idSchema,
     name: z.string().min(1),
     slug: z.string().min(1),
+    prompts_private_by_default: z.boolean(),
+    data_use_policy: workspaceDataUsePolicySchema,
+    provider_call_sensitive_data_policy: providerCallSensitiveDataPolicySchema,
     is_mock: z.boolean(),
     created_at: isoDateTimeSchema,
     updated_at: isoDateTimeSchema

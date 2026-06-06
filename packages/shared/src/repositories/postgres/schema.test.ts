@@ -27,6 +27,9 @@ describe("postgres schema metadata", () => {
     expect(POSTGRES_MIGRATION_FILES).toContain(
       "packages/shared/src/repositories/postgres/migrations/0007_model_registry_freshness_workflow.sql"
     );
+    expect(POSTGRES_MIGRATION_FILES).toContain(
+      "packages/shared/src/repositories/postgres/migrations/0008_rate_limits_logging_data_use_controls.sql"
+    );
   });
 
   test("keeps admin audit logs append-only in durable storage", async () => {
@@ -81,5 +84,15 @@ describe("postgres schema metadata", () => {
     expect(sql).toContain("ADD COLUMN IF NOT EXISTS approved_by_admin_user_id TEXT");
     expect(sql).toContain("ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ");
     expect(sql).toContain("'demo_unverified'");
+  });
+
+  test("stores workspace data-use defaults for privacy controls", async () => {
+    const sql = await readMigrations();
+
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS prompts_private_by_default BOOLEAN NOT NULL DEFAULT TRUE");
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS data_use_policy TEXT NOT NULL DEFAULT 'no_training'");
+    expect(sql).toContain("provider_call_sensitive_data_policy TEXT NOT NULL DEFAULT 'require_confirmation'");
+    expect(sql).toContain("CHECK (data_use_policy IN ('no_training', 'training_opt_in'))");
+    expect(sql).toContain("CHECK (provider_call_sensitive_data_policy IN ('require_confirmation', 'block'))");
   });
 });

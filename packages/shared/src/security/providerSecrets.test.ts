@@ -37,6 +37,9 @@ describe("provider secret encryption", () => {
           id: "workspace_secret_test",
           name: "Secret Test",
           slug: "secret-test",
+          prompts_private_by_default: true,
+          data_use_policy: "no_training",
+          provider_call_sensitive_data_policy: "require_confirmation",
           is_mock: true,
           created_at: timestamp,
           updated_at: timestamp
