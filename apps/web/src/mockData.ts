@@ -16,6 +16,7 @@ import type {
   TaskType,
   Workspace
 } from "@promptopts/shared";
+import { DEMO_IDS } from "@promptopts/shared";
 
 export type PublicAppState = {
   projectName: string;
@@ -46,7 +47,7 @@ export type PublicAppState = {
 const demoCreatedAt = "2026-06-03T12:00:00.000Z";
 
 export const demoWorkspace: Workspace = {
-  id: "workspace_demo_acme",
+  id: DEMO_IDS.workspace,
   name: "Acme AI",
   slug: "acme-ai",
   is_mock: true,
@@ -55,12 +56,12 @@ export const demoWorkspace: Workspace = {
 };
 
 export const demoProject: PromptProject = {
-  id: "project_demo_support",
+  id: DEMO_IDS.project,
   workspace_id: demoWorkspace.id,
   name: "Support classifier",
-  task_type: "classification",
+  task_type: "support",
   current_provider: "openai",
-  current_model_id: "openai-demo-frontier",
+  current_model_id: "openai-demo-balanced",
   status: "active",
   is_mock: true,
   created_at: demoCreatedAt,
@@ -68,10 +69,10 @@ export const demoProject: PromptProject = {
 };
 
 export const demoPrompt: Prompt = {
-  id: "prompt_demo_support",
+  id: DEMO_IDS.prompt,
   project_id: demoProject.id,
   name: "Support classifier prompt",
-  current_version_id: "prompt_version_demo_support_v1",
+  current_version_id: DEMO_IDS.promptVersion,
   redacted_preview: "Classify inbound support tickets by urgency, topic, and routing group.",
   is_mock: true,
   created_at: demoCreatedAt,
@@ -79,7 +80,7 @@ export const demoPrompt: Prompt = {
 };
 
 export const demoPromptVersion: PromptVersion = {
-  id: "prompt_version_demo_support_v1",
+  id: DEMO_IDS.promptVersion,
   prompt_id: demoPrompt.id,
   version: 1,
   label: "Current production baseline",
@@ -94,7 +95,7 @@ export const demoPromptVersion: PromptVersion = {
 };
 
 export const demoAudit: AuditResponse = {
-  id: "audit_demo_support",
+  id: DEMO_IDS.promptAnalysis,
   inputTokens: 32,
   estimatedOutputTokens: 96,
   monthlyCostEstimate: {
@@ -124,20 +125,20 @@ export const demoAudit: AuditResponse = {
   suggestedModelRoles: [
     {
       role: "baseline",
-      modelId: "openai-demo-frontier",
-      registryRecordId: "model_record_openai_frontier",
+      modelId: "openai-demo-balanced",
+      registryRecordId: "model_registry_openai_demo_balanced",
       reason: "Current prompt and model remain the regression baseline."
     },
     {
       role: "cheaper_candidate",
-      modelId: "openai-demo-balanced",
-      registryRecordId: "model_record_openai_balanced",
+      modelId: "openai-demo-economy",
+      registryRecordId: "model_registry_openai_demo_economy",
       reason: "Same-provider candidate for eval benchmarking, not a production switch recommendation."
     },
     {
       role: "stronger_fallback",
       modelId: "openai-demo-frontier",
-      registryRecordId: "model_record_openai_frontier",
+      registryRecordId: "model_registry_openai_demo_frontier",
       reason: "Fallback role for quality risk evaluation."
     }
   ],
@@ -147,13 +148,13 @@ export const demoAudit: AuditResponse = {
 };
 
 export const demoQualityContract: QualityContract = {
-  id: "quality_contract_demo_support",
+  id: DEMO_IDS.qualityContract,
   project_id: demoProject.id,
   task: "Support ticket classification",
   required_output: "Strict JSON with urgency, topic, routing_group, and short rationale.",
   must_preserve: ["Strict JSON", "Urgency labels", "routing_group"],
   forbidden_behavior: ["Do not invent customer facts.", "Do not include private policy text."],
-  pass_threshold: 0.92,
+  pass_threshold: 0.95,
   must_pass_check_ids: ["check_json", "check_urgency", "check_routing"],
   check_definitions: [
     {
@@ -277,7 +278,7 @@ export const demoTestCases: TestCase[] = [
 
 export const demoCandidates = [
   {
-    id: "candidate_baseline",
+    id: "candidate_support_classifier_baseline",
     strategy: "baseline",
     risk: "low",
     tokenDelta: 0,
@@ -291,7 +292,7 @@ export const demoCandidates = [
     summary: "Tightens output instructions while preserving labels and JSON shape."
   },
   {
-    id: "candidate_balanced",
+    id: "candidate_support_classifier_balanced",
     strategy: "balanced",
     risk: "medium",
     tokenDelta: -26,
@@ -327,26 +328,24 @@ export const demoCandidates = [
 }>;
 
 export const demoModelRegistry: ModelRegistryRecord[] = [
-  createDemoModel("model_record_openai_frontier", "openai", "openai-demo-frontier", "OpenAI demo frontier", "frontier"),
-  createDemoModel("model_record_openai_balanced", "openai", "openai-demo-balanced", "OpenAI demo balanced", "balanced"),
-  createDemoModel("model_record_openai_economy", "openai", "openai-demo-economy", "OpenAI demo economy", "economy"),
-  createDemoModel("model_record_anthropic_balanced", "anthropic", "anthropic-demo-balanced", "Anthropic demo balanced", "balanced"),
-  createDemoModel("model_record_gemini_balanced", "gemini", "gemini-demo-balanced", "Gemini demo balanced", "balanced")
+  createDemoModel("model_registry_openai_demo_frontier", "openai", "openai-demo-frontier", "OpenAI demo frontier", "frontier"),
+  createDemoModel("model_registry_openai_demo_balanced", "openai", "openai-demo-balanced", "OpenAI demo balanced", "balanced"),
+  createDemoModel("model_registry_openai_demo_economy", "openai", "openai-demo-economy", "OpenAI demo economy", "economy"),
+  createDemoModel("model_registry_anthropic_demo_balanced", "anthropic", "anthropic-demo-balanced", "Anthropic demo balanced", "balanced"),
+  createDemoModel("model_registry_gemini_demo_balanced", "gemini", "gemini-demo-balanced", "Gemini demo balanced", "balanced")
 ];
 
 export const demoEvalRun: EvalRun = {
-  id: "eval_demo_support",
+  id: DEMO_IDS.evalRun,
   project_id: demoProject.id,
   quality_contract_id: demoQualityContract.id,
   baseline_prompt_version_id: demoPromptVersion.id,
-  candidate_ids: ["candidate_baseline", "candidate_conservative", "candidate_balanced"],
+  candidate_ids: ["candidate_support_classifier_baseline", "candidate_support_classifier_balanced"],
   model_registry_record_ids: [
-    "model_record_openai_frontier",
-    "model_record_openai_balanced",
-    "model_record_openai_economy"
+    "model_registry_openai_demo_balanced"
   ],
   status: "queued",
-  pass_threshold: 0.92,
+  pass_threshold: 0.95,
   is_mock: true,
   queued_at: demoCreatedAt,
   started_at: null,
@@ -354,13 +353,13 @@ export const demoEvalRun: EvalRun = {
 };
 
 export const demoEvalResults: EvalResult[] = [
-  createEvalResult("eval_result_baseline", "candidate_baseline", "openai-demo-frontier", 0.96, 0, "low", "pass"),
-  createEvalResult("eval_result_balanced", "candidate_balanced", "openai-demo-balanced", 0.91, 1, "medium", "fail"),
+  createEvalResult("eval_result_baseline", "candidate_support_classifier_baseline", "openai-demo-balanced", 0.96, 0, "low", "pass"),
+  createEvalResult("eval_result_balanced", "candidate_support_classifier_balanced", "openai-demo-balanced", 0.91, 1, "medium", "fail"),
   createEvalResult("eval_result_economy", "candidate_output_lite", "openai-demo-economy", 0.86, 2, "high", "fail")
 ];
 
 export const demoReport: RecommendationReport = {
-  id: "report_demo_support",
+  id: DEMO_IDS.report,
   project_id: demoProject.id,
   eval_run_id: demoEvalRun.id,
   status: "blocked",
@@ -472,7 +471,7 @@ function createEvalResult(
     candidate_id: candidateId,
     prompt_version_id: demoPromptVersion.id,
     model_registry_record_id:
-      demoModelRegistry.find((model) => model.model_id === modelId)?.id ?? "model_record_openai_frontier",
+      demoModelRegistry.find((model) => model.model_id === modelId)?.id ?? "model_registry_openai_demo_frontier",
     provider: "openai",
     model_id: modelId,
     quality_score: passRate,

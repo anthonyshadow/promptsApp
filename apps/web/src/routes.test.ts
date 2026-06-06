@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { DEMO_IDS } from "@promptopts/shared";
 import { parsePublicRoute, stepperItems } from "./routes";
 
 describe("public route map", () => {
@@ -7,14 +8,14 @@ describe("public route map", () => {
       "/app",
       "/app/workspace/acme-ai",
       "/app/setup",
-      "/app/prompts/prompt_demo_support",
-      "/app/projects/project_demo_support/audit",
-      "/app/projects/project_demo_support/success",
-      "/app/projects/project_demo_support/candidates",
-      "/app/projects/project_demo_support/models",
-      "/app/eval-runs/eval_demo_support",
-      "/app/reports/report_demo_support",
-      "/app/reports/report_demo_support/export",
+      `/app/prompts/${DEMO_IDS.prompt}`,
+      `/app/projects/${DEMO_IDS.project}/audit`,
+      `/app/projects/${DEMO_IDS.project}/success`,
+      `/app/projects/${DEMO_IDS.project}/candidates`,
+      `/app/projects/${DEMO_IDS.project}/models`,
+      `/app/eval-runs/${DEMO_IDS.evalRun}`,
+      `/app/reports/${DEMO_IDS.report}`,
+      `/app/reports/${DEMO_IDS.report}/export`,
       "/audit",
       "/free-audit"
     ];
@@ -40,6 +41,25 @@ describe("public route map", () => {
       "Report",
       "Exports"
     ]);
+  });
+
+  test("normalizes legacy frontend demo ids to API seed ids", () => {
+    expect(parsePublicRoute("/app/prompts/prompt_demo_support")).toMatchObject({
+      kind: "prompt",
+      promptId: DEMO_IDS.prompt
+    });
+    expect(parsePublicRoute("/app/projects/project_demo_support/success")).toMatchObject({
+      kind: "success",
+      projectId: DEMO_IDS.project
+    });
+    expect(parsePublicRoute("/app/eval-runs/eval_demo_support")).toMatchObject({
+      kind: "eval-run",
+      evalRunId: DEMO_IDS.evalRun
+    });
+    expect(parsePublicRoute("/app/reports/report_demo_support/export")).toMatchObject({
+      kind: "report-export",
+      reportId: DEMO_IDS.report
+    });
   });
 
   test("does not treat admin paths as public routes", () => {

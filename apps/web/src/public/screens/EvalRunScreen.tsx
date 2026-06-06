@@ -11,6 +11,7 @@ import {
   demoEvalResults,
   demoEvalRun,
   demoQualityContract,
+  demoReport,
   demoTestCases,
   type PublicAppState
 } from "../../mockData";
@@ -223,7 +224,7 @@ function EvalRunScreen({
 
   async function createReportAndNavigate() {
     if (!apiClient) {
-      onNavigate("/app/reports/report_demo_support");
+      onNavigate(`/app/reports/${demoReport.id}`);
       return;
     }
 

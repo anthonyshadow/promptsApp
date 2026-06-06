@@ -9,6 +9,7 @@
     "packages/*"
   ],
   "scripts": {
+    "dev": "bun run dev:api & VITE_API_URL=http://localhost:3000 bun run dev:web & wait",
     "dev:web": "cd apps/web && bun run dev",
     "dev:api": "cd apps/api && bun run dev",
     "dev:workers": "(cd workers/eval-runner && bun run dev) & (cd workers/report-generator && bun run dev) & wait",

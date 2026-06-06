@@ -1,3 +1,5 @@
+import { DEMO_IDS } from "@promptopts/shared";
+
 export type ProductStepKey =
   | "setup"
   | "prompt"
@@ -29,15 +31,31 @@ export type PublicRoute =
   | { kind: "free-audit"; activeStep: ProductStepKey; path: string }
   | { kind: "not-found"; activeStep: null; path: string };
 
+function normalizePromptId(promptId: string): string {
+  return promptId === "prompt_demo_support" ? DEMO_IDS.prompt : promptId;
+}
+
+function normalizeProjectId(projectId: string): string {
+  return projectId === "project_demo_support" ? DEMO_IDS.project : projectId;
+}
+
+function normalizeEvalRunId(evalRunId: string): string {
+  return evalRunId === "eval_demo_support" ? DEMO_IDS.evalRun : evalRunId;
+}
+
+function normalizeReportId(reportId: string): string {
+  return reportId === "report_demo_support" ? DEMO_IDS.report : reportId;
+}
+
 export const stepperItems: ProductStep[] = [
   { key: "setup", label: "Setup", path: "/app/setup" },
-  { key: "prompt", label: "Prompt", path: "/app/prompts/prompt_demo_support" },
-  { key: "audit", label: "Audit", path: "/app/projects/project_demo_support/audit" },
-  { key: "success", label: "Success", path: "/app/projects/project_demo_support/success" },
-  { key: "candidates", label: "Candidates", path: "/app/projects/project_demo_support/candidates" },
-  { key: "evals", label: "Evals", path: "/app/eval-runs/eval_demo_support" },
-  { key: "report", label: "Report", path: "/app/reports/report_demo_support" },
-  { key: "exports", label: "Exports", path: "/app/reports/report_demo_support/export" }
+  { key: "prompt", label: "Prompt", path: `/app/prompts/${DEMO_IDS.prompt}` },
+  { key: "audit", label: "Audit", path: `/app/projects/${DEMO_IDS.project}/audit` },
+  { key: "success", label: "Success", path: `/app/projects/${DEMO_IDS.project}/success` },
+  { key: "candidates", label: "Candidates", path: `/app/projects/${DEMO_IDS.project}/candidates` },
+  { key: "evals", label: "Evals", path: `/app/eval-runs/${DEMO_IDS.evalRun}` },
+  { key: "report", label: "Report", path: `/app/reports/${DEMO_IDS.report}` },
+  { key: "exports", label: "Exports", path: `/app/reports/${DEMO_IDS.report}/export` }
 ];
 
 export function parsePublicRoute(pathname: string): PublicRoute {
@@ -62,7 +80,7 @@ export function parsePublicRoute(pathname: string): PublicRoute {
       kind: "prompt",
       activeStep: "prompt",
       path,
-      promptId: decodeURIComponent(segments[2])
+      promptId: normalizePromptId(decodeURIComponent(segments[2]))
     };
   }
 
@@ -76,7 +94,7 @@ export function parsePublicRoute(pathname: string): PublicRoute {
   }
 
   if (segments[0] === "app" && segments[1] === "projects" && segments[2] && segments[3]) {
-    const projectId = decodeURIComponent(segments[2]);
+    const projectId = normalizeProjectId(decodeURIComponent(segments[2]));
 
     if (segments[3] === "audit" && segments.length === 4) {
       return { kind: "audit", activeStep: "audit", path, projectId };
@@ -100,12 +118,12 @@ export function parsePublicRoute(pathname: string): PublicRoute {
       kind: "eval-run",
       activeStep: "evals",
       path,
-      evalRunId: decodeURIComponent(segments[2])
+      evalRunId: normalizeEvalRunId(decodeURIComponent(segments[2]))
     };
   }
 
   if (segments[0] === "app" && segments[1] === "reports" && segments[2]) {
-    const reportId = decodeURIComponent(segments[2]);
+    const reportId = normalizeReportId(decodeURIComponent(segments[2]));
 
     if (segments.length === 3) {
       return { kind: "report", activeStep: "report", path, reportId };

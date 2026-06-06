@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { DEMO_IDS } from "@promptopts/shared";
 import { getAdminGateCopy, getAdminGateStateFromSearch } from "./adminGate";
 import { getRegistryNotice, renderApiStatus } from "./apiViewState";
 import {
@@ -23,14 +24,14 @@ describe("web view helpers", () => {
       ["/app/workspace/acme-ai", "Acme AI workspace"],
       ["/audit", "Free audit"],
       ["/app/setup", "Setup"],
-      ["/app/prompts/prompt_demo_support", "Prompt"],
-      ["/app/projects/project_demo_support/audit", "Audit"],
-      ["/app/projects/project_demo_support/success", "Success contract"],
-      ["/app/projects/project_demo_support/candidates", "Candidates"],
-      ["/app/projects/project_demo_support/models", "Model shortlist"],
-      ["/app/eval-runs/eval_demo_support", "Eval matrix"],
-      ["/app/reports/report_demo_support", "Recommendation report"],
-      ["/app/reports/report_demo_support/export", "Export package"]
+      [`/app/prompts/${DEMO_IDS.prompt}`, "Prompt"],
+      [`/app/projects/${DEMO_IDS.project}/audit`, "Audit"],
+      [`/app/projects/${DEMO_IDS.project}/success`, "Success contract"],
+      [`/app/projects/${DEMO_IDS.project}/candidates`, "Candidates"],
+      [`/app/projects/${DEMO_IDS.project}/models`, "Model shortlist"],
+      [`/app/eval-runs/${DEMO_IDS.evalRun}`, "Eval matrix"],
+      [`/app/reports/${DEMO_IDS.report}`, "Recommendation report"],
+      [`/app/reports/${DEMO_IDS.report}/export`, "Export package"]
     ]);
 
     for (const [path, title] of expectedTitles) {
@@ -73,7 +74,7 @@ describe("web view helpers", () => {
     expect(firstSuggestedRole).toBeDefined();
 
     if (firstSuggestedRole) {
-      expect(formatSuggestedRole(firstSuggestedRole)).toBe("Baseline: openai-demo-frontier");
+      expect(formatSuggestedRole(firstSuggestedRole)).toBe("Baseline: openai-demo-balanced");
     }
   });
 

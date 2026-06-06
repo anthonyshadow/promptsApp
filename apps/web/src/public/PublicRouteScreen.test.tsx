@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { DEMO_IDS } from "@promptopts/shared";
 import { renderToString } from "react-dom/server";
 import { createInitialPublicAppState, demoModelRegistry } from "../mockData";
 import { parsePublicRoute } from "../routes";
@@ -12,14 +13,14 @@ describe("public route screens", () => {
       ["/app", "Workspace dashboard"],
       ["/app/workspace/acme-ai", "Recent projects"],
       ["/app/setup", "Provider and model setup"],
-      ["/app/prompts/prompt_demo_support", "Prompt baseline"],
-      ["/app/projects/project_demo_support/audit", "Prompt and model audit"],
-      ["/app/projects/project_demo_support/success", "Quality contract"],
-      ["/app/projects/project_demo_support/candidates", "Prompt candidates"],
-      ["/app/projects/project_demo_support/models", "Model shortlist"],
-      ["/app/eval-runs/eval_demo_support", "Eval matrix"],
-      ["/app/reports/report_demo_support", "Recommendation report"],
-      ["/app/reports/report_demo_support/export", "Deploy package export"],
+      [`/app/prompts/${DEMO_IDS.prompt}`, "Prompt baseline"],
+      [`/app/projects/${DEMO_IDS.project}/audit`, "Prompt and model audit"],
+      [`/app/projects/${DEMO_IDS.project}/success`, "Quality contract"],
+      [`/app/projects/${DEMO_IDS.project}/candidates`, "Prompt candidates"],
+      [`/app/projects/${DEMO_IDS.project}/models`, "Model shortlist"],
+      [`/app/eval-runs/${DEMO_IDS.evalRun}`, "Eval matrix"],
+      [`/app/reports/${DEMO_IDS.report}`, "Recommendation report"],
+      [`/app/reports/${DEMO_IDS.report}/export`, "Deploy package export"],
       ["/does-not-exist", "Route unavailable"]
     ] as const;
 
@@ -97,7 +98,7 @@ describe("public route screens", () => {
         apiState={apiState}
         appState={createInitialPublicAppState()}
         registryModels={demoModelRegistry}
-        route={parsePublicRoute("/app/projects/project_demo_support/audit")}
+        route={parsePublicRoute(`/app/projects/${DEMO_IDS.project}/audit`)}
         updateAppState={() => undefined}
         onNavigate={() => undefined}
       />
@@ -118,7 +119,7 @@ describe("public route screens", () => {
         apiState={apiState}
         appState={createInitialPublicAppState()}
         registryModels={demoModelRegistry}
-        route={parsePublicRoute("/app/projects/project_demo_support/success")}
+        route={parsePublicRoute(`/app/projects/${DEMO_IDS.project}/success`)}
         updateAppState={() => undefined}
         onNavigate={() => undefined}
       />
@@ -141,7 +142,7 @@ describe("public route screens", () => {
         apiState={apiState}
         appState={createInitialPublicAppState()}
         registryModels={demoModelRegistry}
-        route={parsePublicRoute("/app/projects/project_demo_support/candidates")}
+        route={parsePublicRoute(`/app/projects/${DEMO_IDS.project}/candidates`)}
         updateAppState={() => undefined}
         onNavigate={() => undefined}
       />
@@ -163,7 +164,7 @@ describe("public route screens", () => {
         apiState={apiState}
         appState={createInitialPublicAppState()}
         registryModels={demoModelRegistry}
-        route={parsePublicRoute("/app/projects/project_demo_support/models")}
+        route={parsePublicRoute(`/app/projects/${DEMO_IDS.project}/models`)}
         updateAppState={() => undefined}
         onNavigate={() => undefined}
       />
@@ -188,7 +189,7 @@ describe("public route screens", () => {
         apiState={apiState}
         appState={createInitialPublicAppState()}
         registryModels={demoModelRegistry}
-        route={parsePublicRoute("/app/eval-runs/eval_demo_support")}
+        route={parsePublicRoute(`/app/eval-runs/${DEMO_IDS.evalRun}`)}
         updateAppState={() => undefined}
         onNavigate={() => undefined}
       />
@@ -212,7 +213,7 @@ describe("public route screens", () => {
         apiState={apiState}
         appState={createInitialPublicAppState()}
         registryModels={demoModelRegistry}
-        route={parsePublicRoute("/app/reports/report_demo_support")}
+        route={parsePublicRoute(`/app/reports/${DEMO_IDS.report}`)}
         updateAppState={() => undefined}
         onNavigate={() => undefined}
       />
@@ -223,7 +224,7 @@ describe("public route screens", () => {
         apiState={apiState}
         appState={createInitialPublicAppState()}
         registryModels={demoModelRegistry}
-        route={parsePublicRoute("/app/reports/report_demo_support/export")}
+        route={parsePublicRoute(`/app/reports/${DEMO_IDS.report}/export`)}
         updateAppState={() => undefined}
         onNavigate={() => undefined}
       />

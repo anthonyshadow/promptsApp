@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { DEMO_IDS } from "@promptopts/shared";
 import type { TestCase } from "@promptopts/shared";
 import { demoQualityContract } from "../../mockData";
 import {
@@ -86,8 +87,8 @@ function createCase(
 ): TestCase {
   return {
     id,
-    project_id: "project_demo_support",
-    quality_contract_id: "contract_demo_support",
+    project_id: DEMO_IDS.project,
+    quality_contract_id: DEMO_IDS.qualityContract,
     name: id,
     input_variables: {},
     expected_output: null,
