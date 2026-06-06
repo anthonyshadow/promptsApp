@@ -6,7 +6,7 @@ Track the blockers that prevent PromptOpts from moving from founder-demoable loc
 
 ## Current Verdict
 
-PromptOpts is demo-ready with mocked infrastructure. It is not private-beta ready until the remaining live-provider, queue, storage hardening, and billing blockers below are closed.
+PromptOpts is demo-ready with mocked provider execution. It is not private-beta ready until the remaining live-provider, storage hardening, browser smoke, and billing blockers below are closed.
 
 ## Blockers
 
@@ -18,7 +18,7 @@ PromptOpts is demo-ready with mocked infrastructure. It is not private-beta read
 | Provider-key encryption and non-viewability | Launch Blockers A; Data Model | complete | Provider connections store encrypted blobs plus fingerprints only, lifecycle routes return metadata only, no reveal route exists, admin metadata reads are audited, and adapters can use controlled decrypt-for-use. | Replace local encryption key material with production KMS before external customer data. | Keys are opaque after storage; all key actions are audited; adapters can use scoped keys safely. |
 | Object storage artifact lifecycle and deletion jobs | Launch Blockers A | complete | Report artifacts are storage-backed locally, deletion requests are durable, object content deletion is audited, partial failures are retryable, and vault evidence shows checksum/size/status. | Choose and harden production S3/MinIO lifecycle policies before external customer data. | Report deletion removes artifacts or records failure/retry evidence and writes audit events. |
 | Verified model registry rows | Launch Blockers A | complete | Seed includes approved official-doc snapshot rows for OpenAI, Anthropic, and Gemini; demo rows remain `demo_unverified`; admin review queue, approve/reject workflow, and stale warnings are wired. | Re-verify before external use and whenever provider docs change. | Active rows include source URL, verification date, verifier, approval state, and freshness status. |
-| Rate limits, request logging, and data-use controls | Production Readiness C | complete | API request IDs, body-free structured logs, sensitive-field redaction, Redis-capable/in-memory route limits, private/no-training workspace defaults, and eval/provider-call acknowledgement or blocking are wired and tested. | Calibrate provider-specific quotas once live adapters and durable queue execution exist. | Limits and logs redact sensitive payloads; provider-call content is blocked or acknowledged before leaving PromptOpts. |
+| Rate limits, request logging, and data-use controls | Production Readiness C | complete | API request IDs, body-free structured logs, sensitive-field redaction, Redis-capable/in-memory route limits, private/no-training workspace defaults, and eval/provider-call acknowledgement or blocking are wired and tested. | Calibrate provider-specific quotas once live adapters make real calls. | Limits and logs redact sensitive payloads; provider-call content is blocked or acknowledged before leaving PromptOpts. |
 
 ## Beta-Blocking Dependencies
 
@@ -26,7 +26,7 @@ These are not all P0 checklist items, but they block safe private-beta evals:
 
 | Dependency | Status | Why it blocks beta |
 | --- | --- | --- |
-| Durable eval queue | not_started | Eval jobs must survive restarts and expose product-visible queue states. |
+| Durable eval queue | complete | Eval jobs persist in `eval_queue_jobs`, expose product-visible queue states, survive API restart in tests, and write partial rows/events/heartbeats. |
 | Live provider adapters | in_progress | Provider adapter boundaries exist, but live OpenAI/Anthropic/Gemini calls are intentionally inert. |
 | Browser smoke tests | not_started | Static responsive audit exists, but beta needs route-level browser confidence. |
 

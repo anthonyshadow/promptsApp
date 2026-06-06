@@ -262,6 +262,7 @@ describe("admin API routes", () => {
       "Stale model prices",
       "Failed report exports",
       "Secret-scan warnings",
+      "Rate-limited eval jobs",
       "Deletion requests"
     ]);
     expect(overview.live_activity.length).toBeGreaterThan(0);

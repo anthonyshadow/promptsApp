@@ -3,9 +3,17 @@ import {
   createMemoryRepository,
   type AdminAuditLog,
   type DeletionRequest,
+  type EvalQueueJob,
+  type JobEvent,
   type PromptOptsRepository,
+  type Prompt,
+  type PromptProject,
+  type PromptVersion,
   type ProviderConnection,
-  type Workspace
+  type QualityContract,
+  type EvalRun,
+  type Workspace,
+  type WorkerHeartbeat
 } from "../index";
 import { encryptSecret, fingerprintSecret } from "../security/providerSecrets";
 import { createPostgresRepository, runPostgresMigrations } from "./postgres";
@@ -131,6 +139,172 @@ async function exerciseDeletionRequestContract(repository: PromptOptsRepository)
   });
 }
 
+async function exerciseEvalQueueContract(repository: PromptOptsRepository) {
+  const projectId = uniqueId("project_queue_contract");
+  const promptId = uniqueId("prompt_queue_contract");
+  const promptVersionId = uniqueId("prompt_version_queue_contract");
+  const contractId = uniqueId("quality_contract_queue_contract");
+  const evalRunId = uniqueId("eval_run_queue_contract");
+  const checkId = uniqueId("check_queue_contract");
+  const workspace: Workspace = {
+    id: uniqueId("workspace_eval_queue"),
+    name: "Eval Queue Workspace",
+    slug: uniqueId("eval-queue-workspace"),
+    prompts_private_by_default: true,
+    data_use_policy: "no_training",
+    provider_call_sensitive_data_policy: "require_confirmation",
+    is_mock: true,
+    created_at: createdAt,
+    updated_at: createdAt
+  };
+  await repository.workspaces.create(workspace);
+  const project: PromptProject = {
+    id: projectId,
+    workspace_id: workspace.id,
+    name: "Queue Contract",
+    task_type: "support",
+    current_provider: "openai",
+    current_model_id: "openai-demo-balanced",
+    status: "active",
+    is_mock: true,
+    created_at: createdAt,
+    updated_at: createdAt
+  };
+  const prompt: Prompt = {
+    id: promptId,
+    project_id: project.id,
+    name: "Queue Contract Prompt",
+    current_version_id: promptVersionId,
+    redacted_preview: "Queue contract prompt.",
+    is_mock: true,
+    created_at: createdAt,
+    updated_at: createdAt
+  };
+  const promptVersion: PromptVersion = {
+    id: promptVersionId,
+    prompt_id: prompt.id,
+    version: 1,
+    label: "Queue Contract Prompt v1",
+    prompt_text: "Classify {{message}}.",
+    variables: ["message"],
+    status: "active",
+    redacted_preview: "Classify message.",
+    is_mock: true,
+    created_by_user_id: null,
+    created_at: createdAt
+  };
+  const contract: QualityContract = {
+    id: contractId,
+    project_id: project.id,
+    task: "Queue contract",
+    required_output: "JSON classification.",
+    must_preserve: ["JSON shape"],
+    forbidden_behavior: ["No hallucination"],
+    pass_threshold: 0.95,
+    must_pass_check_ids: [checkId],
+    check_definitions: [
+      {
+        id: checkId,
+        type: "required_phrase",
+        description: "Requires support.",
+        must_pass: true,
+        field_path: null,
+        expected_value: "support",
+        pattern: null,
+        placeholder_note: null
+      }
+    ],
+    notes: null,
+    is_mock: true,
+    created_at: createdAt,
+    updated_at: createdAt
+  };
+  const evalRun: EvalRun = {
+    id: evalRunId,
+    project_id: project.id,
+    quality_contract_id: contract.id,
+    baseline_prompt_version_id: promptVersion.id,
+    candidate_ids: [],
+    model_registry_record_ids: [],
+    status: "queued",
+    pass_threshold: 0.95,
+    is_mock: true,
+    queued_at: createdAt,
+    started_at: null,
+    completed_at: null
+  };
+
+  await repository.projects.create(project);
+  await repository.prompts.create(prompt);
+  await repository.prompt_versions.create(promptVersion);
+  await repository.quality_contracts.create(contract);
+  await repository.eval_runs.create(evalRun);
+
+  const job: EvalQueueJob = {
+    id: uniqueId("eval_queue_job_contract"),
+    eval_run_id: evalRunId,
+    workspace_id: workspace.id,
+    project_id: projectId,
+    status: "queued",
+    attempt_count: 0,
+    max_attempts: 3,
+    locked_by: null,
+    locked_until: null,
+    last_heartbeat_at: null,
+    next_attempt_at: createdAt,
+    rate_limited_until: null,
+    retry_after_seconds: null,
+    retry_hint: "Contract queue job.",
+    sanitized_error: null,
+    metadata: { contract: true },
+    is_mock: true,
+    created_at: createdAt,
+    updated_at: createdAt,
+    completed_at: null,
+    cancelled_at: null
+  };
+  const event: JobEvent = {
+    id: uniqueId("job_event_contract"),
+    job_type: "eval_run",
+    job_id: job.id,
+    status: "queued",
+    workspace_id: workspace.id,
+    eval_run_id: job.eval_run_id,
+    report_id: null,
+    sanitized_error: null,
+    metadata: { contract: true, payload_redacted: true },
+    created_at: createdAt
+  };
+  const heartbeat: WorkerHeartbeat = {
+    id: uniqueId("worker_heartbeat_contract"),
+    worker_name: "eval-runner",
+    instance_id: uniqueId("worker"),
+    status: "healthy",
+    last_heartbeat_at: createdAt,
+    metadata: { contract: true },
+    created_at: createdAt,
+    updated_at: createdAt
+  };
+
+  await expect(repository.eval_queue_jobs.create(job)).resolves.toEqual(job);
+  await expect(repository.job_events.create(event)).resolves.toEqual(event);
+  await expect(repository.worker_heartbeats.create(heartbeat)).resolves.toEqual(heartbeat);
+
+  const retrying = await repository.eval_queue_jobs.update(job.id, {
+    status: "retrying",
+    attempt_count: 1,
+    updated_at: updatedAt
+  });
+  const degraded = await repository.worker_heartbeats.update(heartbeat.id, {
+    status: "degraded",
+    last_heartbeat_at: updatedAt,
+    updated_at: updatedAt
+  });
+
+  expect(retrying).toMatchObject({ id: job.id, status: "retrying", attempt_count: 1 });
+  expect(degraded).toMatchObject({ id: heartbeat.id, status: "degraded" });
+}
+
 async function appendAuditLog(repository: PromptOptsRepository): Promise<AdminAuditLog> {
   const log: AdminAuditLog = {
     id: uniqueId("admin_audit_log_contract"),
@@ -165,6 +339,7 @@ describe("repository contract", () => {
     await exerciseRepositoryContract(repository);
     await exerciseProviderConnectionContract(repository);
     await exerciseDeletionRequestContract(repository);
+    await exerciseEvalQueueContract(repository);
 
     const auditRepository = repository.admin_audit_logs as object;
 
@@ -193,6 +368,7 @@ describe("repository contract", () => {
     await exerciseRepositoryContract(repository);
     await exerciseProviderConnectionContract(repository);
     await exerciseDeletionRequestContract(repository);
+    await exerciseEvalQueueContract(repository);
 
     const auditRepository = repository.admin_audit_logs as object;
 

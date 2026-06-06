@@ -5,6 +5,7 @@ export * from "./repositories/types";
 export * from "./repositories/memory";
 export * from "./storage/reportArtifacts";
 export * from "./retention/policy";
+export * from "./evalQueue";
 
 export const APP_NAME = "PromptOpts";
 

@@ -114,6 +114,26 @@ export const evalStatusSchema = z.enum([
 ]);
 export type EvalStatus = z.infer<typeof evalStatusSchema>;
 
+export const evalQueueJobStatusSchema = evalStatusSchema;
+export type EvalQueueJobStatus = z.infer<typeof evalQueueJobStatusSchema>;
+
+export const jobTypeSchema = z.enum([
+  "eval_run",
+  "report_generation",
+  "report_export",
+  "deletion",
+  "provider_call"
+]);
+export type JobType = z.infer<typeof jobTypeSchema>;
+
+export const workerHeartbeatStatusSchema = z.enum([
+  "starting",
+  "healthy",
+  "degraded",
+  "stopped"
+]);
+export type WorkerHeartbeatStatus = z.infer<typeof workerHeartbeatStatusSchema>;
+
 export const evalVerdictSchema = z.enum(["pass", "fail", "blocked"]);
 export type EvalVerdict = z.infer<typeof evalVerdictSchema>;
 

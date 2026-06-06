@@ -11,11 +11,13 @@ import type {
   CrmTask,
   DeletionRequest,
   Entitlement,
+  EvalQueueJob,
   EvalResult,
   EvalRun,
   FeatureFlag,
   FreeAudit,
   Invoice,
+  JobEvent,
   ModelRegistryRecord,
   ModelRegistryVersion,
   OptimizationCandidate,
@@ -33,6 +35,7 @@ import type {
   UsageLedgerEntry,
   User,
   Workspace,
+  WorkerHeartbeat,
   SudoRequest
 } from "../schemas";
 
@@ -64,6 +67,7 @@ export type RepositoryCollections = {
   prompt_analyses: PromptAnalysis;
   quality_contracts: QualityContract;
   test_cases: TestCase;
+  eval_queue_jobs: EvalQueueJob;
   eval_runs: EvalRun;
   eval_results: EvalResult;
   optimization_candidates: OptimizationCandidate;
@@ -78,6 +82,8 @@ export type RepositoryCollections = {
   opportunities: Opportunity;
   crm_notes: CrmNote;
   tasks: CrmTask;
+  job_events: JobEvent;
+  worker_heartbeats: WorkerHeartbeat;
   entitlements: Entitlement;
   usage_ledger: UsageLedgerEntry;
   plans: Plan;
@@ -110,6 +116,7 @@ export interface PromptOptsRepository {
   prompt_analyses: CrudRepository<PromptAnalysis>;
   quality_contracts: CrudRepository<QualityContract>;
   test_cases: CrudRepository<TestCase>;
+  eval_queue_jobs: CrudRepository<EvalQueueJob>;
   eval_runs: CrudRepository<EvalRun>;
   eval_results: CrudRepository<EvalResult>;
   optimization_candidates: CrudRepository<OptimizationCandidate>;
@@ -124,6 +131,8 @@ export interface PromptOptsRepository {
   opportunities: CrudRepository<Opportunity>;
   crm_notes: CrudRepository<CrmNote>;
   tasks: CrudRepository<CrmTask>;
+  job_events: CrudRepository<JobEvent>;
+  worker_heartbeats: CrudRepository<WorkerHeartbeat>;
   admin_audit_logs: AppendOnlyRepository<AdminAuditLog>;
   entitlements: CrudRepository<Entitlement>;
   usage_ledger: CrudRepository<UsageLedgerEntry>;

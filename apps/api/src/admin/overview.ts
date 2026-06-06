@@ -43,7 +43,8 @@ function countEvalJobs(evalRuns: EvalRun[]): AdminOverviewResponse["kpis"]["eval
     queued: evalRuns.filter((evalRun) => evalRun.status === "queued").length,
     running: evalRuns.filter((evalRun) => evalRun.status === "running").length,
     failed: evalRuns.filter((evalRun) => evalRun.status === "failed").length,
-    retrying: evalRuns.filter((evalRun) => evalRun.status === "retrying").length
+    retrying: evalRuns.filter((evalRun) => evalRun.status === "retrying").length,
+    rate_limited: evalRuns.filter((evalRun) => evalRun.status === "rate_limited").length
   };
 }
 

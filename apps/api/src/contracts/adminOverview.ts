@@ -62,7 +62,8 @@ export const adminOverviewResponseSchema = z
             queued: z.number().int().nonnegative(),
             running: z.number().int().nonnegative(),
             failed: z.number().int().nonnegative(),
-            retrying: z.number().int().nonnegative()
+            retrying: z.number().int().nonnegative(),
+            rate_limited: z.number().int().nonnegative()
           })
           .strict(),
         provider_spend_usd: z.number().nonnegative().nullable(),

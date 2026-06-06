@@ -11,7 +11,7 @@
 ## B. Private Beta Readiness
 
 - [ ] P1 backend L: Implement live OpenAI, Anthropic, and Gemini adapters. Why it matters: eval proof must run against real provider outputs. Acceptance: adapters use configured keys, sanitize errors, and record normalized usage/latency.
-- [ ] P1 infra L: Add durable eval queue with retry/rate-limit state. Why it matters: queue/cache state is a product surface. Acceptance: eval jobs survive API restarts and expose partial rows.
+- [x] P1 infra L: Add durable eval queue with retry/rate-limit state. Status: complete for MVP - `POST /eval-runs` enqueues durable `eval_queue_jobs`, worker claims persist attempts/heartbeats/events, partial rows persist in `eval_results`, rate-limit/retry/cancel states are visible through public/admin APIs, and tests cover simulated API restart plus admin retry/cancel audits. Why it matters: queue/cache state is a product surface. Acceptance: eval jobs survive API restarts and expose partial rows.
 - [ ] P1 frontend M: Add browser smoke tests for all public/admin routes. Why it matters: current UI tests are render-level. Acceptance: breakpoints 320, 375, 430, 768, 1024, 1280, 1440 are covered for key routes.
 - [ ] P1 product M: Polish first-run examples and empty states. Why it matters: demos need understandable value in under two minutes. Acceptance: a new user can run a free audit and project audit without tribal knowledge.
 

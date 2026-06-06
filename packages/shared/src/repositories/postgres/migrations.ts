@@ -107,7 +107,10 @@ export async function seedRepository(
   await upsertMany(repository.model_registry, seed.model_registry);
   await upsertMany(repository.model_registry_versions, seed.model_registry_versions);
   await upsertMany(repository.eval_runs, seed.eval_runs);
+  await upsertMany(repository.eval_queue_jobs, seed.eval_queue_jobs);
   await upsertMany(repository.eval_results, seed.eval_results);
+  await upsertMany(repository.job_events, seed.job_events);
+  await upsertMany(repository.worker_heartbeats, seed.worker_heartbeats);
   await upsertMany(repository.reports, seed.reports);
   await upsertMany(repository.report_artifacts, seed.report_artifacts);
   await upsertMany(repository.deletion_requests, seed.deletion_requests);

@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import { z } from "zod";
 import type { EvalResult, EvalRun, PromptOptsRepository, UsageLedgerEntry } from "@promptopts/shared";
+import { getEvalRunStatus } from "@promptopts/shared";
 import { costQualityFrontier } from "@promptopts/eval-core";
 import { errorResponseSchema, evalRunActionResponseSchema } from "./contracts";
 import type { ApiEnv, ValidatedJson } from "./context";
@@ -51,6 +52,7 @@ export function notFound(c: Context<ApiEnv>, message: string): Response {
 }
 
 export async function getEvalRunDetail(repository: PromptOptsRepository, evalRun: EvalRun) {
+  const queueStatus = await getEvalRunStatus(repository, evalRun.id);
   const results = (await repository.eval_results.list()).filter(
     (result) => result.eval_run_id === evalRun.id
   );
@@ -73,7 +75,18 @@ export async function getEvalRunDetail(repository: PromptOptsRepository, evalRun
       passThreshold: evalRun.pass_threshold
     }),
     failures,
-    retry_hints: getEvalRetryHints(evalRun, results, failures.length),
+    retry_hints: [
+      ...new Set([
+        ...getEvalRetryHints(evalRun, results, failures.length),
+        ...(queueStatus?.retryHints ?? [])
+      ])
+    ],
+    queue: {
+      job: queueStatus?.job ?? null,
+      events: queueStatus?.events ?? [],
+      worker_heartbeats: queueStatus?.workerHeartbeats ?? [],
+      retry_hints: queueStatus?.retryHints ?? []
+    },
     status_note: getEvalStatusNote(evalRun, results)
   };
 }

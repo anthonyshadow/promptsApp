@@ -6,8 +6,17 @@ import {
 import { MockProviderAdapter, type ProviderAdapter } from "@promptopts/provider-adapters";
 import {
   APP_NAME,
+  appendPartialResult,
+  claimNextEvalJob,
   createDemoRepositorySeed,
   createMemoryRepository,
+  enqueueEvalRun,
+  findEvalQueueJob,
+  heartbeatWorker,
+  markComplete,
+  markFailed,
+  markJobRunning,
+  markRateLimited,
   type EvalResult,
   type EvalRun,
   type ModelRegistryRecord,
@@ -29,19 +38,48 @@ export type EvalRunnerOptions = {
   adapter?: ProviderAdapter;
   maxRuns?: number;
   testCaseIds?: string[];
+  workerId?: string;
+  now?: string;
 };
 
 export async function runQueuedEvalRuns(
   repository: PromptOptsRepository,
   options: EvalRunnerOptions = {}
 ): Promise<EvalRunnerResult[]> {
-  const evalRuns = (await repository.eval_runs.list())
-    .filter((evalRun) => evalRun.status === "queued" || evalRun.status === "retrying")
-    .slice(0, options.maxRuns ?? Number.POSITIVE_INFINITY);
   const results: EvalRunnerResult[] = [];
+  const workerId = options.workerId ?? `eval-runner-${crypto.randomUUID().slice(0, 8)}`;
+  const maxRuns = options.maxRuns ?? Number.POSITIVE_INFINITY;
 
-  for (const evalRun of evalRuns) {
-    results.push(await runEvalRun(repository, evalRun, options));
+  await heartbeatWorker(repository, {
+    workerName: "eval-runner",
+    instanceId: workerId,
+    status: "healthy",
+    metadata: { mode: "durable_queue" },
+    now: options.now
+  });
+
+  while (results.length < maxRuns) {
+    const job = await claimNextEvalJob(repository, {
+      workerId,
+      now: options.now
+    });
+
+    if (!job) {
+      break;
+    }
+
+    const evalRun = await repository.eval_runs.get(job.eval_run_id);
+    if (!evalRun) {
+      await markFailed(repository, job.eval_run_id, {
+        workerId,
+        retryHint: "Eval run record is missing; job cannot run.",
+        sanitizedError: { code: "missing_eval_run", retryable: false },
+        now: options.now
+      });
+      continue;
+    }
+
+    results.push(await runEvalRun(repository, evalRun, { ...options, workerId }));
   }
 
   return results;
@@ -53,8 +91,18 @@ export async function runEvalRun(
   options: EvalRunnerOptions = {}
 ): Promise<EvalRunnerResult> {
   const timestamp = nowIso();
+  const project = await repository.projects.get(evalRun.project_id);
+  const job =
+    (await findEvalQueueJob(repository, evalRun.id)) ??
+    (
+      await enqueueEvalRun(repository, {
+        evalRun,
+        workspaceId: project?.workspace_id ?? "workspace_unknown",
+        metadata: { source: "runner_direct_start" }
+      })
+    ).job;
   const contract = await repository.quality_contracts.get(evalRun.quality_contract_id);
-  const selectedTestCaseIds = new Set(options.testCaseIds ?? []);
+  const selectedTestCaseIds = new Set(options.testCaseIds ?? readQueuedTestCaseIds(job));
   const testCases = (await repository.test_cases.list()).filter((testCase) => {
     if (testCase.quality_contract_id !== evalRun.quality_contract_id) {
       return false;
@@ -63,17 +111,23 @@ export async function runEvalRun(
     return selectedTestCaseIds.size === 0 || selectedTestCaseIds.has(testCase.id);
   });
 
-  await repository.eval_runs.update(evalRun.id, {
-    status: "running",
-    started_at: evalRun.started_at ?? timestamp,
-    completed_at: null
+  await markJobRunning(repository, evalRun.id, {
+    workerId: options.workerId ?? job.locked_by ?? "eval-runner-direct",
+    now: timestamp
   });
 
   if (!contract || testCases.length === 0) {
-    const failedRun = await repository.eval_runs.update(evalRun.id, {
-      status: "failed",
-      completed_at: nowIso()
+    await markFailed(repository, evalRun.id, {
+      workerId: options.workerId,
+      retryHint: contract
+        ? "Add test cases before starting a production recommendation eval."
+        : "Quality contract is missing; create or restore it before retrying.",
+      sanitizedError: {
+        code: contract ? "missing_test_cases" : "missing_quality_contract",
+        retryable: true
+      }
     });
+    const failedRun = await repository.eval_runs.get(evalRun.id);
 
     return {
       evalRun: failedRun ?? evalRun,
@@ -92,10 +146,17 @@ export async function runEvalRun(
   const retryHints = new Set<string>();
 
   if (candidates.length === 0 || models.length === 0) {
-    const failedRun = await repository.eval_runs.update(evalRun.id, {
-      status: "failed",
-      completed_at: nowIso()
+    await markFailed(repository, evalRun.id, {
+      workerId: options.workerId,
+      retryHint: candidates.length === 0
+        ? "No prompt candidates could be resolved for this eval run."
+        : "No model registry records could be resolved for this eval run.",
+      sanitizedError: {
+        code: candidates.length === 0 ? "missing_candidates" : "missing_models",
+        retryable: true
+      }
     });
+    const failedRun = await repository.eval_runs.get(evalRun.id);
 
     return {
       evalRun: failedRun ?? evalRun,
@@ -110,6 +171,16 @@ export async function runEvalRun(
 
   for (const candidate of candidates) {
     for (const model of models) {
+      if (await isEvalJobCancelled(repository, evalRun.id)) {
+        const cancelledRun = await repository.eval_runs.get(evalRun.id);
+
+        return {
+          evalRun: cancelledRun ?? evalRun,
+          results: writtenResults,
+          retryHints: ["Eval job was cancelled before the matrix completed."]
+        };
+      }
+
       const combo = await runEvalCombo({
         repository,
         evalRun,
@@ -132,10 +203,27 @@ export async function runEvalRun(
     : writtenResults.length > 0
       ? "complete"
       : "failed";
-  const updated = await repository.eval_runs.update(evalRun.id, {
-    status: finalStatus,
-    completed_at: finalStatus === "complete" ? nowIso() : null
-  });
+
+  if (finalStatus === "rate_limited") {
+    await markRateLimited(repository, evalRun.id, {
+      workerId: options.workerId,
+      retryAfterSeconds: 60,
+      retryHint: "Provider rate limit encountered; retry after backoff.",
+      sanitizedError: { code: "rate_limited", retryable: true }
+    });
+  } else if (finalStatus === "complete") {
+    await markComplete(repository, evalRun.id, {
+      workerId: options.workerId,
+      metadata: { result_count: writtenResults.length }
+    });
+  } else {
+    await markFailed(repository, evalRun.id, {
+      workerId: options.workerId,
+      retryHint: "Eval job failed before producing rows.",
+      sanitizedError: { code: "no_results", retryable: true }
+    });
+  }
+  const updated = await repository.eval_runs.get(evalRun.id);
 
   return {
     evalRun: updated ?? evalRun,
@@ -145,7 +233,7 @@ export async function runEvalRun(
 }
 
 export function startEvalRunner(repository = createMemoryRepository(createDemoRepositorySeed())) {
-  console.log(`${APP_NAME} eval-runner ready. Mock queue polling is enabled.`);
+  console.log(`${APP_NAME} eval-runner ready. Durable queue polling is enabled.`);
 
   void runQueuedEvalRuns(repository).then((results) => {
     console.log(`${APP_NAME} eval-runner processed ${results.length} queued run(s).`);
@@ -255,12 +343,21 @@ async function runEvalCombo(input: {
     created_at: nowIso()
   };
 
-  await input.repository.eval_results.create(result);
+  await appendPartialResult(input.repository, result);
 
   return {
     result,
     retryHints: Array.from(retryHints)
   };
+}
+
+async function isEvalJobCancelled(
+  repository: PromptOptsRepository,
+  evalRunId: string
+): Promise<boolean> {
+  const job = await findEvalQueueJob(repository, evalRunId);
+
+  return Boolean(job?.cancelled_at);
 }
 
 async function resolveEvalCandidates(
@@ -377,6 +474,14 @@ function estimateTokens(text: string): number {
 
 function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function readQueuedTestCaseIds(job: { metadata: Record<string, unknown> }): string[] {
+  const selected = job.metadata.selected_test_case_ids;
+
+  return Array.isArray(selected)
+    ? selected.filter((value): value is string => typeof value === "string" && value.length > 0)
+    : [];
 }
 
 function createId(prefix: string): string {

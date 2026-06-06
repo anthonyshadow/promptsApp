@@ -348,6 +348,25 @@ function EvalRunScreen({
 
       <StatusNotice tone={statusTone} title="Eval run state" body={detailState.message} />
 
+      <section className={queueStateStyle} aria-label="Durable queue state">
+        <div>
+          <span>Attempts</span>
+          <strong>{detail.queue.job?.attempt_count ?? 0}/{detail.queue.job?.max_attempts ?? 3}</strong>
+        </div>
+        <div>
+          <span>Worker heartbeats</span>
+          <strong>{detail.queue.worker_heartbeats.length}</strong>
+        </div>
+        <div>
+          <span>Job events</span>
+          <strong>{detail.queue.events.length}</strong>
+        </div>
+        <div>
+          <span>Backoff</span>
+          <strong>{detail.queue.job?.rate_limited_until ?? "none"}</strong>
+        </div>
+      </section>
+
       {detail.retry_hints.length > 0 ? (
         <StatusNotice tone="warn" title="Retry hints" body={detail.retry_hints.join(" ")} />
       ) : null}
@@ -489,6 +508,38 @@ const providerAckStyle = css({
   color: "#4c5650",
   fontSize: "0.86rem",
   lineHeight: 1.45
+});
+
+const queueStateStyle = css({
+  display: "grid",
+  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+  gap: "10px",
+  div: {
+    border: "1px solid #dedfd6",
+    borderRadius: "8px",
+    background: "#fbfaf5",
+    padding: "12px"
+  },
+  span: {
+    display: "block",
+    color: "#667067",
+    fontSize: "0.76rem",
+    fontWeight: 800,
+    textTransform: "uppercase"
+  },
+  strong: {
+    display: "block",
+    marginTop: "6px",
+    color: "#20241f",
+    fontSize: "0.92rem",
+    overflowWrap: "anywhere"
+  },
+  "@media (max-width: 760px)": {
+    gridTemplateColumns: "1fr 1fr"
+  },
+  "@media (max-width: 460px)": {
+    gridTemplateColumns: "1fr"
+  }
 });
 
 const frontierPanelStyle = css({

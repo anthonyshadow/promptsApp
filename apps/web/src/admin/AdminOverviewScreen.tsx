@@ -181,7 +181,8 @@ function createLocalAdminOverview(): AdminOverviewResponse {
         queued: 1,
         running: 0,
         failed: 0,
-        retrying: 0
+        retrying: 0,
+        rate_limited: 0
       },
       provider_spend_usd: null,
       usage_ledger_events: 1,

@@ -30,6 +30,9 @@ describe("postgres schema metadata", () => {
     expect(POSTGRES_MIGRATION_FILES).toContain(
       "packages/shared/src/repositories/postgres/migrations/0008_rate_limits_logging_data_use_controls.sql"
     );
+    expect(POSTGRES_MIGRATION_FILES).toContain(
+      "packages/shared/src/repositories/postgres/migrations/0009_durable_eval_queue.sql"
+    );
   });
 
   test("keeps admin audit logs append-only in durable storage", async () => {
@@ -94,5 +97,17 @@ describe("postgres schema metadata", () => {
     expect(sql).toContain("provider_call_sensitive_data_policy TEXT NOT NULL DEFAULT 'require_confirmation'");
     expect(sql).toContain("CHECK (data_use_policy IN ('no_training', 'training_opt_in'))");
     expect(sql).toContain("CHECK (provider_call_sensitive_data_policy IN ('require_confirmation', 'block'))");
+  });
+
+  test("stores durable eval queue state and worker heartbeats", async () => {
+    const sql = await readMigrations();
+
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS eval_queue_jobs");
+    expect(sql).toContain("attempt_count INTEGER NOT NULL DEFAULT 0");
+    expect(sql).toContain("rate_limited_until TIMESTAMPTZ");
+    expect(sql).toContain("cancelled_at TIMESTAMPTZ");
+    expect(sql).toContain("idx_eval_queue_jobs_status_next_attempt");
+    expect(sql).toContain("idx_job_events_job_id_created_at");
+    expect(sql).toContain("idx_worker_heartbeats_worker_instance");
   });
 });

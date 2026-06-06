@@ -11,11 +11,13 @@ import {
   crmNoteSchema,
   deletionRequestSchema,
   entitlementSchema,
+  evalQueueJobSchema,
   evalResultSchema,
   evalRunSchema,
   featureFlagSchema,
   freeAuditSchema,
   invoiceSchema,
+  jobEventSchema,
   modelRegistryRecordSchema,
   modelRegistryVersionSchema,
   optimizationCandidateSchema,
@@ -33,6 +35,7 @@ import {
   testCaseSchema,
   usageLedgerEntrySchema,
   userSchema,
+  workerHeartbeatSchema,
   workspaceSchema,
   type Account,
   type AdminAuditLog,
@@ -46,11 +49,13 @@ import {
   type CrmTask,
   type DeletionRequest,
   type Entitlement,
+  type EvalQueueJob,
   type EvalResult,
   type EvalRun,
   type FeatureFlag,
   type FreeAudit,
   type Invoice,
+  type JobEvent,
   type ModelRegistryRecord,
   type ModelRegistryVersion,
   type OptimizationCandidate,
@@ -67,6 +72,7 @@ import {
   type TestCase,
   type UsageLedgerEntry,
   type User,
+  type WorkerHeartbeat,
   type Workspace,
   sudoRequestSchema,
   type SudoRequest
@@ -197,6 +203,10 @@ export function createMemoryRepository(seed: RepositorySeed = {}): PromptOptsRep
       seed.quality_contracts
     ),
     test_cases: new MemoryCrudRepository<TestCase>(testCaseSchema, seed.test_cases),
+    eval_queue_jobs: new MemoryCrudRepository<EvalQueueJob>(
+      evalQueueJobSchema,
+      seed.eval_queue_jobs
+    ),
     eval_runs: new MemoryCrudRepository<EvalRun>(evalRunSchema, seed.eval_runs),
     eval_results: new MemoryCrudRepository<EvalResult>(evalResultSchema, seed.eval_results),
     optimization_candidates: new MemoryCrudRepository<OptimizationCandidate>(
@@ -229,6 +239,11 @@ export function createMemoryRepository(seed: RepositorySeed = {}): PromptOptsRep
     opportunities: new MemoryCrudRepository<Opportunity>(opportunitySchema, seed.opportunities),
     crm_notes: new MemoryCrudRepository<CrmNote>(crmNoteSchema, seed.crm_notes),
     tasks: new MemoryCrudRepository<CrmTask>(taskSchema, seed.tasks),
+    job_events: new MemoryCrudRepository<JobEvent>(jobEventSchema, seed.job_events),
+    worker_heartbeats: new MemoryCrudRepository<WorkerHeartbeat>(
+      workerHeartbeatSchema,
+      seed.worker_heartbeats
+    ),
     admin_audit_logs: new MemoryAppendOnlyRepository<AdminAuditLog>(
       adminAuditLogSchema,
       seed.admin_audit_logs

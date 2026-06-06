@@ -1,6 +1,5 @@
 import { Hono, type Context } from "hono";
 import { autoDraftQualityContract, costQualityFrontier, decideRecommendation } from "@promptopts/eval-core";
-import { runEvalRun } from "@promptopts/eval-runner";
 import { generateReportArtifacts, persistGeneratedReportArtifacts } from "@promptopts/report-generator";
 import {
   generateAggressiveCandidate,
@@ -17,6 +16,7 @@ import {
 import {
   type CandidateStrategy,
   createHealthResponse,
+  enqueueEvalRun,
   reportArtifactFormatSchema,
   type Account,
   type Contact,
@@ -708,22 +708,25 @@ export function createPublicApiRoutes() {
         completed_at: null
       };
 
-      await c.var.repository.eval_runs.create(evalRun);
+      const queued = await enqueueEvalRun(c.var.repository, {
+        evalRun,
+        workspaceId: project.workspace_id,
+        metadata: {
+          source: "public_api",
+          selected_test_case_ids: body.data.test_case_ids ?? null,
+          selected_test_case_count: body.data.test_case_ids?.length ?? null
+        }
+      });
       await writeUsageLedger(c.var.repository, {
         workspaceId: project.workspace_id,
         feature: "hosted_eval_runs",
         quantity: 1,
         sourceType: "eval_run",
-        sourceId: evalRun.id,
+        sourceId: queued.evalRun.id,
         timestamp
       });
-      const runResult = await runEvalRun(
-        c.var.repository,
-        evalRun,
-        body.data.test_case_ids ? { testCaseIds: body.data.test_case_ids } : {}
-      );
 
-      return c.json(runResult.evalRun, 201);
+      return c.json(queued.evalRun, 201);
     })
     .get("/eval-runs/:id", async (c) => {
       const evalRun = await c.var.repository.eval_runs.get(c.req.param("id"));

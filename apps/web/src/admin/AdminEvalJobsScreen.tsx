@@ -306,6 +306,34 @@ function createLocalEvalJobDetail(evalRunId = "eval_run_support_classifier_demo"
       frontier_points: [],
       failures: [],
       retry_hints: ["No eval rows are available yet; verify quality contract, candidates, and model shortlist."],
+      queue: {
+        job: {
+          id: "eval_queue_job_support_classifier_demo",
+          eval_run_id: evalRunId,
+          workspace_id: "workspace_acme_ai",
+          project_id: "project_support_classifier",
+          status: "queued",
+          attempt_count: 0,
+          max_attempts: 3,
+          locked_by: null,
+          locked_until: null,
+          last_heartbeat_at: null,
+          next_attempt_at: "2026-01-15T12:00:00.000Z",
+          rate_limited_until: null,
+          retry_after_seconds: null,
+          retry_hint: "Local durable queue metadata is redacted.",
+          sanitized_error: null,
+          metadata: { payload_redacted: true, source: "local_demo" },
+          is_mock: true,
+          created_at: "2026-01-15T12:00:00.000Z",
+          updated_at: "2026-01-15T12:00:00.000Z",
+          completed_at: null,
+          cancelled_at: null
+        },
+        events: [],
+        worker_heartbeats: [],
+        retry_hints: ["Local durable queue metadata is redacted."]
+      },
       status_note: "Eval run is queued; 0 partial row(s) are available."
     },
     sanitized_payload: {

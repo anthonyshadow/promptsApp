@@ -11,11 +11,13 @@ import {
   crmNoteSchema,
   deletionRequestSchema,
   entitlementSchema,
+  evalQueueJobSchema,
   evalResultSchema,
   evalRunSchema,
   featureFlagSchema,
   freeAuditSchema,
   invoiceSchema,
+  jobEventSchema,
   modelRegistryRecordSchema,
   modelRegistryVersionSchema,
   optimizationCandidateSchema,
@@ -33,6 +35,7 @@ import {
   testCaseSchema,
   usageLedgerEntrySchema,
   userSchema,
+  workerHeartbeatSchema,
   workspaceSchema,
   type Account,
   type AdminAuditLog,
@@ -46,11 +49,13 @@ import {
   type CrmTask,
   type DeletionRequest,
   type Entitlement,
+  type EvalQueueJob,
   type EvalResult,
   type EvalRun,
   type FeatureFlag,
   type FreeAudit,
   type Invoice,
+  type JobEvent,
   type ModelRegistryRecord,
   type ModelRegistryVersion,
   type OptimizationCandidate,
@@ -67,6 +72,7 @@ import {
   type TestCase,
   type UsageLedgerEntry,
   type User,
+  type WorkerHeartbeat,
   type Workspace,
   sudoRequestSchema,
   type SudoRequest
@@ -395,6 +401,7 @@ const configs = {
   prompt_analyses: { tableName: "prompt_analyses", schema: promptAnalysisSchema },
   quality_contracts: { tableName: "quality_contracts", schema: qualityContractSchema },
   test_cases: { tableName: "test_cases", schema: testCaseSchema },
+  eval_queue_jobs: { tableName: "eval_queue_jobs", schema: evalQueueJobSchema },
   eval_runs: { tableName: "eval_runs", schema: evalRunSchema },
   eval_results: { tableName: "eval_results", schema: evalResultSchema },
   optimization_candidates: {
@@ -420,6 +427,8 @@ const configs = {
   },
   crm_notes: { tableName: "crm_notes", schema: crmNoteSchema },
   tasks: { tableName: "tasks", schema: taskSchema },
+  job_events: { tableName: "job_events", schema: jobEventSchema },
+  worker_heartbeats: { tableName: "worker_heartbeats", schema: workerHeartbeatSchema },
   admin_audit_logs: { tableName: "admin_audit_logs", schema: adminAuditLogSchema },
   entitlements: {
     tableName: "entitlements",
@@ -471,6 +480,10 @@ export function createPostgresRepository(options: PostgresRepositoryOptions = {}
       executorOptions
     ),
     test_cases: new PostgresCrudRepository<TestCase>(configs.test_cases, executorOptions),
+    eval_queue_jobs: new PostgresCrudRepository<EvalQueueJob>(
+      configs.eval_queue_jobs,
+      executorOptions
+    ),
     eval_runs: new PostgresCrudRepository<EvalRun>(configs.eval_runs, executorOptions),
     eval_results: new PostgresCrudRepository<EvalResult>(configs.eval_results, executorOptions),
     optimization_candidates: new PostgresCrudRepository<OptimizationCandidate>(
@@ -503,6 +516,11 @@ export function createPostgresRepository(options: PostgresRepositoryOptions = {}
     ),
     crm_notes: new PostgresCrudRepository<CrmNote>(configs.crm_notes, executorOptions),
     tasks: new PostgresCrudRepository<CrmTask>(configs.tasks, executorOptions),
+    job_events: new PostgresCrudRepository<JobEvent>(configs.job_events, executorOptions),
+    worker_heartbeats: new PostgresCrudRepository<WorkerHeartbeat>(
+      configs.worker_heartbeats,
+      executorOptions
+    ),
     admin_audit_logs: new PostgresAppendOnlyRepository<AdminAuditLog>(
       configs.admin_audit_logs,
       executorOptions

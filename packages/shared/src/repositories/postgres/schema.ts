@@ -7,6 +7,7 @@ export const POSTGRES_SCHEMA_TABLES = [
   "prompt_analyses",
   "quality_contracts",
   "test_cases",
+  "eval_queue_jobs",
   "eval_runs",
   "eval_results",
   "optimization_candidates",
@@ -51,7 +52,8 @@ export const POSTGRES_MIGRATION_FILES = [
   "packages/shared/src/repositories/postgres/migrations/0005_provider_key_lifecycle.sql",
   "packages/shared/src/repositories/postgres/migrations/0006_storage_deletion_lifecycle.sql",
   "packages/shared/src/repositories/postgres/migrations/0007_model_registry_freshness_workflow.sql",
-  "packages/shared/src/repositories/postgres/migrations/0008_rate_limits_logging_data_use_controls.sql"
+  "packages/shared/src/repositories/postgres/migrations/0008_rate_limits_logging_data_use_controls.sql",
+  "packages/shared/src/repositories/postgres/migrations/0009_durable_eval_queue.sql"
 ] as const;
 
 export const POSTGRES_DURABILITY_INVARIANTS = {

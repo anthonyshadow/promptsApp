@@ -34,7 +34,7 @@ Provide the update-safe status ledger for `docs/roadmap/next-steps-checklist.md`
 | Item | Priority | Status | Evidence | Remaining work |
 | --- | --- | --- | --- | --- |
 | Implement live OpenAI, Anthropic, and Gemini adapters. | P1 | in_progress | Adapter interface, mock adapter, and inert live placeholders exist. | Make live calls with opaque keys, sanitize errors, and store usage/latency. |
-| Add durable eval queue with retry/rate-limit state. | P1 | not_started | Eval runner uses mocked memory execution. | Add durable queue, retry/rate-limit state, worker leasing, and partial-row persistence. |
+| Add durable eval queue with retry/rate-limit state. | P1 | complete | `eval_queue_jobs`, `job_events`, and `worker_heartbeats` are schema-backed; `POST /eval-runs` enqueues durable jobs; the eval runner claims jobs, writes heartbeats/events, persists partial rows, and marks retry/rate-limit/failed/complete/cancel states; public/admin APIs expose queue metadata and tests cover API restart, partial rows, retry, cancel, and rate-limit state. | Production high-concurrency leasing and live-provider retry calibration remain future hardening. |
 | Add browser smoke tests for all public/admin routes. | P1 | not_started | Static responsive audit and render tests exist. | Add browser route coverage at 320, 375, 430, 768, 1024, 1280, and 1440 widths. |
 | Polish first-run examples and empty states. | P1 | in_progress | Local demo state and fallback states exist. | Add guided examples, empty state copy, and first-run audit path polish. |
 
@@ -44,7 +44,7 @@ Provide the update-safe status ledger for `docs/roadmap/next-steps-checklist.md`
 | --- | --- | --- | --- | --- |
 | Add billing provider integration and webhook handling. | P1 | blocked | Billing admin, invoices, credits, entitlements, and usage ledger exist locally. | Select billing provider and beta packaging terms, then wire webhooks/reconciliation. |
 | Add retention/deletion policy implementation. | P1 | complete | `DEFAULT_RETENTION_POLICY` documents delete-vs-retain behavior; report deletion tombstones scoped metadata, preserves audit/billing metadata, deletes artifact content, and keeps retry evidence. | Customer-specific retention controls remain excluded from MVP. |
-| Add rate limits, request logging policy, and data-use controls. | P1 | complete | API request IDs, structured body-free logs, Redis-capable/in-memory rate limiting, sensitive-field redaction, workspace private/no-training defaults, and eval/provider-call acknowledgement or blocking for sensitive content are wired and tested. | Calibrate exact provider quotas and abuse heuristics once live adapters and durable queue execution land. |
+| Add rate limits, request logging policy, and data-use controls. | P1 | complete | API request IDs, structured body-free logs, Redis-capable/in-memory rate limiting, sensitive-field redaction, workspace private/no-training defaults, and eval/provider-call acknowledgement or blocking for sensitive content are wired and tested. | Calibrate exact provider quotas and abuse heuristics once live adapters start making real calls. |
 
 ### D. Product Polish
 
@@ -95,6 +95,7 @@ Provide the update-safe status ledger for `docs/roadmap/next-steps-checklist.md`
 - Provider-key encryption and non-viewability with metadata-only lifecycle routes and audited key actions.
 - Verified model registry official-doc rows and freshness review workflow.
 - Rate limits, body-free request logging, sensitive-field log redaction, and data-use controls for private/no-training prompts and provider-call consent.
+- Durable eval queue with persistent job state, partial rows, retry/rate-limit/cancel status, worker heartbeat metadata, and admin retry/cancel audit coverage.
 
 ## Blocked
 
@@ -103,13 +104,13 @@ Provide the update-safe status ledger for `docs/roadmap/next-steps-checklist.md`
 
 ## Validation Results
 
-- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run db:migrate`: passed against local Postgres; 0 migrations applied and 8 skipped.
-- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run db:seed`: passed; demo seed completed with workspace data-use defaults.
+- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run db:migrate`: passed against local Postgres; 0 migrations applied and 9 skipped.
+- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run db:seed`: passed; demo seed completed with durable eval queue rows.
 - `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run typecheck`: passed.
-- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun test`: passed with local Postgres integration, 146 tests across 26 files. The Postgres repository contract branch executed against local Postgres after sandbox escalation.
+- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun test`: passed with local Postgres integration, 151 tests across 27 files. The Postgres repository contract branch executed against local Postgres after sandbox escalation.
 - `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run lint`: passed; current script delegates to `bun run typecheck`.
 - `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run build`: passed for packages, API, workers, and web.
 
 ## Recommended Next Prompt
 
-Move to Prompt 8 from `implementation-sequence.md`: durable eval queue with retry/rate-limit state.
+Move to Prompt 9 from `implementation-sequence.md`: live OpenAI, Anthropic, and Gemini adapters with opaque-key usage capture.

@@ -67,7 +67,7 @@ apps/
   web/                 React + TypeScript + Vite public/admin shell
   api/                 Hono + TypeScript API running on Bun
 workers/
-  eval-runner/         Mock eval matrix runner boundary
+  eval-runner/         Durable eval queue worker using the mock provider boundary
   report-generator/    Markdown/JSON/PDF-stub report package generator
 packages/
   shared/              Zod schemas, types, repositories, seed data, storage/security abstractions
@@ -137,6 +137,16 @@ The API assigns `x-request-id`, writes structured body-free request logs, and ra
 
 Workspace prompts are private by default with `data_use_policy=no_training`. Eval/provider-call creation scans baseline prompts, selected candidates, and selected test cases before provider execution. Hard secrets are blocked; PII/proprietary findings require explicit acknowledgement. Logs redact sensitive fields and never store raw prompts, provider keys, raw reports, or raw eval test-case payloads.
 
+### Durable Eval Queue
+
+`POST /eval-runs` creates a durable queue job instead of running the matrix inline. Queue state lives in `eval_queue_jobs`, partial rows live in `eval_results`, operator/worker events live in `job_events`, and worker health lives in `worker_heartbeats`. `GET /eval-runs/:id` returns queue metadata, retry hints, persisted partial rows, failures, and cost-quality frontier data. Admin eval job retry/cancel actions mutate the durable queue state and remain audited.
+
+Run the worker with:
+
+```bash
+bun run dev:workers
+```
+
 ## Environment Variables
 
 `.env.example` contains placeholders for:
@@ -186,6 +196,7 @@ bun run build
 - Storage abstraction with local filesystem report artifacts, checksum/size metadata, deletion requests, retryable deletion failures, and report-vault evidence.
 - Verified model registry seed rows, 30-day freshness classification, admin review queue, pending diff proposals, approve/reject workflow, and exact-savings blocking for stale/demo/unapproved metadata.
 - Request ID middleware, Redis-capable/in-memory rate limiting, body-free structured request logs, sensitive-field log redaction, private/no-training workspace defaults, and provider-call confirmation/blocking for sensitive prompt/test-case content.
+- Durable eval queue records, retry/rate-limit/cancel state, partial eval result persistence, queue events, worker heartbeats, public polling metadata, and admin retry/cancel controls.
 - Unit/integration tests across web, API, packages, workers, repository, storage, and schema metadata.
 
 ## What Is Mocked
@@ -193,7 +204,7 @@ bun run build
 - Public user auth and product-user session revocation.
 - Live provider calls.
 - Production-grade Postgres pooling; the current adapter uses the local `psql` CLI execution layer.
-- Durable Redis queue execution; Redis-backed API rate limiting exists, while local dev/test can use the in-memory fallback.
+- Production-grade queue leasing/concurrency; durable eval state is Postgres-backed for MVP, while high-concurrency worker coordination remains a future hardening item.
 - S3/MinIO adapter and lifecycle policies; local filesystem storage is wired for dev/test.
 - Billing provider events.
 - Provider spend.
@@ -227,7 +238,7 @@ Audit is a preflight, not a switch recommendation. The original prompt and curre
 
 Current local MVP status is green for the mocked demo loop: provider selection, prompt paste, audit, model-fit label, candidate generation, model shortlist, test cases, eval matrix, recommendation report, export, hidden admin UI, guarded admin API, Account 360 redaction, eval job control, model registry admin, reports vault, billing admin, audit-log viewer, entitlements, and append-only audit-log tests.
 
-Remaining launch blockers are live provider adapters, durable queue, production KMS/S3 lifecycle configuration, and production billing integration.
+Remaining launch blockers are live provider adapters, production KMS/S3 lifecycle configuration, and production billing integration.
 
 ## Audit And Roadmap
 

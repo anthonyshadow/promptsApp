@@ -36,14 +36,17 @@ import {
   auditRequestSchema,
   auditResponseSchema,
   candidateStrategySchema,
+  evalQueueJobSchema,
   evalResultSchema,
   costEstimateStatusSchema,
   idSchema,
   isoDateTimeSchema,
   modelFitSchema,
   metadataSchema,
+  jobEventSchema,
   providerSchema,
   nonEmptyStringSchema,
+  workerHeartbeatSchema,
   requireAtLeastOneField
 } from './common';
 
@@ -263,6 +266,14 @@ export const evalRunDetailResponseSchema = z
         .strict()
     ),
     retry_hints: z.array(nonEmptyStringSchema),
+    queue: z
+      .object({
+        job: evalQueueJobSchema.nullable(),
+        events: z.array(jobEventSchema),
+        worker_heartbeats: z.array(workerHeartbeatSchema),
+        retry_hints: z.array(nonEmptyStringSchema)
+      })
+      .strict(),
     status_note: nonEmptyStringSchema
   })
   .strict();

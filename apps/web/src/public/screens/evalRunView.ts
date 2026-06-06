@@ -29,8 +29,36 @@ export function createLocalEvalDetail(
           result.must_pass_failures > 0
             ? "Must-pass failure rejects this prompt/model combo."
             : "Combo did not meet the configured pass threshold."
-      })),
+    })),
     retry_hints: ["Local demo registry data is unverified; exact savings claims remain disabled."],
+    queue: {
+      job: {
+        id: "eval_queue_job_local_demo",
+        eval_run_id: evalRun.id,
+        workspace_id: "workspace_acme_ai",
+        project_id: evalRun.project_id,
+        status,
+        attempt_count: status === "queued" ? 0 : 1,
+        max_attempts: 3,
+        locked_by: status === "running" ? "local-demo-worker" : null,
+        locked_until: null,
+        last_heartbeat_at: null,
+        next_attempt_at: evalRun.queued_at,
+        rate_limited_until: null,
+        retry_after_seconds: null,
+        retry_hint: "Local demo queue metadata; run the worker to process durable jobs.",
+        sanitized_error: null,
+        metadata: { payload_redacted: true, source: "local_demo" },
+        is_mock: true,
+        created_at: evalRun.queued_at,
+        updated_at: evalRun.queued_at,
+        completed_at: status === "complete" ? evalRun.completed_at : null,
+        cancelled_at: null
+      },
+      events: [],
+      worker_heartbeats: [],
+      retry_hints: ["Local demo queue metadata; run the worker to process durable jobs."]
+    },
     status_note: "Local demo eval matrix shows queue/cache state, failures, and cost-quality frontier."
   };
 }

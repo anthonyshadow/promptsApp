@@ -52,6 +52,7 @@ import type {
   UsageLedgerEntry,
   Workspace
 } from "@promptopts/shared";
+import { cancelJob, retryJob } from "@promptopts/shared";
 import {
   accountCreateRequestSchema,
   accountNoteCreateRequestSchema,
@@ -87,6 +88,7 @@ import {
   billingCreditResponseSchema,
   billingResponseSchema,
   breakGlassResponseSchema,
+  evalRunActionResponseSchema,
   impersonationResponseSchema,
   modelApproveRequestSchema,
   modelApproveResponseSchema,
@@ -108,7 +110,6 @@ import type { ApiEnv } from "./context";
 import {
   createId,
   getEvalRunDetail,
-  handleEvalRunStatusUpdate,
   notFound,
   nowIso,
   stripUndefined,
@@ -339,6 +340,16 @@ export function createAdminApiRoutes() {
                   secretScanWarnings > 0
                     ? "High-risk prompt analyses exist; overview shows counts only."
                     : "No high-risk prompt analysis warnings are visible in metadata."
+              },
+              {
+                id: "risk_eval_rate_limits",
+                label: "Rate-limited eval jobs",
+                severity: evalRuns.some((evalRun) => evalRun.status === "rate_limited") ? "medium" : "low",
+                count: evalRuns.filter((evalRun) => evalRun.status === "rate_limited").length,
+                link: "/__admin/eval-jobs",
+                redacted_summary: evalRuns.some((evalRun) => evalRun.status === "rate_limited")
+                  ? "Provider rate-limit state is persisted with retry hints; raw provider payloads stay sanitized."
+                  : "No rate-limited eval jobs are visible."
               },
               {
                 id: "risk_deletion_requests",
@@ -631,12 +642,14 @@ export function createAdminApiRoutes() {
         return c.json(workspaceSchema.parse(workspace));
       })
       .get("/eval-runs", async (c) => {
-        const [evalRuns, projects, workspaces, models, results] = await Promise.all([
+        const [evalRuns, projects, workspaces, models, results, jobs, heartbeats] = await Promise.all([
           c.var.repository.eval_runs.list(),
           c.var.repository.projects.list(),
           c.var.repository.workspaces.list(),
           c.var.repository.model_registry.list(),
-          c.var.repository.eval_results.list()
+          c.var.repository.eval_results.list(),
+          c.var.repository.eval_queue_jobs.list(),
+          c.var.repository.worker_heartbeats.list()
         ]);
 
         return c.json(
@@ -646,7 +659,9 @@ export function createAdminApiRoutes() {
               projects,
               workspaces,
               models,
-              results
+              results,
+              jobs,
+              heartbeats
             })
           )
         );
@@ -667,7 +682,25 @@ export function createAdminApiRoutes() {
           return body.response;
         }
 
-        return handleEvalRunStatusUpdate(c, "retrying", `Retry queueing is mocked. Reason: ${body.data.reason_code}`);
+        const evalRun = await c.var.repository.eval_runs.get(c.req.param("id"));
+        if (!evalRun) {
+          return notFound(c, "Eval run not found");
+        }
+
+        const job = await retryJob(c.var.repository, evalRun.id, {
+          reasonCode: body.data.reason_code,
+          retryHint: `Operator retry requested. Reason: ${body.data.reason_code}`
+        });
+        const updated = await c.var.repository.eval_runs.get(evalRun.id);
+
+        return c.json(
+          evalRunActionResponseSchema.parse({
+            eval_run: updated ?? evalRun,
+            todo: job
+              ? `Durable retry queued. Attempt count is ${job.attempt_count}; reason: ${body.data.reason_code}`
+              : `Retry requested but no durable queue job exists. Reason: ${body.data.reason_code}`
+          })
+        );
       })
       .post("/eval-runs/:id/cancel", async (c) => {
         const body = await validateJson(c, adminReasonRequestSchema);
@@ -675,7 +708,25 @@ export function createAdminApiRoutes() {
           return body.response;
         }
 
-        return handleEvalRunStatusUpdate(c, "failed", `Cancellation is mocked. Reason: ${body.data.reason_code}`);
+        const evalRun = await c.var.repository.eval_runs.get(c.req.param("id"));
+        if (!evalRun) {
+          return notFound(c, "Eval run not found");
+        }
+
+        const job = await cancelJob(c.var.repository, evalRun.id, {
+          reasonCode: body.data.reason_code,
+          retryHint: `Operator cancelled the durable eval job. Reason: ${body.data.reason_code}`
+        });
+        const updated = await c.var.repository.eval_runs.get(evalRun.id);
+
+        return c.json(
+          evalRunActionResponseSchema.parse({
+            eval_run: updated ?? evalRun,
+            todo: job
+              ? `Durable cancellation recorded. Future worker claims are blocked. Reason: ${body.data.reason_code}`
+              : `Cancellation requested but no durable queue job exists. Reason: ${body.data.reason_code}`
+          })
+        );
       })
       .post("/eval-runs/:id/regenerate-report", async (c) => {
         const body = await validateJson(c, adminReasonRequestSchema);

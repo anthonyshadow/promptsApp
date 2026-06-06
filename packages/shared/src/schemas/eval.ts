@@ -19,7 +19,9 @@ import {
   promptStatusSchema,
   candidateStrategySchema,
   evalStatusSchema,
+  evalQueueJobStatusSchema,
   evalVerdictSchema,
+  jobTypeSchema,
   testCheckTypeSchema,
   reportStatusSchema,
   reportArtifactFormatSchema,
@@ -37,7 +39,8 @@ import {
   evalReadinessSchema,
   entitlementFeatureSchema,
   usageLedgerUnitSchema,
-  ledgerDirectionSchema
+  ledgerDirectionSchema,
+  workerHeartbeatStatusSchema
 } from './common';
 
 import { costEstimateStatusSchema } from './audit';
@@ -111,6 +114,63 @@ export const evalRunSchema = z
   })
   .strict();
 export type EvalRun = z.infer<typeof evalRunSchema>;
+
+export const evalQueueJobSchema = z
+  .object({
+    id: idSchema,
+    eval_run_id: idSchema,
+    workspace_id: idSchema,
+    project_id: idSchema,
+    status: evalQueueJobStatusSchema,
+    attempt_count: z.number().int().nonnegative(),
+    max_attempts: z.number().int().positive(),
+    locked_by: z.string().min(1).nullable(),
+    locked_until: isoDateTimeSchema.nullable(),
+    last_heartbeat_at: isoDateTimeSchema.nullable(),
+    next_attempt_at: isoDateTimeSchema.nullable(),
+    rate_limited_until: isoDateTimeSchema.nullable(),
+    retry_after_seconds: z.number().int().positive().nullable(),
+    retry_hint: z.string().min(1).nullable(),
+    sanitized_error: metadataSchema.nullable(),
+    metadata: metadataSchema,
+    is_mock: z.boolean(),
+    created_at: isoDateTimeSchema,
+    updated_at: isoDateTimeSchema,
+    completed_at: isoDateTimeSchema.nullable(),
+    cancelled_at: isoDateTimeSchema.nullable()
+  })
+  .strict();
+export type EvalQueueJob = z.infer<typeof evalQueueJobSchema>;
+
+export const jobEventSchema = z
+  .object({
+    id: idSchema,
+    job_type: jobTypeSchema,
+    job_id: idSchema,
+    status: z.string().min(1),
+    workspace_id: idSchema.nullable(),
+    eval_run_id: idSchema.nullable(),
+    report_id: idSchema.nullable(),
+    sanitized_error: metadataSchema.nullable(),
+    metadata: metadataSchema,
+    created_at: isoDateTimeSchema
+  })
+  .strict();
+export type JobEvent = z.infer<typeof jobEventSchema>;
+
+export const workerHeartbeatSchema = z
+  .object({
+    id: idSchema,
+    worker_name: z.string().min(1),
+    instance_id: z.string().min(1),
+    status: workerHeartbeatStatusSchema,
+    last_heartbeat_at: isoDateTimeSchema,
+    metadata: metadataSchema,
+    created_at: isoDateTimeSchema,
+    updated_at: isoDateTimeSchema
+  })
+  .strict();
+export type WorkerHeartbeat = z.infer<typeof workerHeartbeatSchema>;
 
 export const evalResultSchema = z
   .object({

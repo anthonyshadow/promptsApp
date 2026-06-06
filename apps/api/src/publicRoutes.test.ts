@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { runQueuedEvalRuns } from "@promptopts/eval-runner";
 import { DEMO_IDS, healthResponseSchema } from "@promptopts/shared";
 import { createTotpCode } from "@promptopts/admin-core";
 import { createApp } from "./app";
@@ -541,7 +542,7 @@ describe("public API routes", () => {
     expect(updated.test_case.name).toBe("Updated exact label");
   });
 
-  test("POST and GET /eval-runs execute the mocked eval matrix with failures and retry hints", async () => {
+  test("POST and GET /eval-runs enqueue durable eval jobs and expose worker results", async () => {
     const repository = createAdminTestRepository();
     const app = createApp({ repository });
     const beforeResults = await repository.eval_results.list();
@@ -563,12 +564,29 @@ describe("public API routes", () => {
         })
       )
     );
-    const afterResults = await repository.eval_results.list();
-    const detail = await expectOkJson(await app.request(`/eval-runs/${evalRun.id}`));
+    const queuedDetail = await expectOkJson(await app.request(`/eval-runs/${evalRun.id}`));
 
-    expect(evalRun.status).toBe("complete");
+    expect(evalRun.status).toBe("queued");
+    expect(await repository.eval_results.list()).toHaveLength(beforeResults.length);
+    expect(queuedDetail.eval_run.id).toBe(evalRun.id);
+    expect(queuedDetail.results).toHaveLength(0);
+    expect(queuedDetail.queue.job.status).toBe("queued");
+    expect(queuedDetail.retry_hints.join(" ")).toContain("poll for partial rows");
+
+    const restartedApp = createApp({ repository });
+    const afterRestartDetail = await expectOkJson(await restartedApp.request(`/eval-runs/${evalRun.id}`));
+    expect(afterRestartDetail.queue.job.id).toBe(queuedDetail.queue.job.id);
+
+    await runQueuedEvalRuns(repository, { maxRuns: 2, workerId: "api_route_test_worker" });
+
+    const afterResults = await repository.eval_results.list();
+    const detail = await expectOkJson(await restartedApp.request(`/eval-runs/${evalRun.id}`));
+
+    expect(detail.eval_run.status).toBe("complete");
     expect(afterResults.length).toBeGreaterThan(beforeResults.length);
-    expect(detail.eval_run.id).toBe(evalRun.id);
+    expect(detail.queue.job.status).toBe("complete");
+    expect(detail.queue.events.map((event: { status: string }) => event.status)).toContain("partial_result");
+    expect(detail.queue.worker_heartbeats).toHaveLength(2);
     expect(detail.results).toHaveLength(2);
     expect(detail.frontier_points).toHaveLength(2);
     expect(detail.frontier_points.map((point: { role: string }) => point.role)).toEqual([
@@ -640,7 +658,7 @@ describe("public API routes", () => {
         })
       )
     );
-    expect(acknowledged.status).toBe("complete");
+    expect(acknowledged.status).toBe("queued");
 
     await repository.prompt_versions.update(DEMO_IDS.promptVersion, {
       prompt_text: "Classify the message. Secret key sk-test-secret-value-12345678901234567890."
@@ -749,24 +767,29 @@ describe("public API routes", () => {
         })
       )
     );
-    expect(evalRun.status).toBe("failed");
+    expect(evalRun.status).toBe("queued");
+    await runQueuedEvalRuns(repository, { maxRuns: 10, workerId: "no_test_report_worker" });
+    const failedEvalRun = await repository.eval_runs.get(evalRun.id);
+    expect(failedEvalRun?.status).toBe("failed");
 
     const report = await expectOkJson(
       await app.request(
         "/reports",
         jsonRequest({
           project_id: promptResponse.project.id,
-          eval_run_id: evalRun.id
+          eval_run_id: failedEvalRun?.id ?? evalRun.id
         })
       )
     );
 
     expect(report.production_recommendation_allowed).toBe(false);
+    expect(report.winner_result_id).toBeNull();
     expect(report.production_blockers.join(" ")).toContain("No test cases");
   });
 
   test("implements the public route map with seed or mock data", async () => {
-    const app = createTestApp();
+    const repository = createAdminTestRepository();
+    const app = createApp({ repository });
 
     const models = await expectOkJson(await app.request("/models?provider=openai"));
     expect(models.models.map((model: { model_id: string }) => model.model_id)).toEqual([
@@ -852,7 +875,8 @@ describe("public API routes", () => {
         })
       )
     );
-    expect(evalRun.status).toBe("complete");
+    expect(evalRun.status).toBe("queued");
+    await runQueuedEvalRuns(repository, { maxRuns: 10, workerId: "route_map_worker" });
 
     const evalDetail = await expectOkJson(await app.request(`/eval-runs/${evalRun.id}`));
     expect(evalDetail.eval_run.id).toBe(evalRun.id);
@@ -869,7 +893,8 @@ describe("public API routes", () => {
         })
       )
     );
-    expect(report.production_recommendation_allowed).toBe(false);
+    expect(report.production_recommendation_allowed).toBe(true);
+    expect(report.winner_result_id).not.toBeNull();
 
     const exportResponse = await expectOkJson(
       await app.request(`/reports/${DEMO_IDS.report}/export?format=json`)

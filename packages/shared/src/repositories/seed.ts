@@ -342,7 +342,67 @@ export function createDemoRepositorySeed(): Required<RepositorySeed> {
         completed_at: null
       }
     ],
+    eval_queue_jobs: [
+      {
+        id: "eval_queue_job_support_classifier_demo",
+        eval_run_id: DEMO_IDS.evalRun,
+        workspace_id: DEMO_IDS.workspace,
+        project_id: DEMO_IDS.project,
+        status: "queued",
+        attempt_count: 0,
+        max_attempts: 3,
+        locked_by: null,
+        locked_until: null,
+        last_heartbeat_at: null,
+        next_attempt_at: DEMO_TIMESTAMP,
+        rate_limited_until: null,
+        retry_after_seconds: null,
+        retry_hint: "Demo eval job is ready for the durable runner.",
+        sanitized_error: null,
+        metadata: {
+          source: "demo_seed",
+          payload_redacted: true
+        },
+        is_mock: true,
+        created_at: DEMO_TIMESTAMP,
+        updated_at: DEMO_TIMESTAMP,
+        completed_at: null,
+        cancelled_at: null
+      }
+    ],
     eval_results: [],
+    job_events: [
+      {
+        id: "job_event_eval_run_support_classifier_queued",
+        job_type: "eval_run",
+        job_id: "eval_queue_job_support_classifier_demo",
+        status: "queued",
+        workspace_id: DEMO_IDS.workspace,
+        eval_run_id: DEMO_IDS.evalRun,
+        report_id: null,
+        sanitized_error: null,
+        metadata: {
+          source: "demo_seed",
+          payload_redacted: true
+        },
+        created_at: DEMO_TIMESTAMP
+      }
+    ],
+    worker_heartbeats: [
+      {
+        id: "worker_heartbeat_eval_runner_demo",
+        worker_name: "eval-runner",
+        instance_id: "demo",
+        status: "healthy",
+        last_heartbeat_at: DEMO_TIMESTAMP,
+        metadata: {
+          source: "demo_seed",
+          queue: "durable_demo"
+        },
+        created_at: DEMO_TIMESTAMP,
+        updated_at: DEMO_TIMESTAMP
+      }
+    ],
     optimization_candidates: [
       {
         id: candidateBaselineId,

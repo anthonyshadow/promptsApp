@@ -8,7 +8,7 @@ Define the practical bar for inviting real users with real prompts while preserv
 
 Not ready for private beta.
 
-The local MVP is founder-demoable, but private beta must wait for durable eval queues, live provider adapters, production KMS-backed key material, and production storage lifecycle configuration.
+The local MVP is founder-demoable, but private beta must wait for live provider adapters, production KMS-backed key material, production storage lifecycle configuration, and browser smoke coverage.
 
 ## Readiness Gates
 
@@ -20,9 +20,9 @@ The local MVP is founder-demoable, but private beta must wait for durable eval q
 | Admin API authorization semantics | complete | Stored sessions, MFA rotation, RBAC/action scopes, sudo lifecycle, redaction, and audit logging are implemented with tests. | Production admin provisioning and browser smoke coverage before beta. |
 | Durable persistence | complete | Postgres adapter, migration runner, seed/reset commands, and local Postgres contract tests pass. | Deployment provisioning and backup policy. |
 | Provider keys | complete | Provider connections persist encrypted blobs plus fingerprints only, lifecycle routes return metadata only, no reveal route exists, adapter decrypt-for-use is controlled, and key actions are audited. | Production KMS-backed key material before external customer data. |
-| Live eval proof | in_progress | Mock eval matrix, scoring, frontier, and reports exist. | Durable queue and live provider adapters with usage capture. |
+| Live eval proof | in_progress | Durable eval queue, mock eval matrix, scoring, frontier, and reports exist. | Live provider adapters with usage capture. |
 | Model registry trust | complete | Approved official-doc snapshot rows, admin diff/approval/reject workflow, stale warnings, and exact-savings blocking exist. | Re-verify rows before external use and when provider docs change. |
-| Privacy and abuse controls | complete | Request IDs, body-free structured logs, sensitive-field redaction, route rate limits, private/no-training workspace defaults, and provider-call acknowledgement/blocking are wired. | Calibrate provider-specific quotas after live adapters and durable queue land. |
+| Privacy and abuse controls | complete | Request IDs, body-free structured logs, sensitive-field redaction, route rate limits, private/no-training workspace defaults, and provider-call acknowledgement/blocking are wired. | Calibrate provider-specific quotas after live adapters make real calls. |
 | Report privacy/deletion | complete | Reports vault, redacted exports, local storage-backed artifacts, durable deletion requests, retryable failures, and retention evidence exist. | Production S3/MinIO lifecycle policy and customer-specific retention controls remain hardening work. |
 | Billing/entitlements | in_progress | Billing admin, entitlement checks, usage ledger, invoices, credits, and feature flags exist locally. | Billing provider/webhooks can wait for paid beta, but plan limits must match beta terms. |
 

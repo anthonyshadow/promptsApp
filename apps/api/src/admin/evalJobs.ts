@@ -13,6 +13,7 @@ import type {
   Entitlement,
   EvalResult,
   EvalRun,
+  EvalQueueJob,
   FeatureFlag,
   FreeAudit,
   Invoice,
@@ -28,7 +29,8 @@ import type {
   ReportArtifact,
   ReportArtifactStorage,
   UsageLedgerEntry,
-  Workspace
+  Workspace,
+  WorkerHeartbeat
 } from "@promptopts/shared";
 import type {
   AdminAccountDetailResponse,
@@ -44,12 +46,15 @@ function createAdminEvalRunsResponse(input: {
   workspaces: Workspace[];
   models: ModelRegistryRecord[];
   results: EvalResult[];
+  jobs: EvalQueueJob[];
+  heartbeats: WorkerHeartbeat[];
 }) {
   return {
-    queue_summary: countEvalJobsWithRateLimits(input.evalRuns),
-    worker_health: createWorkerHealth(input.evalRuns),
+    queue_summary: countEvalJobsWithRateLimits(input.evalRuns, input.jobs),
+    worker_health: createWorkerHealth(input.evalRuns, input.heartbeats),
     jobs: input.evalRuns
       .map((evalRun) => {
+        const queueJob = input.jobs.find((job) => job.eval_run_id === evalRun.id) ?? null;
         const project = input.projects.find((item) => item.id === evalRun.project_id) ?? null;
         const workspace = project
           ? input.workspaces.find((item) => item.id === project.workspace_id) ?? null
@@ -62,10 +67,10 @@ function createAdminEvalRunsResponse(input: {
           id: evalRun.id,
           workspace: workspace?.name ?? "Workspace metadata unavailable",
           provider: model?.provider ?? project?.current_provider ?? "openai",
-          status: evalRun.status,
+          status: queueJob?.status ?? evalRun.status,
           age_seconds: getAgeSeconds(evalRun.queued_at),
           progress: getEvalProgress(evalRun, results),
-          action: getEvalJobAction(evalRun),
+          action: getEvalJobAction(queueJob?.status ?? evalRun.status),
           redaction_state: "redacted" as const
         };
       })
@@ -112,31 +117,45 @@ async function createAdminEvalRunDetail(
     failed_checks: detail.failures,
     sanitized_provider_error: sanitizedProviderError,
     retry_hints: detail.retry_hints,
-    worker_health: createWorkerHealth([evalRun])
+    worker_health: createWorkerHealth([evalRun], detail.queue.worker_heartbeats)
   };
 }
 
-function countEvalJobsWithRateLimits(evalRuns: EvalRun[]) {
+function countEvalJobsWithRateLimits(evalRuns: EvalRun[], jobs: EvalQueueJob[]) {
+  const statusFor = (evalRun: EvalRun) =>
+    jobs.find((job) => job.eval_run_id === evalRun.id)?.status ?? evalRun.status;
+
   return {
-    queued: evalRuns.filter((evalRun) => evalRun.status === "queued").length,
-    running: evalRuns.filter((evalRun) => evalRun.status === "running").length,
-    failed: evalRuns.filter((evalRun) => evalRun.status === "failed").length,
-    retrying: evalRuns.filter((evalRun) => evalRun.status === "retrying").length,
-    rate_limited: evalRuns.filter((evalRun) => evalRun.status === "rate_limited").length
+    queued: evalRuns.filter((evalRun) => statusFor(evalRun) === "queued").length,
+    running: evalRuns.filter((evalRun) => statusFor(evalRun) === "running").length,
+    failed: evalRuns.filter((evalRun) => statusFor(evalRun) === "failed").length,
+    retrying: evalRuns.filter((evalRun) => statusFor(evalRun) === "retrying").length,
+    rate_limited: evalRuns.filter((evalRun) => statusFor(evalRun) === "rate_limited").length
   };
 }
 
-function createWorkerHealth(evalRuns: EvalRun[]) {
+function createWorkerHealth(evalRuns: EvalRun[], heartbeats: WorkerHeartbeat[] = []) {
   const hasFailures = evalRuns.some((evalRun) => evalRun.status === "failed");
   const hasRateLimits = evalRuns.some((evalRun) => evalRun.status === "rate_limited");
+  const evalRunnerHeartbeat = heartbeats
+    .filter((heartbeat) => heartbeat.worker_name === "eval-runner")
+    .sort((a, b) => b.last_heartbeat_at.localeCompare(a.last_heartbeat_at))[0];
 
   return [
     {
       component: "eval-runner" as const,
-      status: hasFailures ? "degraded" as const : "mocked" as const,
-      redacted_summary: hasFailures
+      status: evalRunnerHeartbeat
+        ? evalRunnerHeartbeat.status === "healthy"
+          ? "ok" as const
+          : "degraded" as const
+        : hasFailures
+          ? "degraded" as const
+          : "mocked" as const,
+      redacted_summary: evalRunnerHeartbeat
+        ? `Last durable heartbeat ${evalRunnerHeartbeat.last_heartbeat_at}; worker payloads are redacted.`
+        : hasFailures
         ? "At least one eval job failed; inspect failed checks and retry hints."
-        : "Memory-backed eval runner metadata is available."
+        : "No live durable heartbeat is available; queue metadata is still persisted."
     },
     {
       component: "provider-adapter" as const,
@@ -168,12 +187,12 @@ function getEvalProgress(evalRun: EvalRun, results: EvalResult[]): number {
   return Math.min(1, results.length / expectedRows);
 }
 
-function getEvalJobAction(evalRun: EvalRun) {
-  if (evalRun.status === "failed" || evalRun.status === "rate_limited") {
+function getEvalJobAction(status: EvalRun["status"]) {
+  if (status === "failed" || status === "rate_limited") {
     return "retry" as const;
   }
 
-  if (evalRun.status === "queued" || evalRun.status === "running" || evalRun.status === "retrying") {
+  if (status === "queued" || status === "running" || status === "retrying") {
     return "cancel" as const;
   }
 
