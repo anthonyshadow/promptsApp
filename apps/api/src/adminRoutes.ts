@@ -42,6 +42,7 @@ import type {
   Prompt,
   PromptAnalysis,
   PromptProject,
+  ProviderConnection,
   RecommendationReport,
   ReportArtifact,
   UsageLedgerEntry,
@@ -73,6 +74,7 @@ import {
   adminModelRegistryResponseSchema,
   adminOverviewResponseSchema,
   type AdminOverviewResponse,
+  adminProviderConnectionsResponseSchema,
   adminReasonRequestSchema,
   adminReportsResponseSchema,
   adminUsersResponseSchema,
@@ -476,6 +478,22 @@ export function createAdminApiRoutes() {
               "Overview is redacted metadata only; raw prompts, provider keys, and raw reports are not returned.",
               "Revenue, provider spend, queue, worker, and storage health are placeholders until durable services are wired."
             ]
+          })
+        );
+      })
+      .get("/provider-connections", async (c) => {
+        const [connections, workspaces] = await Promise.all([
+          c.var.repository.provider_connections.list(),
+          c.var.repository.workspaces.list()
+        ]);
+
+        return c.json(
+          adminProviderConnectionsResponseSchema.parse({
+            connections: connections.map((connection) =>
+              toAdminProviderConnectionMetadata(connection, workspaces)
+            ),
+            redaction_note:
+              "Admin provider-key views are metadata-only; ciphertext and plaintext are never returned."
           })
         );
       })
@@ -2221,6 +2239,19 @@ function countFailedReportExports(
 
     return reportArtifacts.some((artifact) => artifact.checksum === null && artifact.size_bytes === null);
   }).length;
+}
+
+function toAdminProviderConnectionMetadata(
+  connection: ProviderConnection,
+  workspaces: Workspace[]
+) {
+  const { encrypted_key_blob: _encryptedKeyBlob, ...metadata } = connection;
+  const workspace = workspaces.find((item) => item.id === connection.workspace_id);
+
+  return {
+    ...metadata,
+    workspace_name: workspace?.name ?? null
+  };
 }
 
 function createLiveActivityFeed(input: {

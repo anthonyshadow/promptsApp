@@ -4,7 +4,7 @@
 
 Demo-ready with caveats.
 
-PromptOpts now presents a coherent, founder-demoable MVP loop using deterministic/mocked infrastructure. It is not private-beta or production-ready until provider-key encryption, live provider adapters, queue/storage/billing infrastructure, and verified model registry metadata are in place.
+PromptOpts now presents a coherent, founder-demoable MVP loop using deterministic/mocked infrastructure. It is not private-beta or production-ready until production KMS-backed provider-key handling, live provider adapters, queue/storage/billing infrastructure, and verified model registry metadata are in place.
 
 ## Current State By Subsystem
 
@@ -21,16 +21,16 @@ PromptOpts now presents a coherent, founder-demoable MVP loop using deterministi
 | Workspace dashboard | Green | Project/value rollup and recent project table. | Savings are unverified/demo. | Keep scope narrow. |
 | Admin CRM | Green | Pipeline, Account 360, notes/tasks, redacted previews. | Durable CRM persistence. | Must not become a public CRM/sales suite. |
 | Admin ops | Green | Overview, eval jobs, model registry, reports vault, billing. | Queue/storage/billing services. | Object storage and billing services must land before beta claims. |
-| Security/trust | Yellow | Stored admin sessions, MFA rotation, RBAC/action scopes, sudo lifecycle, redaction, audit logs. | Break-glass/raw reveal payload flows are placeholders. | Provider-key encryption remains P0. |
+| Security/trust | Yellow | Stored admin sessions, MFA rotation, RBAC/action scopes, sudo lifecycle, provider-key encryption/non-viewability, redaction, audit logs. | Break-glass/raw reveal payload flows are placeholders. | Production KMS remains required before external customer data. |
 | Billing/entitlements | Yellow | Entitlement checks, usage ledger, invoices, credits, feature flags. | Billing provider and plan enforcement depth. | Credits/limits need real finance controls. |
 | Data/persistence | Yellow | Repository boundary, memory adapter, Postgres schema metadata. | Postgres adapter execution. | Audit logs must be durable before real data. |
-| Tests/build/tooling | Green | 118 tests, typecheck, lint alias, build all pass. | No browser visual suite. | Lint is typecheck-only. |
+| Tests/build/tooling | Green | 134 tests, typecheck, lint alias, build all pass. | No browser visual suite. | Lint is typecheck-only. |
 
 ## Top 10 Launch Risks
 
-1. Provider-key encryption and non-viewability are not wired at runtime.
-2. Model registry metadata is synthetic/unverified, blocking exact savings claims.
-3. Live provider adapters are intentionally inert.
+1. Model registry metadata is synthetic/unverified, blocking exact savings claims.
+2. Live provider adapters are intentionally inert.
+3. Production KMS-backed provider-key handling is not configured.
 4. Queue/storage/report deletion jobs are mocked.
 5. PDF export is a stub.
 6. Billing provider integration is absent.
@@ -41,9 +41,9 @@ PromptOpts now presents a coherent, founder-demoable MVP loop using deterministi
 
 ## Top 10 Highest-Leverage Improvements
 
-1. Provider-key encryption and non-viewability.
-2. Verified model registry seed/update workflow.
-3. Live provider adapter execution behind encrypted BYOK.
+1. Verified model registry seed/update workflow.
+2. Live provider adapter execution behind encrypted BYOK.
+3. Production KMS-backed provider-key handling.
 4. Durable eval queue and worker leasing.
 5. Object storage artifact lifecycle and deletion jobs.
 6. Browser smoke tests across public/admin routes.
@@ -67,7 +67,7 @@ PromptOpts now presents a coherent, founder-demoable MVP loop using deterministi
 
 ## Final Validation Results
 
-- `bun test`: passed, 126 tests across 22 files.
+- `bun test`: passed, 134 tests across 23 files.
 - `bun run typecheck`: passed.
 - `bun run lint`: passed; current script delegates to `bun run typecheck`.
 - `bun run build`: passed for packages, API, workers, and web.

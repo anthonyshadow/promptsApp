@@ -8,7 +8,7 @@ Define the practical bar for inviting real users with real prompts while preserv
 
 Not ready for private beta.
 
-The local MVP is founder-demoable, but private beta must wait for encrypted provider-key handling, object storage deletion, registry verification, rate limits/logging, durable eval queues, and live provider adapters.
+The local MVP is founder-demoable, but private beta must wait for object storage deletion, registry verification, rate limits/logging, durable eval queues, live provider adapters, and production KMS-backed key material.
 
 ## Readiness Gates
 
@@ -19,7 +19,7 @@ The local MVP is founder-demoable, but private beta must wait for encrypted prov
 | Admin internal UI | complete | `/__admin/*` routes exist, are not linked from public navigation, and show login/MFA/expired/missing-role/missing-scope gate states. | Browser smoke coverage before beta. |
 | Admin API authorization semantics | complete | Stored sessions, MFA rotation, RBAC/action scopes, sudo lifecycle, redaction, and audit logging are implemented with tests. | Production admin provisioning and browser smoke coverage before beta. |
 | Durable persistence | complete | Postgres adapter, migration runner, seed/reset commands, and local Postgres contract tests pass. | Deployment provisioning and backup policy. |
-| Provider keys | in_progress | Opaque/encrypted schema metadata exists. | Runtime encryption, no reveal routes, key lifecycle audit events. |
+| Provider keys | complete | Provider connections persist encrypted blobs plus fingerprints only, lifecycle routes return metadata only, no reveal route exists, adapter decrypt-for-use is controlled, and key actions are audited. | Production KMS-backed key material before external customer data. |
 | Live eval proof | in_progress | Mock eval matrix, scoring, frontier, and reports exist. | Durable queue and live provider adapters with usage capture. |
 | Model registry trust | in_progress | Admin diff/approval/stale warnings exist. | Official source verification for active MVP rows. |
 | Report privacy/deletion | in_progress | Reports vault and redacted exports exist. | Object storage status, deletion job, retention evidence. |

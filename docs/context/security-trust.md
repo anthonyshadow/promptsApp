@@ -20,6 +20,7 @@ All three PDFs state that users will paste production prompts, customer examples
 - Admin roles include owner, ops, support, finance, and read-only.
 - Admin API authorization uses persisted admin users, roles, sessions, and MFA state. Mock admin headers are not accepted as authorization.
 - Dangerous admin actions require time-boxed sudo with MFA recheck, action scope binding, and reason code.
+- Provider keys are stored through provider-connection lifecycle routes as encrypted blobs plus fingerprints only; plaintext is not returned after save.
 
 ## Non-Negotiables
 
@@ -59,6 +60,16 @@ Sudo lifecycle implementation:
 - `requireSudo(action)` rejects missing, expired, or wrong-action grants; allowed and denied dangerous actions are audited.
 - Sudo is extra authorization only. It does not bypass RBAC, action scopes, or redacted-by-default admin views.
 
+Provider-key implementation:
+
+- `/provider-connections` accepts BYOK submissions for OpenAI, Anthropic, and Gemini and persists only ciphertext, key fingerprint, provider, workspace, status, and timestamps.
+- `/provider-connections/:id/rotate` replaces ciphertext and fingerprint without returning plaintext.
+- `/provider-connections/:id/revoke` marks the connection revoked.
+- `/admin-api/provider-connections` is metadata-only and audited as a sensitive read.
+- No reveal route exists for provider keys.
+- Local development uses `PROMPTOPTS_SECRET_ENCRYPTION_KEY`; production should replace local key material with KMS-backed encryption without changing repository callers.
+- Provider adapters request decrypted keys only through the controlled decrypt-for-use helper inside provider execution paths; decrypted keys are not persisted or returned.
+
 Trust UX states to build:
 
 - Secret detected: block or redact before provider call.
@@ -74,6 +85,7 @@ Trust UX states to build:
 
 - SOC 2 workstream.
 - Enterprise SSO and custom retention controls.
+- Production KMS/key hierarchy.
 - Public prompt sharing by default.
 - Public admin docs.
 - Raw prompt support browsing.

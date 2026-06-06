@@ -19,6 +19,7 @@ export type ProductStep = {
 export type PublicRoute =
   | { kind: "app-home"; activeStep: ProductStepKey; path: string }
   | { kind: "workspace-dashboard"; activeStep: ProductStepKey; path: string; workspaceSlug: string }
+  | { kind: "workspace-security"; activeStep: ProductStepKey; path: string; workspaceSlug: string }
   | { kind: "setup"; activeStep: ProductStepKey; path: string }
   | { kind: "prompt"; activeStep: ProductStepKey; path: string; promptId: string }
   | { kind: "audit"; activeStep: ProductStepKey; path: string; projectId: string }
@@ -87,6 +88,21 @@ export function parsePublicRoute(pathname: string): PublicRoute {
   if (segments[0] === "app" && segments[1] === "workspace" && segments[2] && segments.length === 3) {
     return {
       kind: "workspace-dashboard",
+      activeStep: "setup",
+      path,
+      workspaceSlug: decodeURIComponent(segments[2])
+    };
+  }
+
+  if (
+    segments[0] === "app" &&
+    segments[1] === "workspace" &&
+    segments[2] &&
+    segments[3] === "security" &&
+    segments.length === 4
+  ) {
+    return {
+      kind: "workspace-security",
       activeStep: "setup",
       path,
       workspaceSlug: decodeURIComponent(segments[2])

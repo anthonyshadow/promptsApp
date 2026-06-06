@@ -70,7 +70,7 @@ workers/
   eval-runner/         Mock eval matrix runner boundary
   report-generator/    Markdown/JSON/PDF-stub report package generator
 packages/
-  shared/              Zod schemas, types, repositories, seed data, storage abstraction
+  shared/              Zod schemas, types, repositories, seed data, storage/security abstractions
   prompt-core/         Prompt parser, scanner, audit, candidates
   eval-core/           Quality contract, checks, scoring, recommendation rules
   model-registry/      Registry freshness, capability filtering, shortlist roles
@@ -121,6 +121,12 @@ The admin UI at `/__admin/*` performs `/admin-api/auth/login`, `/admin-api/auth/
 
 Dangerous admin actions use `/admin-api/sudo/start`, `/admin-api/sudo/status`, and `/admin-api/sudo/end`. Sudo start requires an MFA recheck, allowed action scope, and reason code; active grants are time-boxed, visible in the admin UI, revocable, and audited.
 
+### Provider Keys
+
+Workspace BYOK lives at `/app/workspace/acme-ai/security` in the local shell. `POST /provider-connections`, `POST /provider-connections/:id/rotate`, and `POST /provider-connections/:id/revoke` store encrypted provider keys for OpenAI, Anthropic, and Gemini and return metadata only: provider, status, fingerprint, and timestamps. There is no reveal route. Admin metadata reads use `/admin-api/provider-connections` and remain redacted.
+
+Set `PROMPTOPTS_SECRET_ENCRYPTION_KEY` for local encrypted storage before saving provider keys. The local crypto abstraction is intentionally small and can be replaced by KMS without changing repository callers.
+
 ## Environment Variables
 
 `.env.example` contains placeholders for:
@@ -131,14 +137,14 @@ Dangerous admin actions use `/admin-api/sudo/start`, `/admin-api/sudo/status`, a
 - `PROMPTOPTS_REPOSITORY`
 - `REDIS_URL`
 - object storage settings
-- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`
+- `PROMPTOPTS_SECRET_ENCRYPTION_KEY`
 - `ENCRYPTION_KEY`
 - `SESSION_SECRET`
 - `PROMPTOPTS_ADMIN_DEV_EMAIL`
 - `PROMPTOPTS_ADMIN_DEV_PASSWORD`
 - `PROMPTOPTS_ADMIN_DEV_MFA_SECRET`
 
-Provider keys are placeholders only. The live adapters intentionally do not call providers until key storage, request logging, rate limits, and redaction policies are production-safe.
+Provider keys are submitted through BYOK routes, encrypted at rest, and never viewable after save. The live adapters intentionally do not call providers until request logging, rate limits, and redaction policies are production-safe.
 
 ## Commands
 
@@ -182,7 +188,7 @@ bun run build
 
 Prompts, reports, provider payloads, and provider keys are private by default. Admin views are redacted by default. Hidden routes are not treated as security. Dangerous actions require MFA recheck, reason codes, time-boxed sudo policies, and append-only audit events. Every admin mutation and sensitive read should write append-only `admin_audit_logs`.
 
-Provider keys are modeled as encrypted/opaque and are never viewable after storage. Production use requires encrypted key storage, object storage deletion, rate-limit/error logging policies, and deliberate production admin provisioning.
+Provider keys are encrypted/opaque and are never viewable after storage. Production use still requires KMS-backed key material, object storage deletion, rate-limit/error logging policies, and deliberate production admin provisioning.
 
 ## Model Registry Policy
 
@@ -195,7 +201,7 @@ Audit is a preflight, not a switch recommendation. The original prompt and curre
 ## Known Limitations
 
 - Demo-ready does not mean private-beta ready.
-- Real customer data should wait until encrypted provider keys, deletion jobs, live provider controls, rate limits, and billing controls are in place.
+- Real customer data should wait until KMS-backed provider-key encryption, deletion jobs, live provider controls, rate limits, and billing controls are in place.
 - Browser-level responsive screenshots are recommended before external demos.
 - API route modules and schema files are intentionally stable but broad; split by domain before adding much more behavior.
 
@@ -203,7 +209,7 @@ Audit is a preflight, not a switch recommendation. The original prompt and curre
 
 Current local MVP status is green for the mocked demo loop: provider selection, prompt paste, audit, model-fit label, candidate generation, model shortlist, test cases, eval matrix, recommendation report, export, hidden admin UI, guarded admin API, Account 360 redaction, eval job control, model registry admin, reports vault, billing admin, audit-log viewer, entitlements, and append-only audit-log tests.
 
-Remaining launch blockers are provider-key encryption, verified model registry, live provider adapters, durable queue/object storage deletion, and production billing integration.
+Remaining launch blockers are verified model registry, live provider adapters with rate limits/logging, durable queue/object storage deletion, production KMS configuration, and production billing integration.
 
 ## Audit And Roadmap
 

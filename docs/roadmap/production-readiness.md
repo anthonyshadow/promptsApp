@@ -16,7 +16,7 @@ Production readiness depends on closing private-beta blockers first, then provin
 | --- | --- | --- | --- |
 | Durable data and audit logs | complete | Implementation prompt 1 | Postgres adapter is default for deployed runtime; audit logs are append-only and queryable. |
 | Production admin trust | in_progress | Prompts 2-3 | Session, MFA, RBAC, action scopes, sudo lifecycle, and audit events are enforced without mock headers; break-glass remains a placeholder flow behind sudo policy. |
-| Provider-key trust | in_progress | Prompt 4 | BYOK keys are encrypted, non-viewable, rotatable/deletable, and audited. |
+| Provider-key trust | in_progress | Prompt 4 | BYOK keys are encrypted, non-viewable, rotatable/revocable, audited, and backed by production KMS-managed key material. |
 | Deletion and retention | in_progress | Prompt 5 | Prompt/report deletion removes or tombstones scoped data and object artifacts with retryable evidence. |
 | Verified model registry | in_progress | Prompt 6 | Active recommendations use fresh/approved registry metadata; stale/demo rows cannot produce exact savings claims. |
 | Privacy and abuse controls | not_started | Prompt 7 | Rate limits, redacted request logs, provider-call data-use controls, and sensitive payload policies are active. |
@@ -28,7 +28,7 @@ Production readiness depends on closing private-beta blockers first, then provin
 
 ## Production-Incomplete Areas
 
-- Live providers are placeholders until keys, logging, rate limits, and queue safety land.
+- Live providers are placeholders until KMS-backed key material, logging, rate limits, and queue safety land.
 - PDF rendering is a stub.
 - Billing provider events are not wired.
 - Object storage deletion is mocked.

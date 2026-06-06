@@ -7,6 +7,7 @@ describe("public route map", () => {
     const paths = [
       "/app",
       "/app/workspace/acme-ai",
+      "/app/workspace/acme-ai/security",
       "/app/setup",
       `/app/prompts/${DEMO_IDS.prompt}`,
       `/app/projects/${DEMO_IDS.project}/audit`,
@@ -26,6 +27,10 @@ describe("public route map", () => {
 
     expect(parsePublicRoute("/app/workspace/acme-ai")).toMatchObject({
       kind: "workspace-dashboard",
+      workspaceSlug: "acme-ai"
+    });
+    expect(parsePublicRoute("/app/workspace/acme-ai/security")).toMatchObject({
+      kind: "workspace-security",
       workspaceSlug: "acme-ai"
     });
   });

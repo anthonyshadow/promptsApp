@@ -29,6 +29,7 @@ export const adminRouteScopes = [
   "reports",
   "billing",
   "audit_logs",
+  "provider_connections",
   "prompt_reveal",
   "impersonation",
   "break_glass"

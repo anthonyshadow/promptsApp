@@ -24,6 +24,7 @@ import {
   promptProjectSchema,
   promptSchema,
   promptVersionSchema,
+  providerConnectionSchema,
   qualityContractSchema,
   recommendationReportSchema,
   reportArtifactSchema,
@@ -57,6 +58,7 @@ import {
   type PromptAnalysis,
   type PromptProject,
   type PromptVersion,
+  type ProviderConnection,
   type QualityContract,
   type RecommendationReport,
   type ReportArtifact,
@@ -348,9 +350,43 @@ function opportunityFromDb(record: PlainRecord): PlainRecord {
   };
 }
 
+function providerConnectionToDb(record: PlainRecord): PlainRecord {
+  const {
+    encrypted_key_blob,
+    created_by,
+    ...rest
+  } = record;
+
+  return {
+    ...rest,
+    encrypted_key_ciphertext: rest.encrypted_key_ciphertext ?? encrypted_key_blob,
+    created_by_user_id: rest.created_by_user_id ?? created_by
+  };
+}
+
+function providerConnectionFromDb(record: PlainRecord): PlainRecord {
+  const {
+    encrypted_key_ciphertext,
+    created_by_user_id,
+    ...rest
+  } = record;
+
+  return {
+    ...rest,
+    encrypted_key_blob: encrypted_key_ciphertext,
+    created_by: created_by_user_id
+  };
+}
+
 const configs = {
   users: { tableName: "users", schema: userSchema },
   workspaces: { tableName: "workspaces", schema: workspaceSchema },
+  provider_connections: {
+    tableName: "provider_keys",
+    schema: providerConnectionSchema,
+    toDb: providerConnectionToDb,
+    fromDb: providerConnectionFromDb
+  },
   projects: { tableName: "projects", schema: promptProjectSchema },
   prompts: { tableName: "prompts", schema: promptSchema },
   prompt_versions: { tableName: "prompt_versions", schema: promptVersionSchema },
@@ -413,6 +449,10 @@ export function createPostgresRepository(options: PostgresRepositoryOptions = {}
     backend: "postgres",
     users: new PostgresCrudRepository<User>(configs.users, executorOptions),
     workspaces: new PostgresCrudRepository<Workspace>(configs.workspaces, executorOptions),
+    provider_connections: new PostgresCrudRepository<ProviderConnection>(
+      configs.provider_connections,
+      executorOptions
+    ),
     projects: new PostgresCrudRepository<PromptProject>(configs.projects, executorOptions),
     prompts: new PostgresCrudRepository<Prompt>(configs.prompts, executorOptions),
     prompt_versions: new PostgresCrudRepository<PromptVersion>(

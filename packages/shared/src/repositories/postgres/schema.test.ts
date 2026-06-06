@@ -5,15 +5,12 @@ import {
   POSTGRES_SCHEMA_TABLES
 } from "./schema";
 
-const migrationUrl = new URL("./migrations/0001_initial.sql", import.meta.url);
-
 async function readMigrations(): Promise<string> {
-  const initial = await Bun.file(migrationUrl).text();
-  const operational = await Bun.file(
-    new URL("./migrations/0002_operational_tables.sql", import.meta.url)
-  ).text();
-
-  return `${initial}\n${operational}`;
+  return (
+    await Promise.all(
+      POSTGRES_MIGRATION_FILES.map((migrationPath) => Bun.file(migrationPath).text())
+    )
+  ).join("\n");
 }
 
 describe("postgres schema metadata", () => {
@@ -51,8 +48,12 @@ describe("postgres schema metadata", () => {
     expect(providerKeySection).toContain("encrypted_key_ciphertext BYTEA NOT NULL");
     expect(providerKeySection).toContain("key_fingerprint TEXT NOT NULL");
     expect(providerKeySection).toContain("encryption_key_id TEXT NOT NULL");
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'");
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS rotated_at TIMESTAMPTZ");
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()");
     expect(providerKeySection).not.toContain("raw_key");
     expect(providerKeySection).not.toContain("plaintext");
+    expect(sql).not.toContain("raw_key");
   });
 
   test("represents report deletion and model registry version approval state", async () => {

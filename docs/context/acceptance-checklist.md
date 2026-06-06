@@ -73,7 +73,7 @@ The wireframes and playbooks define readiness targets: under two minutes to publ
 - [ ] Eval runner and report generator run through worker boundaries.
 - [ ] Middleware checks route and action scopes, not just session.
 - [ ] Raw reveal, delete, credit, and impersonation actions require sudo.
-- [ ] Provider keys remain encrypted and non-viewable.
+- [x] Provider keys remain encrypted and non-viewable.
 - [ ] Report and prompt deletion remove object storage artifacts and write audit events.
 
 ## MVP Exclusions

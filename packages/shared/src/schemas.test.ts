@@ -4,6 +4,7 @@ import {
   auditRequestSchema,
   auditResponseSchema,
   createDemoRepositorySeed,
+  providerConnectionSchema,
   providerSchema
 } from "./index";
 
@@ -97,6 +98,30 @@ describe("shared domain schemas", () => {
 
     expect(context.action_scope).toBe("manage_model_registry");
     expect(context.redaction_state).toBe("redacted");
+  });
+
+  test("parse provider connections as encrypted non-viewable records", () => {
+    const connection = providerConnectionSchema.parse({
+      id: "provider_connection_demo",
+      workspace_id: "workspace_acme_ai",
+      provider: "openai",
+      encrypted_key_blob: "\\x7b226b6964223a226c6f63616c3a64656d6f227d",
+      encryption_key_id: "local:demo",
+      key_fingerprint: "fp_1234567890abcdef",
+      status: "active",
+      created_by: "user_acme_owner",
+      rotated_at: null,
+      revoked_at: null,
+      last_used_at: null,
+      metadata: { storage: "encrypted_non_viewable" },
+      is_mock: true,
+      created_at: timestamp,
+      updated_at: timestamp
+    });
+
+    expect(connection.encrypted_key_blob).not.toContain("OPENAI_API_KEY");
+    expect(connection.key_fingerprint).toContain("fp_");
+    expect(connection.status).toBe("active");
   });
 
   test("demo seed is synthetic and keeps model metadata unverified", () => {

@@ -40,6 +40,7 @@ import {
   type PromptAnalysis,
   type PromptProject,
   type PromptVersion,
+  type ProviderConnection,
   type PromptOptsRepository,
   type QualityContract,
   type RecommendationReport,
@@ -47,6 +48,11 @@ import {
   type TestCase,
   type UsageLedgerEntry
 } from "@promptopts/shared";
+import {
+  encryptSecret,
+  fingerprintSecret,
+  writeProviderKeyAuditEvent
+} from "@promptopts/shared/security";
 import {
   auditRequestSchema,
   auditResponseSchema,
@@ -58,6 +64,11 @@ import {
   promptCreateResponseSchema,
   promptOptimizeRequestSchema,
   promptOptimizeResponseSchema,
+  providerConnectionCreateRequestSchema,
+  providerConnectionMutationResponseSchema,
+  providerConnectionRevokeRequestSchema,
+  providerConnectionRotateRequestSchema,
+  providerConnectionsResponseSchema,
   qualityContractRequestSchema,
   qualityContractResponseSchema,
   reportCreateRequestSchema,
@@ -165,6 +176,191 @@ export function createPublicApiRoutes() {
           models,
           registry_note:
             "Model metadata is served from the registry; demo rows are mock/unverified until approved."
+        })
+      );
+    })
+    .get("/provider-connections", async (c) => {
+      const workspaceId = c.req.query("workspace_id");
+      if (!workspaceId) {
+        return publicError(c, 400, "validation_error", "workspace_id query parameter is required");
+      }
+
+      const connections = (await c.var.repository.provider_connections.list())
+        .filter((connection) => connection.workspace_id === workspaceId)
+        .map(toProviderConnectionMetadata);
+
+      return c.json(
+        providerConnectionsResponseSchema.parse({
+          connections,
+          redaction_note:
+            "Provider keys are encrypted and never viewable after save; only metadata is returned."
+        })
+      );
+    })
+    .post("/provider-connections", async (c) => {
+      const body = await validateJson(c, providerConnectionCreateRequestSchema);
+      if (!body.success) {
+        return body.response;
+      }
+
+      const workspace = await c.var.repository.workspaces.get(body.data.workspace_id);
+      if (!workspace) {
+        return notFound(c, "Workspace not found");
+      }
+
+      const existingActive = (await c.var.repository.provider_connections.list()).find(
+        (connection) =>
+          connection.workspace_id === body.data.workspace_id &&
+          connection.provider === body.data.provider &&
+          connection.status === "active" &&
+          !connection.revoked_at
+      );
+      if (existingActive) {
+        return publicError(
+          c,
+          409,
+          "provider_connection_exists",
+          "An active provider connection already exists; rotate it instead."
+        );
+      }
+
+      const timestamp = nowIso();
+      const encrypted = tryPrepareProviderKey(body.data.api_key);
+      if (!encrypted) {
+        return publicError(
+          c,
+          500,
+          "provider_key_encryption_unavailable",
+          "Provider-key encryption is not configured."
+        );
+      }
+      const connection: ProviderConnection = {
+        id: createId("provider_connection"),
+        workspace_id: body.data.workspace_id,
+        provider: body.data.provider,
+        encrypted_key_blob: encrypted.encrypted_key_blob,
+        encryption_key_id: encrypted.encryption_key_id,
+        key_fingerprint: encrypted.key_fingerprint,
+        status: "active",
+        created_by: body.data.created_by ?? null,
+        rotated_at: null,
+        revoked_at: null,
+        last_used_at: null,
+        metadata: {
+          storage: "encrypted_non_viewable",
+          reveal_route: false
+        },
+        is_mock: false,
+        created_at: timestamp,
+        updated_at: timestamp
+      };
+
+      const created = await c.var.repository.provider_connections.create(connection);
+      await writeProviderKeyAuditEvent(c.var.repository, {
+        connection: created,
+        action: "provider_key_created",
+        actorId: body.data.created_by ?? "public_provider_key_actor",
+        reasonCode: "provider_key_created",
+        ...readPublicRequestMetadata(c)
+      });
+
+      return c.json(
+        providerConnectionMutationResponseSchema.parse({
+          connection: toProviderConnectionMetadata(created),
+          redaction_note:
+            "Provider key stored as encrypted ciphertext; plaintext is not returned or viewable."
+        }),
+        201
+      );
+    })
+    .post("/provider-connections/:id/rotate", async (c) => {
+      const body = await validateJson(c, providerConnectionRotateRequestSchema);
+      if (!body.success) {
+        return body.response;
+      }
+
+      const current = await c.var.repository.provider_connections.get(c.req.param("id"));
+      if (!current) {
+        return notFound(c, "Provider connection not found");
+      }
+      if (current.status === "revoked" || current.revoked_at) {
+        return publicError(c, 400, "provider_connection_revoked", "Revoked connections cannot be rotated");
+      }
+
+      const timestamp = nowIso();
+      const encrypted = tryPrepareProviderKey(body.data.api_key);
+      if (!encrypted) {
+        return publicError(
+          c,
+          500,
+          "provider_key_encryption_unavailable",
+          "Provider-key encryption is not configured."
+        );
+      }
+      const rotated = await c.var.repository.provider_connections.update(current.id, {
+        encrypted_key_blob: encrypted.encrypted_key_blob,
+        encryption_key_id: encrypted.encryption_key_id,
+        key_fingerprint: encrypted.key_fingerprint,
+        status: "active",
+        rotated_at: timestamp,
+        updated_at: timestamp
+      });
+
+      if (!rotated) {
+        return notFound(c, "Provider connection not found");
+      }
+
+      await writeProviderKeyAuditEvent(c.var.repository, {
+        connection: rotated,
+        action: "provider_key_rotated",
+        actorId: body.data.rotated_by ?? rotated.created_by ?? "public_provider_key_actor",
+        reasonCode: body.data.reason_code,
+        ...readPublicRequestMetadata(c)
+      });
+
+      return c.json(
+        providerConnectionMutationResponseSchema.parse({
+          connection: toProviderConnectionMetadata(rotated),
+          redaction_note:
+            "Provider key rotated; only fingerprint and lifecycle metadata are returned."
+        })
+      );
+    })
+    .post("/provider-connections/:id/revoke", async (c) => {
+      const body = await validateJson(c, providerConnectionRevokeRequestSchema);
+      if (!body.success) {
+        return body.response;
+      }
+
+      const current = await c.var.repository.provider_connections.get(c.req.param("id"));
+      if (!current) {
+        return notFound(c, "Provider connection not found");
+      }
+
+      const timestamp = nowIso();
+      const revoked = await c.var.repository.provider_connections.update(current.id, {
+        status: "revoked",
+        revoked_at: current.revoked_at ?? timestamp,
+        updated_at: timestamp
+      });
+
+      if (!revoked) {
+        return notFound(c, "Provider connection not found");
+      }
+
+      await writeProviderKeyAuditEvent(c.var.repository, {
+        connection: revoked,
+        action: "provider_key_revoked",
+        actorId: body.data.revoked_by ?? revoked.created_by ?? "public_provider_key_actor",
+        reasonCode: body.data.reason_code,
+        ...readPublicRequestMetadata(c)
+      });
+
+      return c.json(
+        providerConnectionMutationResponseSchema.parse({
+          connection: toProviderConnectionMetadata(revoked),
+          redaction_note:
+            "Provider connection revoked; plaintext key remains non-viewable and is not returned."
         })
       );
     })
@@ -1625,4 +1821,54 @@ function entitlementForbidden(c: Context<ApiEnv>, message: string): Response {
     }),
     403
   );
+}
+
+function publicError(
+  c: Context<ApiEnv>,
+  status: 400 | 409 | 500,
+  code: string,
+  message: string
+): Response {
+  return c.json(
+    errorResponseSchema.parse({
+      error: {
+        code,
+        message
+      }
+    }),
+    status
+  );
+}
+
+function toProviderConnectionMetadata(connection: ProviderConnection) {
+  const { encrypted_key_blob: _encryptedKeyBlob, ...metadata } = connection;
+
+  return metadata;
+}
+
+function readPublicRequestMetadata(c: Context<ApiEnv>) {
+  return {
+    ipAddress:
+      c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ??
+      c.req.header("cf-connecting-ip") ??
+      "127.0.0.1",
+    userAgent: c.req.header("user-agent") ?? "PromptOpts public API"
+  };
+}
+
+function tryPrepareProviderKey(apiKey: string):
+  | {
+      encrypted_key_blob: string;
+      encryption_key_id: string;
+      key_fingerprint: string;
+    }
+  | null {
+  try {
+    return {
+      ...encryptSecret(apiKey),
+      key_fingerprint: fingerprintSecret(apiKey)
+    };
+  } catch {
+    return null;
+  }
 }

@@ -12,6 +12,7 @@ describe("public route screens", () => {
     const routes = [
       ["/app", "Workspace dashboard"],
       ["/app/workspace/acme-ai", "Recent projects"],
+      ["/app/workspace/acme-ai/security", "Provider keys"],
       ["/app/setup", "Provider and model setup"],
       [`/app/prompts/${DEMO_IDS.prompt}`, "Prompt baseline"],
       [`/app/projects/${DEMO_IDS.project}/audit`, "Prompt and model audit"],
@@ -88,6 +89,28 @@ describe("public route screens", () => {
     expect(html).toContain("Support classifier");
     expect(html).toContain("New audit");
     expect(html).not.toContain("/__admin");
+  });
+
+  test("renders workspace provider-key security without exposing raw key UI after save", () => {
+    const apiState: ApiState = { status: "not-configured" };
+    const html = renderToString(
+      <PublicRouteScreen
+        apiClient={null}
+        apiState={apiState}
+        appState={createInitialPublicAppState()}
+        registryModels={demoModelRegistry}
+        route={parsePublicRoute("/app/workspace/acme-ai/security")}
+        updateAppState={() => undefined}
+        onNavigate={() => undefined}
+      />
+    );
+
+    expect(html).toContain("Provider keys");
+    expect(html).toContain("never viewable after save");
+    expect(html).toContain("Fingerprint");
+    expect(html).toContain("Paste key once");
+    expect(html).not.toContain("/__admin");
+    expect(html).not.toContain("Reveal");
   });
 
   test("renders the prompt and model audit screen with risk-first fallback copy", () => {

@@ -25,7 +25,7 @@ Provide the update-safe status ledger for `docs/roadmap/next-steps-checklist.md`
 | --- | --- | --- | --- | --- |
 | Replace mock auth/MFA/sudo headers with real session storage. | P0 | complete | `/admin-api/auth/login` creates persisted pre-MFA admin sessions; `/admin-api/auth/mfa/verify` validates TOTP and rotates sessions; middleware resolves bearer/cookie sessions from `admin_sessions`, derives RBAC/action scopes from `admin_users`/`admin_roles`, rejects mock `x-admin-*` headers, and tests cover unauthenticated/non-MFA/missing-scope/missing-sudo paths. | None for the current MVP scope. |
 | Implement Postgres repository adapter and migration runner. | P0 | complete | Adapter, migration runner, seed/reset commands, missing ops tables, prompt deletion state, and memory/Postgres contract tests exist. Local Postgres role/database were created, migrations applied, seed completed, and live Postgres contract tests passed. | Future production hardening can replace the `psql` execution layer with a pooled client under the same repository interface. |
-| Encrypt provider keys and keep them non-viewable. | P0 | in_progress | Provider keys are modeled as ciphertext/fingerprint metadata only. | Implement runtime encryption, key lifecycle, adapter lookup, and audit events. |
+| Encrypt provider keys and keep them non-viewable. | P0 | complete | Provider connections persist encrypted blobs plus fingerprints only; public lifecycle routes create/rotate/revoke and return metadata only; `/admin-api/provider-connections` is redacted and audited; no reveal route exists; adapter placeholders can resolve decrypted keys through the controlled decrypt-for-use helper. | Replace local key material with production KMS before external customer data. |
 | Wire object storage artifact lifecycle and deletion jobs. | P0 | in_progress | Storage abstraction, MinIO service, and memory deletion states exist. | Implement object adapter, deletion worker, retention policy, checksums, and retry evidence. |
 | Verify initial model registry rows from official source URLs. | P0 | in_progress | Registry admin supports source URL, versioning, approval, and stale warnings. | Verify OpenAI/Anthropic/Gemini rows from official sources and mark active rows fresh/approved. |
 
@@ -58,7 +58,7 @@ Provide the update-safe status ledger for `docs/roadmap/next-steps-checklist.md`
 
 | Item | Priority | Status | Evidence | Remaining work |
 | --- | --- | --- | --- | --- |
-| Add real sudo request lifecycle. | P0 | complete | `/admin-api/sudo/start`, `/admin-api/sudo/status`, and `/admin-api/sudo/end` persist reason-coded active/revoked/expired `sudo_requests`; sudo start requires MFA recheck and action scope, dangerous routes reject missing/expired/wrong-action grants, the admin UI shows a sudo modal/banner, and tests cover lifecycle audit events. | Break-glass and raw reveal payload retrieval remain placeholder product flows until encrypted payload/provider-key work lands. |
+| Add real sudo request lifecycle. | P0 | complete | `/admin-api/sudo/start`, `/admin-api/sudo/status`, and `/admin-api/sudo/end` persist reason-coded active/revoked/expired `sudo_requests`; sudo start requires MFA recheck and action scope, dangerous routes reject missing/expired/wrong-action grants, the admin UI shows a sudo modal/banner, and tests cover lifecycle audit events. | Break-glass and raw reveal payload retrieval remain placeholder product flows until encrypted payload access lands. |
 | Add audit-log review/search UI. | P1 | in_progress | `/__admin/audit-logs` shows redacted append-only metadata. | Add filters by actor, action scope, target, reason, and time. |
 | Implement raw reveal encrypted payload access only where policy allows. | P1 | in_progress | Raw reveal routes are policy-gated placeholders requiring sudo. | Add encrypted payload retrieval, support-role redaction enforcement, and durable reveal audits. |
 
@@ -92,6 +92,7 @@ Provide the update-safe status ledger for `docs/roadmap/next-steps-checklist.md`
 - Free audit conversion mapping to account/contact/opportunity with CTA signal.
 - Real admin auth/session/MFA with stored sessions and mock-header rejection.
 - Real sudo lifecycle with MFA recheck, reason code, expiry, revocation, wrong-action rejection, and audit events.
+- Provider-key encryption and non-viewability with metadata-only lifecycle routes and audited key actions.
 
 ## Blocked
 
@@ -100,13 +101,13 @@ Provide the update-safe status ledger for `docs/roadmap/next-steps-checklist.md`
 
 ## Validation Results
 
-- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run db:migrate`: passed against local Postgres; latest idempotency run applied 0 migrations and skipped 4 already-applied migrations.
+- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run db:migrate`: passed against local Postgres; provider-key lifecycle migration applied, 4 existing migrations skipped.
 - `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run db:seed`: passed; demo seed completed.
-- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun test`: passed with local Postgres integration, 126 tests across 22 files. The Postgres repository contract branch executed against local Postgres.
+- `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun test`: passed with local Postgres integration, 134 tests across 23 files. The Postgres repository contract branch executed against local Postgres.
 - `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run typecheck`: passed.
 - `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run lint`: passed; current script delegates to `bun run typecheck`.
 - `env PATH=/Users/anthonyshadowitz/.bun/bin:$PATH bun run build`: passed for packages, API, workers, and web.
 
 ## Recommended Next Prompt
 
-Move to Prompt 4 from `implementation-sequence.md`: provider-key encryption and non-viewability.
+Move to Prompt 5 from `implementation-sequence.md`: object storage, deletion jobs, and retention.

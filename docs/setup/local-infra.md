@@ -43,13 +43,14 @@ OBJECT_STORAGE_URL=http://localhost:9000
 OBJECT_STORAGE_BUCKET=promptopts-reports
 OBJECT_STORAGE_ACCESS_KEY=promptopts
 OBJECT_STORAGE_SECRET_KEY=promptopts-local-only
+PROMPTOPTS_SECRET_ENCRYPTION_KEY=replace-with-local-32-plus-character-secret
 ```
 
 ## Notes
 
 - The app uses the Postgres repository when `DATABASE_URL` is set and `PROMPTOPTS_REPOSITORY` is not `memory`.
 - The memory repository remains available for tests and no-service local demos.
-- Provider keys are modeled as encrypted ciphertext plus fingerprint metadata only. They must never be displayed after storage.
+- Provider keys are stored through BYOK routes as encrypted ciphertext plus fingerprint metadata only. They must never be displayed after storage, and raw provider keys should not be placed in `.env`.
 - `admin_audit_logs` are append-only in both the repository contract and the Postgres migration.
 - Report deletion is represented with report and artifact deletion state so object cleanup can be audited.
 - Model registry edits should create `model_registry_versions` rows with source URL, `last_verified_at`, `verified_by`, and approval state.

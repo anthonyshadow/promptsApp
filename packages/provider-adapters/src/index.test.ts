@@ -1,10 +1,24 @@
 import { describe, expect, test } from "bun:test";
 import {
+  createMemoryRepository,
+  type ProviderConnection
+} from "@promptopts/shared";
+import {
+  decryptSecretForUse,
+  encryptSecret,
+  fingerprintSecret
+} from "@promptopts/shared/security";
+import {
   MockProviderAdapter,
   OpenAIAdapter,
   normalizeProviderResponse,
   sanitizeProviderError
 } from "./index";
+
+const cryptoOptions = {
+  keyMaterial: "provider-adapter-test-key-material",
+  keyId: "local:provider-adapter-test"
+};
 
 describe("provider adapters", () => {
   test("normalizes mock provider responses with usage and parsed JSON", async () => {
@@ -65,6 +79,65 @@ describe("provider adapters", () => {
 
     expect(missing.error?.code).toBe("missing_key");
     expect(todo.error?.code).toBe("not_implemented");
+  });
+
+  test("live placeholders can resolve decrypted BYOK keys without returning them", async () => {
+    const repository = createMemoryRepository({
+      workspaces: [
+        {
+          id: "workspace_adapter_key",
+          name: "Adapter Key Workspace",
+          slug: "adapter-key",
+          is_mock: true,
+          created_at: "2026-06-06T12:00:00.000Z",
+          updated_at: "2026-06-06T12:00:00.000Z"
+        }
+      ]
+    });
+    const encrypted = encryptSecret("sk-adapter-key-secret", cryptoOptions);
+    const connection: ProviderConnection = {
+      id: "provider_connection_adapter_key",
+      workspace_id: "workspace_adapter_key",
+      provider: "openai",
+      encrypted_key_blob: encrypted.encrypted_key_blob,
+      encryption_key_id: encrypted.encryption_key_id,
+      key_fingerprint: fingerprintSecret("sk-adapter-key-secret", cryptoOptions),
+      status: "active",
+      created_by: null,
+      rotated_at: null,
+      revoked_at: null,
+      last_used_at: null,
+      metadata: {},
+      is_mock: true,
+      created_at: "2026-06-06T12:00:00.000Z",
+      updated_at: "2026-06-06T12:00:00.000Z"
+    };
+
+    await repository.provider_connections.create(connection);
+
+    const adapter = new OpenAIAdapter({
+      keyResolver: (input) =>
+        input.providerConnectionId
+          ? decryptSecretForUse(input.providerConnectionId, {
+              repository,
+              actorId: "system_eval_runner",
+              reasonCode: "provider_adapter_test",
+              crypto: cryptoOptions
+            })
+          : Promise.resolve(null)
+    });
+    const response = await adapter.generate({
+      provider: "openai",
+      modelId: "openai-demo-balanced",
+      providerConnectionId: connection.id,
+      prompt: "Return JSON.",
+      inputVariables: {}
+    });
+    const auditLogs = await repository.admin_audit_logs.list();
+
+    expect(response.error?.code).toBe("not_implemented");
+    expect(JSON.stringify(response)).not.toContain("sk-adapter-key-secret");
+    expect(auditLogs.map((log) => log.action)).toContain("provider_key_used_for_eval");
   });
 
   test("normalization parses JSON text responses", () => {

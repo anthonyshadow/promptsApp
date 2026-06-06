@@ -61,6 +61,7 @@ export function createDemoRepositorySeed(): Required<RepositorySeed> {
         updated_at: DEMO_TIMESTAMP
       }
     ],
+    provider_connections: [],
     projects: [
       {
         id: DEMO_IDS.project,

@@ -47,13 +47,13 @@ Audit `/__admin/*` and `/admin-api/*` against the internal-only trust model.
 
 - Raw reveal payload retrieval and break-glass behavior remain placeholders behind sudo policy.
 - Report deletion marks memory-backed records and artifacts; object storage cleanup is mocked.
-- Billing and provider-key workflows do not yet use production services.
+- Billing and provider-key workflows do not yet use production billing/KMS services.
 - Audit-log search UI is not a rich operator surface yet.
 
 ## Critical Launch Blockers
 
 - Keep deployed environments on durable Postgres before handling real customer data.
-- Encrypt provider keys and keep them non-viewable before live provider calls.
+- Use production KMS-backed provider-key handling before live provider calls.
 - Add object storage deletion jobs before claiming deletion is complete.
 
 ## Fixes Completed In This Pass

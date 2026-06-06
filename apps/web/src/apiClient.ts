@@ -10,6 +10,11 @@ import type {
   PromptCreateResponse,
   PromptOptimizeRequest,
   PromptOptimizeResponse,
+  ProviderConnectionCreateRequest,
+  ProviderConnectionMutationResponse,
+  ProviderConnectionRevokeRequest,
+  ProviderConnectionRotateRequest,
+  ProviderConnectionsResponse,
   QualityContractRequest,
   QualityContractResponse,
   ReportCreateRequest,
@@ -38,6 +43,18 @@ export type PromptOptsApiClient = {
   health: () => Promise<HealthResponse>;
   models: (filters?: ModelRegistryFilters) => Promise<RegistryResponse>;
   getWorkspaceDashboard: (workspaceSlug: string) => Promise<WorkspaceDashboardResponse>;
+  listProviderConnections: (workspaceId: string) => Promise<ProviderConnectionsResponse>;
+  createProviderConnection: (
+    request: ProviderConnectionCreateRequest
+  ) => Promise<ProviderConnectionMutationResponse>;
+  rotateProviderConnection: (
+    connectionId: string,
+    request: ProviderConnectionRotateRequest
+  ) => Promise<ProviderConnectionMutationResponse>;
+  revokeProviderConnection: (
+    connectionId: string,
+    request: ProviderConnectionRevokeRequest
+  ) => Promise<ProviderConnectionMutationResponse>;
   createPrompt: (request: PromptCreateRequest) => Promise<PromptCreateResponse>;
   optimizePrompt: (
     promptId: string,
@@ -96,6 +113,62 @@ export function createPromptOptsApiClient(baseUrl: string): PromptOptsApiClient 
       }
 
       return (await response.json()) as WorkspaceDashboardResponse;
+    },
+    async listProviderConnections(workspaceId) {
+      const response = await fetch(
+        `${baseUrl}/provider-connections?workspace_id=${encodeURIComponent(workspaceId)}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`Provider connections returned ${response.status}`);
+      }
+
+      return (await response.json()) as ProviderConnectionsResponse;
+    },
+    async createProviderConnection(request) {
+      const response = await fetch(`${baseUrl}/provider-connections`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(request)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Provider connection create returned ${response.status}`);
+      }
+
+      return (await response.json()) as ProviderConnectionMutationResponse;
+    },
+    async rotateProviderConnection(connectionId, request) {
+      const response = await fetch(
+        `${baseUrl}/provider-connections/${encodeURIComponent(connectionId)}/rotate`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(request)
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Provider connection rotate returned ${response.status}`);
+      }
+
+      return (await response.json()) as ProviderConnectionMutationResponse;
+    },
+    async revokeProviderConnection(connectionId, request) {
+      const response = await fetch(
+        `${baseUrl}/provider-connections/${encodeURIComponent(connectionId)}/revoke`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(request)
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Provider connection revoke returned ${response.status}`);
+      }
+
+      return (await response.json()) as ProviderConnectionMutationResponse;
     },
     async createPrompt(request) {
       const response = await client.prompts.$post({ json: request });

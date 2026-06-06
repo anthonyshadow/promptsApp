@@ -7,6 +7,9 @@ export const metadataSchema = z.record(z.unknown());
 export const providerSchema = z.enum(["openai", "anthropic", "gemini"]);
 export type Provider = z.infer<typeof providerSchema>;
 
+export const providerConnectionStatusSchema = z.enum(["active", "revoked", "error"]);
+export type ProviderConnectionStatus = z.infer<typeof providerConnectionStatusSchema>;
+
 export const taskTypeSchema = z.enum([
   "support",
   "summarization",
@@ -289,6 +292,27 @@ export const workspaceSchema = z
   })
   .strict();
 export type Workspace = z.infer<typeof workspaceSchema>;
+
+export const providerConnectionSchema = z
+  .object({
+    id: idSchema,
+    workspace_id: idSchema,
+    provider: providerSchema,
+    encrypted_key_blob: z.string().min(1),
+    encryption_key_id: z.string().min(1),
+    key_fingerprint: z.string().min(1),
+    status: providerConnectionStatusSchema,
+    created_by: idSchema.nullable(),
+    rotated_at: isoDateTimeSchema.nullable(),
+    revoked_at: isoDateTimeSchema.nullable(),
+    last_used_at: isoDateTimeSchema.nullable(),
+    metadata: metadataSchema,
+    is_mock: z.boolean(),
+    created_at: isoDateTimeSchema,
+    updated_at: isoDateTimeSchema
+  })
+  .strict();
+export type ProviderConnection = z.infer<typeof providerConnectionSchema>;
 
 export const modelRegistryRecordSchema = z
   .object({

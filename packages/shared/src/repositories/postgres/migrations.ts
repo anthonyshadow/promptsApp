@@ -96,6 +96,7 @@ export async function seedRepository(
 ): Promise<void> {
   await upsertMany(repository.workspaces, seed.workspaces);
   await upsertMany(repository.users, seed.users);
+  await upsertMany(repository.provider_connections, seed.provider_connections);
   await upsertMany(repository.projects, seed.projects);
   await upsertMany(repository.prompts, seed.prompts);
   await upsertMany(repository.prompt_versions, seed.prompt_versions);

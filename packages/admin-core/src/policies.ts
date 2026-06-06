@@ -133,6 +133,15 @@ export function resolveAdminRoutePolicy(method: string, path: string): AdminRout
     };
   }
 
+  if (normalizedPath === "/admin-api/provider-connections") {
+    return {
+      route_scope: "provider_connections",
+      action_scope: "read_metadata",
+      sensitive_read: true,
+      requires_sudo: false
+    };
+  }
+
   if (normalizedPath.includes("/billing")) {
     return readPolicy("billing");
   }

@@ -18,6 +18,7 @@ import {
   adminEvalRunsResponseSchema,
   adminModelRegistryResponseSchema,
   adminOverviewResponseSchema,
+  adminProviderConnectionsResponseSchema,
   adminReportsResponseSchema,
   billingCreditResponseSchema,
   billingResponseSchema,
@@ -36,6 +37,8 @@ const ADMIN_TEST_TOKENS = {
   readOnly: "admin_test_token_read_only",
   missingScope: "admin_test_token_missing_scope"
 } as const;
+
+process.env.PROMPTOPTS_SECRET_ENCRYPTION_KEY ??= "api-route-test-provider-key-material";
 
 type AdminRequestInput = {
   role?: "owner" | "ops" | "support" | "finance" | "read_only";
@@ -339,6 +342,112 @@ describe("public API routes", () => {
     const response = await createTestApp().request("/workspaces/missing/dashboard");
 
     expect(response.status).toBe(404);
+  });
+
+  test("provider connection routes encrypt keys, return metadata only, and audit lifecycle actions", async () => {
+    const repository = createAdminTestRepository();
+    const app = createApp({ repository });
+    const rawKey = "sk-openai-test-provider-key-never-return";
+
+    const created = await expectOkJson(
+      await app.request(
+        "/provider-connections",
+        jsonRequest({
+          workspace_id: DEMO_IDS.workspace,
+          provider: "openai",
+          api_key: rawKey,
+          created_by: DEMO_IDS.user
+        })
+      )
+    );
+    const stored = await repository.provider_connections.get(created.connection.id);
+    const listed = await expectOkJson(
+      await app.request(`/provider-connections?workspace_id=${DEMO_IDS.workspace}`)
+    );
+
+    expect(created.connection.provider).toBe("openai");
+    expect(JSON.stringify(created)).not.toContain(rawKey);
+    expect(JSON.stringify(listed)).not.toContain(rawKey);
+    expect(JSON.stringify(created)).not.toContain("encrypted_key_blob");
+    expect(stored?.encrypted_key_blob).not.toContain(rawKey);
+    expect(stored?.key_fingerprint).toBe(created.connection.key_fingerprint);
+
+    const duplicate = await app.request(
+      "/provider-connections",
+      jsonRequest({
+        workspace_id: DEMO_IDS.workspace,
+        provider: "openai",
+        api_key: "sk-duplicate",
+        created_by: DEMO_IDS.user
+      })
+    );
+    expect(duplicate.status).toBe(409);
+
+    const rotated = await expectOkJson(
+      await app.request(
+        `/provider-connections/${created.connection.id}/rotate`,
+        jsonRequest({
+          api_key: "sk-openai-rotated-provider-key-never-return",
+          rotated_by: DEMO_IDS.user,
+          reason_code: "key_rotation_test"
+        })
+      )
+    );
+    expect(rotated.connection.rotated_at).not.toBeNull();
+    expect(JSON.stringify(rotated)).not.toContain("sk-openai-rotated");
+
+    const revoked = await expectOkJson(
+      await app.request(
+        `/provider-connections/${created.connection.id}/revoke`,
+        jsonRequest({
+          revoked_by: DEMO_IDS.user,
+          reason_code: "key_revocation_test"
+        })
+      )
+    );
+    expect(revoked.connection.status).toBe("revoked");
+    expect(revoked.connection.revoked_at).not.toBeNull();
+
+    const reveal = await app.request(`/provider-connections/${created.connection.id}/reveal`);
+    const auditActions = (await repository.admin_audit_logs.list()).map((log) => log.action);
+
+    expect(reveal.status).toBe(404);
+    expect(auditActions).toContain("provider_key_created");
+    expect(auditActions).toContain("provider_key_rotated");
+    expect(auditActions).toContain("provider_key_revoked");
+  });
+
+  test("admin provider connection metadata is redacted and audited", async () => {
+    const repository = createAdminTestRepository();
+    const app = createApp({ repository });
+    const rawKey = "sk-anthropic-test-provider-key-never-return";
+    const created = await expectOkJson(
+      await app.request(
+        "/provider-connections",
+        jsonRequest({
+          workspace_id: DEMO_IDS.workspace,
+          provider: "anthropic",
+          api_key: rawKey,
+          created_by: DEMO_IDS.user
+        })
+      )
+    );
+
+    const rejected = await app.request("/admin-api/provider-connections");
+    expect(rejected.status).toBe(401);
+
+    const response = await app.request(
+      "/admin-api/provider-connections",
+      adminGetRequest()
+    );
+    const body = adminProviderConnectionsResponseSchema.parse(await expectOkJson(response));
+    const auditLogs = await repository.admin_audit_logs.list();
+
+    expect(body.connections.map((connection) => connection.id)).toContain(created.connection.id);
+    expect(JSON.stringify(body)).not.toContain(rawKey);
+    expect(JSON.stringify(body)).not.toContain("encrypted_key_blob");
+    expect(body.redaction_note).toContain("metadata-only");
+    expect(auditLogs.some((log) => log.target_type === "provider_connections")).toBe(true);
   });
 
   test("POST /prompts persists project, prompt, and raw prompt version records", async () => {

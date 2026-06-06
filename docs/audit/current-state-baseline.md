@@ -42,7 +42,7 @@ Record the pre-cleanup state for the Prompt 22 final review pass.
 
 - Break-glass and raw reveal payload retrieval remain placeholder flows behind sudo policy.
 - Production admin provisioning and stronger password-hash policy.
-- Real provider calls, BYOK encrypted key storage, rate limits, retries, and logging policy.
+- Real provider calls using encrypted BYOK, production KMS key material, rate limits, retries, and logging policy.
 - Durable queue/job state and object storage artifact lifecycle.
 - Real billing provider integration and invoice/payment webhooks.
 - Real PDF rendering.
@@ -60,6 +60,6 @@ Record the pre-cleanup state for the Prompt 22 final review pass.
 
 - Keep API route modules split by domain before adding more behavior.
 - Keep schema exports stable while grouping future contracts by product/admin/billing/registry.
-- Implement provider-key encryption and non-viewability before private beta.
+- Wire live provider calls through encrypted BYOK and production KMS before private beta.
 - Add real visual regression or browser smoke coverage when UI polish becomes a launch blocker.
 - Update README and audit docs so future work starts from actual implementation state.

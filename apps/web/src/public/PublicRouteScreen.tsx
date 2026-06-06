@@ -14,6 +14,7 @@ import ReportScreen from "./screens/ReportScreen";
 import SetupScreen from "./screens/SetupScreen";
 import SuccessContractScreen from "./screens/SuccessContractScreen";
 import WorkspaceScreen from "./screens/WorkspaceScreen";
+import WorkspaceSecurityScreen from "./screens/WorkspaceSecurityScreen";
 import type { ApiState, NavigateHandler } from "../viewTypes";
 
 function PublicRouteScreen({
@@ -45,6 +46,8 @@ function PublicRouteScreen({
           workspaceSlug={route.workspaceSlug}
         />
       );
+    case "workspace-security":
+      return <WorkspaceSecurityScreen apiClient={apiClient} workspaceSlug={route.workspaceSlug} />;
     case "free-audit":
       return (
         <FreeAuditScreen

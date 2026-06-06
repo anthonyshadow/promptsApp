@@ -13,6 +13,8 @@ export function getRouteTitle(route: PublicRoute): string {
     case "app-home":
     case "workspace-dashboard":
       return `${demoWorkspace.name} workspace`;
+    case "workspace-security":
+      return "Provider keys";
     case "free-audit":
       return "Free audit";
     case "setup":

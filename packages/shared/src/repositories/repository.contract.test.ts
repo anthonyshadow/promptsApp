@@ -3,13 +3,19 @@ import {
   createMemoryRepository,
   type AdminAuditLog,
   type PromptOptsRepository,
+  type ProviderConnection,
   type Workspace
 } from "../index";
+import { encryptSecret, fingerprintSecret } from "../security/providerSecrets";
 import { createPostgresRepository, runPostgresMigrations } from "./postgres";
 import { runPsql } from "./postgres/psql";
 
 const createdAt = "2026-01-15T12:00:00.000Z";
 const updatedAt = "2026-01-16T12:00:00.000Z";
+const cryptoOptions = {
+  keyMaterial: "repository-contract-provider-key-material",
+  keyId: "local:repository-contract"
+};
 
 function uniqueId(prefix: string): string {
   return `${prefix}_${crypto.randomUUID().replaceAll("-", "")}`;
@@ -44,6 +50,54 @@ async function exerciseRepositoryContract(repository: PromptOptsRepository) {
   expect(await repository.workspaces.get(workspace.id)).toBeUndefined();
 }
 
+async function exerciseProviderConnectionContract(repository: PromptOptsRepository) {
+  const workspace: Workspace = {
+    id: uniqueId("workspace_provider_connection"),
+    name: "Provider Connection Workspace",
+    slug: uniqueId("provider-connection-workspace"),
+    is_mock: true,
+    created_at: createdAt,
+    updated_at: createdAt
+  };
+  const encrypted = encryptSecret("sk-provider-contract-secret", cryptoOptions);
+  const connection: ProviderConnection = {
+    id: uniqueId("provider_connection_contract"),
+    workspace_id: workspace.id,
+    provider: "openai",
+    encrypted_key_blob: encrypted.encrypted_key_blob,
+    encryption_key_id: encrypted.encryption_key_id,
+    key_fingerprint: fingerprintSecret("sk-provider-contract-secret", cryptoOptions),
+    status: "active",
+    created_by: null,
+    rotated_at: null,
+    revoked_at: null,
+    last_used_at: null,
+    metadata: { contract: true },
+    is_mock: true,
+    created_at: createdAt,
+    updated_at: createdAt
+  };
+
+  await repository.workspaces.create(workspace);
+  await expect(repository.provider_connections.create(connection)).resolves.toEqual(connection);
+
+  const stored = await repository.provider_connections.get(connection.id);
+  expect(stored?.encrypted_key_blob).not.toContain("sk-provider-contract-secret");
+  expect(stored?.key_fingerprint).toBe(connection.key_fingerprint);
+
+  const revoked = await repository.provider_connections.update(connection.id, {
+    status: "revoked",
+    revoked_at: updatedAt,
+    updated_at: updatedAt
+  });
+
+  expect(revoked).toMatchObject({
+    id: connection.id,
+    status: "revoked",
+    revoked_at: updatedAt
+  });
+}
+
 async function appendAuditLog(repository: PromptOptsRepository): Promise<AdminAuditLog> {
   const log: AdminAuditLog = {
     id: uniqueId("admin_audit_log_contract"),
@@ -76,6 +130,7 @@ describe("repository contract", () => {
 
     expect(repository.backend).toBe("memory");
     await exerciseRepositoryContract(repository);
+    await exerciseProviderConnectionContract(repository);
 
     const auditRepository = repository.admin_audit_logs as object;
 
@@ -102,6 +157,7 @@ describe("repository contract", () => {
 
     expect(repository.backend).toBe("postgres");
     await exerciseRepositoryContract(repository);
+    await exerciseProviderConnectionContract(repository);
 
     const auditRepository = repository.admin_audit_logs as object;
 

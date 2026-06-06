@@ -5,6 +5,7 @@ export type ProviderCallInput = {
   modelId: string;
   prompt: string;
   inputVariables: Record<string, unknown>;
+  providerConnectionId?: string;
   testCase?: Pick<TestCase, "id" | "name" | "expected_output">;
 };
 
@@ -35,6 +36,13 @@ export interface ProviderAdapter {
   readonly provider: Provider;
   generate(input: ProviderCallInput): Promise<NormalizedProviderResponse>;
 }
+
+export type ProviderKeyResolver = (input: ProviderCallInput) => Promise<string | null>;
+
+export type LiveProviderAdapterOptions = {
+  apiKey?: string;
+  keyResolver?: ProviderKeyResolver;
+};
 
 type RawProviderResponse = {
   text?: string;
@@ -149,37 +157,63 @@ export class MockProviderAdapter implements ProviderAdapter {
 
 // Live adapters are intentionally inert until key storage, logging, and rate-limit policies are production-safe.
 class PlaceholderLiveAdapter implements ProviderAdapter {
+  private readonly apiKey: string | undefined;
+  private readonly keyResolver: ProviderKeyResolver | undefined;
+
   constructor(
     readonly provider: Provider,
-    private readonly apiKey?: string
-  ) {}
+    options: LiveProviderAdapterOptions = {}
+  ) {
+    this.apiKey = options.apiKey;
+    this.keyResolver = options.keyResolver;
+  }
 
   async generate(input: ProviderCallInput): Promise<NormalizedProviderResponse> {
-    if (!this.apiKey) {
+    const apiKey = await this.resolveApiKey(input);
+
+    if (!apiKey) {
       return normalizeProviderError(input, new ProviderAdapterError("missing_key"));
     }
 
     // TODO: Implement live provider calls after key storage, request signing, rate limits, and logging policies land.
     return normalizeProviderError(input, new ProviderAdapterError("not_implemented"));
   }
+
+  private async resolveApiKey(input: ProviderCallInput): Promise<string | null> {
+    if (this.keyResolver) {
+      return this.keyResolver(input);
+    }
+
+    return this.apiKey ?? null;
+  }
 }
 
 export class OpenAIAdapter extends PlaceholderLiveAdapter {
-  constructor(apiKey: string | undefined = process.env.OPENAI_API_KEY) {
-    super("openai", apiKey);
+  constructor(options: string | LiveProviderAdapterOptions | undefined = undefined) {
+    super("openai", normalizeLiveAdapterOptions(options));
   }
 }
 
 export class AnthropicAdapter extends PlaceholderLiveAdapter {
-  constructor(apiKey: string | undefined = process.env.ANTHROPIC_API_KEY) {
-    super("anthropic", apiKey);
+  constructor(options: string | LiveProviderAdapterOptions | undefined = undefined) {
+    super("anthropic", normalizeLiveAdapterOptions(options));
   }
 }
 
 export class GeminiAdapter extends PlaceholderLiveAdapter {
-  constructor(apiKey: string | undefined = process.env.GEMINI_API_KEY) {
-    super("gemini", apiKey);
+  constructor(options: string | LiveProviderAdapterOptions | undefined = undefined) {
+    super("gemini", normalizeLiveAdapterOptions(options));
   }
+}
+
+function normalizeLiveAdapterOptions(
+  options: string | LiveProviderAdapterOptions | undefined
+): LiveProviderAdapterOptions {
+  if (typeof options === "string") {
+    return { apiKey: options };
+  }
+
+  return options ?? {};
 }
 
 class ProviderAdapterError extends Error {

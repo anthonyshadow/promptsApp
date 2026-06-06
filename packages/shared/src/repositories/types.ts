@@ -24,6 +24,7 @@ import type {
   PromptAnalysis,
   PromptProject,
   PromptVersion,
+  ProviderConnection,
   QualityContract,
   RecommendationReport,
   ReportArtifact,
@@ -55,6 +56,7 @@ export interface AppendOnlyRepository<TRecord extends IdentifiedRecord> {
 export type RepositoryCollections = {
   users: User;
   workspaces: Workspace;
+  provider_connections: ProviderConnection;
   projects: PromptProject;
   prompts: Prompt;
   prompt_versions: PromptVersion;
@@ -99,6 +101,7 @@ export interface PromptOptsRepository {
   backend: RepositoryBackend;
   users: CrudRepository<User>;
   workspaces: CrudRepository<Workspace>;
+  provider_connections: CrudRepository<ProviderConnection>;
   projects: CrudRepository<PromptProject>;
   prompts: CrudRepository<Prompt>;
   prompt_versions: CrudRepository<PromptVersion>;

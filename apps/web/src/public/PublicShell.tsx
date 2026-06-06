@@ -87,6 +87,13 @@ function PublicShell({ path, onNavigate }: { path: string; onNavigate: NavigateH
           >
             Workspace
           </RouteLink>
+          <RouteLink
+            current={route.kind === "workspace-security"}
+            onNavigate={onNavigate}
+            to={`/app/workspace/${demoWorkspace.slug}/security`}
+          >
+            Provider keys
+          </RouteLink>
           <RouteLink current={route.kind === "free-audit"} onNavigate={onNavigate} to="/audit">
             Free audit
           </RouteLink>

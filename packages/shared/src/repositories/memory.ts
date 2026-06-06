@@ -24,6 +24,7 @@ import {
   promptProjectSchema,
   promptSchema,
   promptVersionSchema,
+  providerConnectionSchema,
   qualityContractSchema,
   recommendationReportSchema,
   reportArtifactSchema,
@@ -57,6 +58,7 @@ import {
   type PromptAnalysis,
   type PromptProject,
   type PromptVersion,
+  type ProviderConnection,
   type QualityContract,
   type RecommendationReport,
   type ReportArtifact,
@@ -174,6 +176,10 @@ export function createMemoryRepository(seed: RepositorySeed = {}): PromptOptsRep
     backend: "memory",
     users: new MemoryCrudRepository<User>(userSchema, seed.users),
     workspaces: new MemoryCrudRepository<Workspace>(workspaceSchema, seed.workspaces),
+    provider_connections: new MemoryCrudRepository<ProviderConnection>(
+      providerConnectionSchema,
+      seed.provider_connections
+    ),
     projects: new MemoryCrudRepository<PromptProject>(promptProjectSchema, seed.projects),
     prompts: new MemoryCrudRepository<Prompt>(promptSchema, seed.prompts),
     prompt_versions: new MemoryCrudRepository<PromptVersion>(
