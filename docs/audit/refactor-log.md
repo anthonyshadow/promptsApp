@@ -20,10 +20,17 @@ Record cleanup performed during the final review pass.
 | Provider-adapters | Added comments for normalization and inert live adapters. | Preserve provider boundary and trust posture. | Low | Final typecheck/test/build. |
 | Shared repository | Added memory repository boundary comment. | Keep memory local/test adapter from becoming a production assumption. | Low | Final typecheck/test/build. |
 | Report generator | Added eval snapshot/export mutation boundary comment. | Ensure export regeneration does not mutate eval proof. | Low | Final typecheck/test/build. |
+| Prompt-core module split | Split parser, sensitive scanner, cost estimator, model-fit classifier, audit composer, candidate generator, and shared types behind the stable package barrel. | Make deterministic prompt value logic easier to review without changing the public API. | Medium | `bun test packages/prompt-core/src/index.test.ts`, final typecheck/test/build. |
+| Eval-core module split | Split quality-contract drafting, deterministic checks, scoring, recommendation, frontier, CSV parsing, and shared types behind the stable package barrel. | Keep eval proof gates and report decision rules inspectable by responsibility. | Medium | `bun test packages/eval-core/src/index.test.ts`, final typecheck/test/build. |
+| API contract split | Split route contracts by public/admin/auth/billing/report/model/account route family behind the existing `contracts.ts` export path. | Reduce the single broad contract file while preserving Hono/client type exports. | Medium | API route tests, final typecheck/test/build. |
+| Shared schema split | Split domain schemas into common, identity, model registry, audit, prompt, eval/report, admin/CRM, billing, and free-audit modules behind the existing `schemas.ts` export path. | Make the data model easier to navigate while preserving all schema/type names. | Medium | Shared schema tests, final typecheck/test/build. |
+| Admin auth route split | Moved admin login, MFA, logout, sudo status/start/end route registration into `apps/api/src/admin/authRoutes.ts`. | Keep the security entry routes separate while leaving protected admin middleware order visible in `adminRoutes.ts`. | Medium | Admin API tests, final typecheck/test/build. |
+| Public model route split | Moved public model registry filtering into `apps/api/src/public/modelRoutes.ts`. | Isolate same-provider registry filtering and freshness-sensitive route behavior. | Low | Public API tests, final typecheck/test/build. |
+| Admin web session helpers | Moved admin session and sudo status refresh helpers into `apps/web/src/admin/adminSessionView.ts`. | Keep `AdminRouteTree` focused on rendering and event orchestration. | Low | Web admin/public smoke tests, final typecheck/test/build. |
 
 ## Intentionally Left Alone
 
-- API route modules remain large but green; splitting them now would be higher risk than value in a final cleanup pass.
-- Shared schemas/contracts remain broad to preserve stable exports.
+- API route modules still contain broad handler bodies; only the clearest route families were extracted in this pass to avoid security or behavior drift.
+- Screen-specific Emotion styles still mostly live in the shared style bucket; deeper style colocation should wait for browser screenshot coverage.
 - Mock provider, auth, queue, billing, and storage boundaries remain mocked and documented.
 - No new dependencies were added.
